@@ -1,5 +1,2 @@
-[phases.build]
-cmds = ["npm ci", "npm run build"]
-
 [start]
 cmd = "npx serve -s build -l $PORT"

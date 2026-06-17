@@ -1,5 +1,2 @@
-[phases.build]
-cmds = ["npm ci --only=production"]
-
 [start]
 cmd = "node src/index.js"
