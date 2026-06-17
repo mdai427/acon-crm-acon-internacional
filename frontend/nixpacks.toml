@@ -1,2 +1,0 @@
-[start]
-cmd = "npx serve -s build -l $PORT"

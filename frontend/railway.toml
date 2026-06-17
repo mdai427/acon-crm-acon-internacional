@@ -1,7 +1,6 @@
 [build]
-builder = "nixpacks"
+builder = "NIXPACKS"
 buildCommand = "npm run build"
 
 [deploy]
-startCommand = "npx serve -s build -l 3001"
-healthcheckPath = "/"
+startCommand = "npx serve -s build -l $PORT"
