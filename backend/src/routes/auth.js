@@ -89,4 +89,32 @@ router.put('/change-password', auth, async (req, res) => {
   }
 });
 
+// POST /api/auth/setup — crea el primer admin si no existe ninguno (solo funciona una vez)
+router.post('/setup', async (req, res) => {
+  try {
+    const count = await User.countDocuments({ role: 'admin' });
+    if (count > 0) {
+      return res.status(403).json({ success: false, message: 'Ya existe un administrador. Usa /login.' });
+    }
+
+    const { name, email, password } = req.body;
+    if (!name || !email || !password) {
+      return res.status(400).json({ success: false, message: 'name, email y password requeridos' });
+    }
+
+    const admin = await User.create({ name, email, password, role: 'admin' });
+
+    const token = jwt.sign(
+      { id: admin._id, role: admin.role },
+      process.env.JWT_SECRET,
+      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+    );
+
+    console.log(`✅ Admin inicial creado: ${email}`);
+    res.status(201).json({ success: true, token, user: admin.toJSON() });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 module.exports = router;
