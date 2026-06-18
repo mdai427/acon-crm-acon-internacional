@@ -12,9 +12,10 @@ import ReportsPage from './pages/ReportsPage';
 import IntegrationsPage from './pages/IntegrationsPage';
 import ConfigPage from './pages/ConfigPage';
 import OperationsPage from './pages/OperationsPage';
+import UsersPage from './pages/UsersPage';
 import {
   LayoutDashboard, Users, Kanban, MessageSquare,
-  BarChart3, Settings, Plug, Package,
+  BarChart3, Settings, Plug, Package, UserPlus,
   LogOut, Bell
 } from 'lucide-react';
 
@@ -25,6 +26,7 @@ const NAV = [
   { id: 'operations',  label: 'Operaciones',     Icon: Package,         section: 'main' },
   { id: 'whatsapp',    label: 'WhatsApp',        Icon: MessageSquare,   section: 'main' },
   { id: 'reports',     label: 'Reportes',        Icon: BarChart3,       section: 'analytics' },
+  { id: 'users',       label: 'Usuarios',        Icon: UserPlus,        section: 'config' },
   { id: 'config',      label: 'Configuración',   Icon: Settings,        section: 'config' },
   { id: 'integrations',label: 'Estado APIs',     Icon: Plug,            section: 'config' },
 ];
@@ -113,6 +115,7 @@ function CRMApp() {
           {page === 'whatsapp'    && <WhatsAppPage toast={toast} />}
           {page === 'reports'     && <ReportsPage toast={toast} />}
           {page === 'config'      && <ConfigPage toast={toast} />}
+          {page === 'users'       && <UsersPage toast={toast} />}
           {page === 'integrations'&& <IntegrationsPage toast={toast} />}
         </div>
       </div>

@@ -40,18 +40,45 @@ const User = require('../models/User');
 
 usersRouter.use(auth);
 
-usersRouter.get('/', adminOnly, async (req, res) => {
+// GET /api/users — todos (admin ve todos; executive/viewer se ve solo a sí mismo)
+usersRouter.get('/', async (req, res) => {
   try {
-    const users = await User.find({ isActive: true }).select('-password');
+    const filter = req.user.role === 'admin' ? {} : { _id: req.user._id };
+    const users = await User.find(filter).select('-password').sort({ createdAt: 1 });
     res.json({ success: true, data: users });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 });
 
-usersRouter.put('/:id', adminOnly, async (req, res) => {
+// POST /api/users — crear usuario (solo admin)
+usersRouter.post('/', adminOnly, async (req, res) => {
   try {
-    const allowed = ['name', 'role', 'phone', 'isActive', 'notifications'];
+    const { name, email, password, role, phone } = req.body;
+    if (!name || !email || !password) {
+      return res.status(400).json({ success: false, message: 'Nombre, email y contraseña son requeridos' });
+    }
+    const exists = await User.findOne({ email: email.toLowerCase() });
+    if (exists) {
+      return res.status(400).json({ success: false, message: 'El email ya está registrado' });
+    }
+    const user = await User.create({ name, email, password, role: role || 'executive', phone });
+    res.status(201).json({ success: true, data: user.toJSON() });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// PUT /api/users/:id — editar (admin edita cualquiera; usuario edita su propio perfil excepto role)
+usersRouter.put('/:id', async (req, res) => {
+  try {
+    const isSelf = req.params.id === String(req.user._id);
+    const isAdmin = req.user.role === 'admin';
+    if (!isAdmin && !isSelf) return res.status(403).json({ success: false, message: 'Sin permiso' });
+
+    const allowed = isAdmin
+      ? ['name', 'role', 'phone', 'isActive', 'notifications']
+      : ['name', 'phone', 'notifications'];
     const updates = {};
     allowed.forEach(k => { if (req.body[k] !== undefined) updates[k] = req.body[k]; });
     const user = await User.findByIdAndUpdate(req.params.id, updates, { new: true }).select('-password');
@@ -61,8 +88,29 @@ usersRouter.put('/:id', adminOnly, async (req, res) => {
   }
 });
 
+// PUT /api/users/:id/reset-password — admin resetea contraseña
+usersRouter.put('/:id/reset-password', adminOnly, async (req, res) => {
+  try {
+    const { newPassword } = req.body;
+    if (!newPassword || newPassword.length < 6) {
+      return res.status(400).json({ success: false, message: 'La contraseña debe tener al menos 6 caracteres' });
+    }
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
+    user.password = newPassword;
+    await user.save();
+    res.json({ success: true, message: 'Contraseña actualizada' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// DELETE /api/users/:id — desactivar (solo admin, no puede desactivarse a sí mismo)
 usersRouter.delete('/:id', adminOnly, async (req, res) => {
   try {
+    if (req.params.id === String(req.user._id)) {
+      return res.status(400).json({ success: false, message: 'No puedes desactivar tu propia cuenta' });
+    }
     await User.findByIdAndUpdate(req.params.id, { isActive: false });
     res.json({ success: true, message: 'Usuario desactivado' });
   } catch (error) {

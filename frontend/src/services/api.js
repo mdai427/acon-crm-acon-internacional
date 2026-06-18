@@ -62,7 +62,10 @@ export const exportCSV = () => api.get('/reports/export', { responseType: 'blob'
 
 // Users
 export const getUsers = () => api.get('/users');
+export const createUser = (data) => api.post('/users', data);
 export const updateUser = (id, data) => api.put(`/users/${id}`, data);
+export const deleteUser = (id) => api.delete(`/users/${id}`);
+export const resetUserPassword = (id, newPassword) => api.put(`/users/${id}/reset-password`, { newPassword });
 
 // Integrations
 export const getIntegrations = () => api.get('/integrations/status');
