@@ -1,0 +1,4 @@
+providers = ["node"]
+
+[start]
+cmd = "npx serve -s build -l $PORT"
