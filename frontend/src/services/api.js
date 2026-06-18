@@ -81,6 +81,22 @@ export const testOpenAI = () => api.post('/config/openai/test');
 export const saveFBConfig = (d) => api.post('/config/facebook', d);
 export const testFacebook = () => api.post('/config/facebook/test');
 
+// Quotes
+export const getQuotes = (params) => api.get('/quotes', { params });
+export const getQuote = (id) => api.get(`/quotes/${id}`);
+export const createQuote = (data) => api.post('/quotes', data);
+export const updateQuote = (id, data) => api.put(`/quotes/${id}`, data);
+export const updateQuoteStatus = (id, status) => api.put(`/quotes/${id}/status`, { status });
+export const deleteQuote = (id) => api.delete(`/quotes/${id}`);
+
+// Follow-up Rules
+export const getFollowUpRules = () => api.get('/followups/rules');
+export const createFollowUpRule = (data) => api.post('/followups/rules', data);
+export const updateFollowUpRule = (id, data) => api.put(`/followups/rules/${id}`, data);
+export const deleteFollowUpRule = (id) => api.delete(`/followups/rules/${id}`);
+export const getPendingFollowUps = () => api.get('/followups/pending');
+export const executeFollowUpRule = (id) => api.post(`/followups/execute/${id}`);
+
 // Operations
 export const getOperations = (params) => api.get('/operations', { params });
 export const getOperation = (id) => api.get(`/operations/${id}`);

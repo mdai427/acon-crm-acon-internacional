@@ -2,6 +2,7 @@ const { CronJob } = require('cron');
 const Lead = require('../models/Lead');
 const Activity = require('../models/Activity');
 const User = require('../models/User');
+const FollowUpRule = require('../models/FollowUpRule');
 const { scoreLeadWithAI } = require('./aiAgent');
 
 const startCronJobs = (io) => {
@@ -141,6 +142,83 @@ const startCronJobs = (io) => {
       }
     } catch (error) {
       console.error('Cron days update error:', error);
+    }
+  }, null, true, 'America/Mexico_City');
+
+  // ============================================
+  // JOB 5: Ejecutar reglas de seguimiento auto — cada día 9:30am L-V
+  // ============================================
+  new CronJob('30 9 * * 1-5', async () => {
+    console.log('⏰ Cron: Ejecutando reglas de seguimiento automático...');
+    try {
+      const rules = await FollowUpRule.find({ isActive: true });
+      let totalTasks = 0;
+
+      for (const rule of rules) {
+        let leads = [];
+
+        if (rule.trigger.type === 'days_inactive') {
+          const cutoff = new Date(Date.now() - rule.trigger.value * 24 * 60 * 60 * 1000);
+          const stageFilter = rule.trigger.stages?.length
+            ? { stage: { $in: rule.trigger.stages } }
+            : { stage: { $nin: ['closed_won', 'closed_lost'] } };
+          leads = await Lead.find({ isActive: true, ...stageFilter, $or: [{ lastContactDate: { $lt: cutoff } }, { lastContactDate: { $exists: false }, createdAt: { $lt: cutoff } }] }).populate('assignedTo', 'name').limit(100);
+        }
+
+        if (rule.trigger.type === 'score_below') {
+          const stageFilter = rule.trigger.stages?.length ? { stage: { $in: rule.trigger.stages } } : { stage: { $nin: ['closed_won', 'closed_lost'] } };
+          leads = await Lead.find({ isActive: true, ...stageFilter, score: { $lt: rule.trigger.value } }).populate('assignedTo', 'name').limit(100);
+        }
+
+        for (const lead of leads) {
+          try {
+            // Respetar cooldown
+            const cooloffDate = new Date(Date.now() - (rule.cooldownDays || 3) * 24 * 60 * 60 * 1000);
+            const recent = await Activity.findOne({ lead: lead._id, isAuto: true, createdAt: { $gte: cooloffDate } });
+            if (recent) continue;
+
+            const contact = typeof lead.contact === 'object' ? lead.contact?.name : lead.contact;
+            const message = (rule.action.message || `Seguimiento pendiente para ${lead.company}`)
+              .replace('{empresa}', lead.company)
+              .replace('{contacto}', contact || '')
+              .replace('{etapa}', lead.stage);
+
+            // Crear tarea en el sistema
+            await Activity.create({
+              lead: lead._id,
+              user: lead.assignedTo?._id,
+              type: 'task',
+              direction: 'internal',
+              isAuto: true,
+              subject: rule.action.taskTitle || `[Auto] Seguimiento: ${lead.company}`,
+              content: message,
+              taskData: {
+                dueDate: new Date(Date.now() + 24 * 60 * 60 * 1000),
+                completed: false,
+              },
+            });
+
+            // Notificar al ejecutivo asignado vía socket
+            io?.to(`user_${lead.assignedTo?._id}`).emit('followup_task', {
+              ruleName: rule.name,
+              leadId: lead._id,
+              company: lead.company,
+              message,
+            });
+
+            totalTasks++;
+            await new Promise(r => setTimeout(r, 150));
+          } catch (err) {
+            console.error(`Followup rule error for lead ${lead._id}:`, err.message);
+          }
+        }
+
+        await FollowUpRule.findByIdAndUpdate(rule._id, { lastRun: new Date(), $inc: { executionCount: 1 } });
+      }
+
+      console.log(`✅ Seguimientos automáticos: ${totalTasks} tareas creadas`);
+    } catch (error) {
+      console.error('Cron followup error:', error);
     }
   }, null, true, 'America/Mexico_City');
 

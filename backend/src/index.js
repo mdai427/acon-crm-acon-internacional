@@ -30,6 +30,8 @@ const integrationsRoutes = require('./routes/integrations');
 const configRoutes = require('./routes/config');
 const n8nRoutes    = require('./routes/n8n');
 const operationsRoutes = require('./routes/operations');
+const quotesRoutes     = require('./routes/quotes');
+const followupsRoutes  = require('./routes/followups');
 
 const app = express();
 const server = http.createServer(app);
@@ -99,6 +101,8 @@ app.use('/api/integrations', integrationsRoutes);
 app.use('/api/config',       configRoutes);
 app.use('/api/n8n',          n8nRoutes);
 app.use('/api/operations',   operationsRoutes);
+app.use('/api/quotes',       quotesRoutes);
+app.use('/api/followups',    followupsRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
