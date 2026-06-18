@@ -4,3 +4,4 @@ build/
 .env.local
 .env.production.local
 .DS_Store
+package-lock.json
