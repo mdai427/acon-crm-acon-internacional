@@ -29,6 +29,7 @@ const usersRoutes = require('./routes/users');
 const integrationsRoutes = require('./routes/integrations');
 const configRoutes = require('./routes/config');
 const n8nRoutes    = require('./routes/n8n');
+const operationsRoutes = require('./routes/operations');
 
 const app = express();
 const server = http.createServer(app);
@@ -97,6 +98,7 @@ app.use('/api/users',        usersRoutes);
 app.use('/api/integrations', integrationsRoutes);
 app.use('/api/config',       configRoutes);
 app.use('/api/n8n',          n8nRoutes);
+app.use('/api/operations',   operationsRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

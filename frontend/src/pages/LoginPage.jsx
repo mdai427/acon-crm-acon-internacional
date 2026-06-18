@@ -24,7 +24,9 @@ export default function LoginPage() {
   return (
     <div className="login-page">
       <div className="login-card">
-        <div className="login-logo">ACON CRM</div>
+        <div className="login-logo">
+          <span>ACON</span> CRM
+        </div>
         <div className="login-sub">Worldwide Logística Internacional</div>
 
         <form onSubmit={handleSubmit}>
@@ -60,8 +62,8 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <div style={{ marginTop: 24, padding: 14, background: 'var(--dark3)', borderRadius: 10, fontSize: 12, color: 'var(--text3)' }}>
-          <div style={{ fontWeight: 600, color: 'var(--text2)', marginBottom: 6 }}>Acceso inicial:</div>
+        <div style={{ marginTop: 24, padding: 14, background: 'var(--gray-50)', border: '1px solid var(--gray-200)', borderRadius: 10, fontSize: 12, color: 'var(--gray-500)' }}>
+          <div style={{ fontWeight: 600, color: 'var(--gray-900)', marginBottom: 6 }}>Acceso inicial:</div>
           <div>admin@aconinternacional.com</div>
           <div>Acon2024!</div>
         </div>

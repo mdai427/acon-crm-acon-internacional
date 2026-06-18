@@ -114,7 +114,7 @@ export default function LeadDetail({ leadId, toast, onBack }) {
             </div>
           </div>
           <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 6 }}>Asunto: {draft.subject}</div>
-          <div style={{ fontSize: 13, color: 'var(--text2)', whiteSpace: 'pre-wrap', background: 'var(--dark3)', borderRadius: 8, padding: 12 }}>{draft.body}</div>
+          <div style={{ fontSize: 13, color: 'var(--text2)', whiteSpace: 'pre-wrap', background: 'var(--gray-50)', borderRadius: 8, padding: 12 }}>{draft.body}</div>
         </div>
       )}
 
@@ -204,7 +204,7 @@ export default function LeadDetail({ leadId, toast, onBack }) {
             )}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 500, overflowY: 'auto' }}>
               {activities.map(a => (
-                <div key={a._id} style={{ padding: '10px 12px', background: 'var(--dark3)', borderRadius: 8, border: '1px solid var(--border)' }}>
+                <div key={a._id} style={{ padding: '10px 12px', background: 'var(--gray-50)', borderRadius: 8, border: '1px solid var(--gray-200)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                     <span style={{ fontSize: 11, color: 'var(--orange)', fontWeight: 600, textTransform: 'uppercase' }}>
                       {a.type === 'whatsapp' ? '💬' : a.type === 'email' ? '📧' : a.type === 'call' ? '📞' : a.type === 'stage_change' ? '🔄' : '📝'} {a.type}

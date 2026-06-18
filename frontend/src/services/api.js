@@ -78,6 +78,15 @@ export const testOpenAI = () => api.post('/config/openai/test');
 export const saveFBConfig = (d) => api.post('/config/facebook', d);
 export const testFacebook = () => api.post('/config/facebook/test');
 
+// Operations
+export const getOperations = (params) => api.get('/operations', { params });
+export const getOperation = (id) => api.get(`/operations/${id}`);
+export const createOperation = (data) => api.post('/operations', data);
+export const updateOperation = (id, data) => api.put(`/operations/${id}`, data);
+export const updateOperationStatus = (id, status) => api.put(`/operations/${id}/status`, { status });
+export const updateOperationDocument = (id, data) => api.put(`/operations/${id}/document`, data);
+export const deleteOperation = (id) => api.delete(`/operations/${id}`);
+
 // AI Agents
 export const draftEmail = (data) => api.post('/agents/draft-email', data);
 export const rescoreLead = (id) => api.post(`/agents/rescore/${id}`);
