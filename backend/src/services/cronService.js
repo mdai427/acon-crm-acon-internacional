@@ -170,6 +170,16 @@ const startCronJobs = (io) => {
           leads = await Lead.find({ isActive: true, ...stageFilter, score: { $lt: rule.trigger.value } }).populate('assignedTo', 'name').limit(100);
         }
 
+        if (rule.trigger.type === 'stage_entered' && rule.trigger.stages?.length) {
+          // Leads que entraron en la etapa hace menos de 24h (recién entrados)
+          const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+          leads = await Lead.find({
+            isActive: true,
+            stage: { $in: rule.trigger.stages },
+            updatedAt: { $gte: since }
+          }).populate('assignedTo', 'name').limit(100);
+        }
+
         for (const lead of leads) {
           try {
             // Respetar cooldown

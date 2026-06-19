@@ -1,7 +1,48 @@
 const express = require('express');
 const router = express.Router();
+const axios = require('axios');
 const Operation = require('../models/Operation');
+const Activity = require('../models/Activity');
+const Lead = require('../models/Lead');
 const { auth } = require('../middleware/auth');
+
+const WA_API_URL = 'https://graph.facebook.com/v18.0';
+
+const STATUS_LABELS = {
+  booking:    'Reserva confirmada',
+  departed:   'Mercancía despachada',
+  in_transit: 'En tránsito',
+  in_customs: 'En aduana',
+  released:   'Liberado de aduana',
+  delivered:  'Entregado'
+};
+
+async function notifyStatusChange(op, newStatus) {
+  try {
+    const lead = op.lead || (op.lead?._id ? op.lead : await Lead.findById(op.lead).select('whatsapp email contact company'));
+    if (!lead) return;
+
+    const phone = lead.whatsapp || lead.phone;
+    const statusLabel = STATUS_LABELS[newStatus] || newStatus;
+    const message = `📦 *ACON Internacional* — Actualización de tu embarque\n\n` +
+      `Folio: *${op.bookingNumber}*\n` +
+      `Ruta: ${op.origin} → ${op.destination}\n` +
+      `Estado: *${statusLabel}*\n\n` +
+      `Para más información contacta a tu ejecutivo ACON.`;
+
+    const phoneId = process.env.META_WA_PHONE_ID;
+    const token = process.env.META_WA_TOKEN;
+    if (phone && phoneId && token) {
+      await axios.post(
+        `${WA_API_URL}/${phoneId}/messages`,
+        { messaging_product: 'whatsapp', to: phone.replace(/\D/g, ''), type: 'text', text: { body: message, preview_url: false } },
+        { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } }
+      );
+    }
+  } catch (e) {
+    console.error('WA notify error:', e.message);
+  }
+}
 
 // GET /api/operations
 router.get('/', auth, async (req, res) => {
@@ -72,8 +113,26 @@ router.put('/:id/status', auth, async (req, res) => {
       req.params.id,
       { status, ...(status === 'delivered' ? { actualDelivery: new Date() } : {}) },
       { new: true }
-    );
+    ).populate('lead', 'whatsapp phone email company contact');
     if (!op) return res.status(404).json({ success: false, message: 'Operación no encontrada' });
+
+    // Registrar actividad y notificar cliente (fire-and-forget)
+    setImmediate(async () => {
+      try {
+        if (op.lead?._id) {
+          await Activity.create({
+            lead: op.lead._id,
+            user: req.user._id,
+            type: 'system',
+            direction: 'internal',
+            content: `Operación ${op.bookingNumber} → ${STATUS_LABELS[status] || status}`
+          });
+        }
+        await notifyStatusChange(op, status);
+      } catch (e) { console.error('status notify:', e.message); }
+    });
+
+    req.io?.emit('operation_updated', op);
     res.json({ success: true, data: op });
   } catch (err) {
     res.status(400).json({ success: false, message: err.message });
@@ -99,6 +158,24 @@ router.put('/:id/document', auth, async (req, res) => {
     res.json({ success: true, data: op });
   } catch (err) {
     res.status(400).json({ success: false, message: err.message });
+  }
+});
+
+// GET /api/operations/summary — KPIs para Dashboard
+router.get('/summary', auth, async (req, res) => {
+  try {
+    const [total, byStatus, inTransit, delivered] = await Promise.all([
+      Operation.countDocuments({ isActive: true }),
+      Operation.aggregate([
+        { $match: { isActive: true } },
+        { $group: { _id: '$status', count: { $sum: 1 } } }
+      ]),
+      Operation.countDocuments({ isActive: true, status: { $in: ['departed','in_transit','in_customs'] } }),
+      Operation.countDocuments({ isActive: true, status: 'delivered' }),
+    ]);
+    res.json({ success: true, data: { total, byStatus, inTransit, delivered } });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
   }
 });
 

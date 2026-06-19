@@ -3,6 +3,7 @@ const router = express.Router();
 const Lead = require('../models/Lead');
 const Activity = require('../models/Activity');
 const User = require('../models/User');
+const Operation = require('../models/Operation');
 const { auth, adminOnly } = require('../middleware/auth');
 const { analyzePipeline } = require('../services/aiAgent');
 
@@ -187,6 +188,39 @@ router.get('/ai-insights', async (req, res) => {
     res.json({ success: true, data: insights });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// GET /api/reports/operations — estadísticas de operaciones
+router.get('/operations', auth, async (req, res) => {
+  try {
+    const base = { isActive: true };
+    const [byService, byStatus, topRoutes, docsExpiring] = await Promise.all([
+      Operation.aggregate([
+        { $match: base },
+        { $group: { _id: '$serviceType', count: { $sum: 1 } } },
+        { $sort: { count: -1 } }
+      ]),
+      Operation.aggregate([
+        { $match: base },
+        { $group: { _id: '$status', count: { $sum: 1 } } }
+      ]),
+      Operation.aggregate([
+        { $match: base },
+        { $group: { _id: { origin: '$origin', destination: '$destination' }, count: { $sum: 1 }, carriers: { $addToSet: '$carrier' } } },
+        { $sort: { count: -1 } },
+        { $limit: 8 }
+      ]),
+      // Docs con vencimiento en menos de 7 días
+      Operation.find({
+        isActive: true,
+        'documents.deadline': { $lte: new Date(Date.now() + 7*24*60*60*1000), $gte: new Date() },
+        'documents.status': { $ne: 'received' }
+      }).select('bookingNumber clientName documents').limit(20)
+    ]);
+    res.json({ success: true, data: { byService, byStatus, topRoutes, docsExpiring } });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
   }
 });
 

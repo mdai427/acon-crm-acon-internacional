@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { getDashboard } from '../services/api';
+import { getDashboard, getOperationsSummary } from '../services/api';
 import { StageBadge } from '../components/Badges';
-import { Users, TrendingUp, CheckCircle2, DollarSign, Package, Plus, BarChart3 } from 'lucide-react';
+import { Users, TrendingUp, CheckCircle2, DollarSign, Package, Plus, BarChart3, Ship, Truck, Clock } from 'lucide-react';
 
 const COLORS = ['#F2641E', '#2563EB', '#16A34A', '#7C3AED', '#CA8A04', '#DC2626', '#0891B2'];
 
@@ -30,13 +30,14 @@ const KPI_TOOLTIP = {
 
 export default function Dashboard({ user, onNavigate }) {
   const [data, setData] = useState(null);
+  const [opsData, setOpsData] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    getDashboard()
-      .then(r => setData(r.data.data))
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    Promise.all([
+      getDashboard().then(r => setData(r.data.data)).catch(() => {}),
+      getOperationsSummary().then(r => setOpsData(r.data.data)).catch(() => {})
+    ]).finally(() => setLoading(false));
   }, []);
 
   const stats = data?.summary || { totalLeads: 0, activeDeals: 0, closedWon: 0, pipelineValue: 0 };
@@ -98,6 +99,34 @@ export default function Dashboard({ user, onNavigate }) {
           <div className="stat-label">Valor Pipeline</div>
           <div className="stat-value">${((stats.pipelineValue || 0) / 1000).toFixed(0)}K</div>
           <div className="stat-delta">USD estimado</div>
+        </div>
+      </div>
+
+      {/* Operations KPIs */}
+      <div className="stats-grid" style={{ marginBottom: 16 }}>
+        <div className="stat-card">
+          <div className="stat-icon navy"><Ship size={18} /></div>
+          <div className="stat-label">Total Operaciones</div>
+          <div className="stat-value">{opsData?.total || 0}</div>
+          <div className="stat-delta">Embarques activos</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-icon orange"><Truck size={18} /></div>
+          <div className="stat-label">En Tránsito</div>
+          <div className="stat-value">{opsData?.inTransit || 0}</div>
+          <div className="stat-delta">Departido / Aduana</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-icon green"><CheckCircle2 size={18} /></div>
+          <div className="stat-label">Entregados</div>
+          <div className="stat-value">{opsData?.delivered || 0}</div>
+          <div className="stat-delta up">Completados</div>
+        </div>
+        <div className="stat-card" style={{ cursor: 'pointer' }} onClick={() => onNavigate('operations')}>
+          <div className="stat-icon blue"><Clock size={18} /></div>
+          <div className="stat-label">Ver Operaciones</div>
+          <div className="stat-value" style={{ fontSize: 16 }}>→</div>
+          <div className="stat-delta">Ir al módulo</div>
         </div>
       </div>
 

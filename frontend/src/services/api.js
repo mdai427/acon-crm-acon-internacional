@@ -58,6 +58,7 @@ export const getTeamReport = () => api.get('/reports/team');
 export const getConversionReport = () => api.get('/reports/conversion');
 export const rescoreAllLeads = () => api.post('/leads/rescore-all');
 export const getAIInsights = () => api.get('/reports/ai-insights');
+export const getOperationsReport = () => api.get('/reports/operations');
 export const exportCSV = () => api.get('/reports/export', { responseType: 'blob' });
 
 // Users
@@ -99,6 +100,7 @@ export const executeFollowUpRule = (id) => api.post(`/followups/execute/${id}`);
 
 // Operations
 export const getOperations = (params) => api.get('/operations', { params });
+export const getOperationsSummary = () => api.get('/operations/summary');
 export const getOperation = (id) => api.get(`/operations/${id}`);
 export const createOperation = (data) => api.post('/operations', data);
 export const updateOperation = (id, data) => api.put(`/operations/${id}`, data);

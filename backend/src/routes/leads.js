@@ -167,7 +167,7 @@ router.put('/:id', async (req, res) => {
     const prevStage = lead.stage;
     const updates = req.body;
 
-    // Si cambia de etapa, registrar actividad
+    // Si cambia de etapa, registrar actividad y re-scorear
     if (updates.stage && updates.stage !== prevStage) {
       await Activity.create({
         lead: lead._id,
@@ -176,6 +176,10 @@ router.put('/:id', async (req, res) => {
         direction: 'internal',
         stageChange: { from: prevStage, to: updates.stage },
         content: `Etapa cambiada: ${prevStage} → ${updates.stage}`
+      });
+      // Re-score cuando cambia de etapa (fire-and-forget)
+      setImmediate(() => {
+        scoreLeadWithAI(req.params.id).catch(e => console.error(`Score error ${req.params.id}:`, e.message));
       });
     }
 
