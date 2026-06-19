@@ -171,17 +171,8 @@ textarea.form-input{resize:vertical;min-height:80px}
 .modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:20px;padding-top:16px;border-top:1px solid var(--gray-100)}
 
 /* ── KANBAN ── */
-.kanban{display:grid;grid-template-columns:repeat(7,240px);gap:12px;overflow-x:auto;padding-bottom:20px}
-.kanban-col{background:#fff;border:1px solid var(--gray-200);border-radius:var(--radius-lg);min-height:400px;display:flex;flex-direction:column}
-.kanban-header{padding:11px 14px;border-bottom:1px solid var(--gray-100);display:flex;align-items:center;justify-content:space-between}
-.kanban-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gray-500)}
-.kanban-count{background:var(--gray-100);color:var(--gray-500);font-size:11px;padding:2px 7px;border-radius:10px;font-weight:600}
-.kanban-cards{padding:10px;display:flex;flex-direction:column;gap:8px;flex:1}
-.kanban-card{background:#fff;border:1px solid var(--gray-200);border-radius:8px;padding:12px;cursor:grab;transition:all .2s;box-shadow:0 1px 3px rgba(0,0,0,.04)}
-.kanban-card:hover{border-color:var(--orange-500);box-shadow:0 4px 12px rgba(242,100,30,.12);transform:translateY(-1px)}
-.kanban-card.dragging{opacity:.5}
-.kc-company{font-size:13px;font-weight:600;margin-bottom:2px;color:var(--gray-900)}
-.kc-contact{font-size:11px;color:var(--gray-400)}
+.kanban-card:hover{border-color:var(--orange-500) !important;box-shadow:0 6px 18px rgba(242,100,30,.14) !important;transform:translateY(-2px)}
+.kanban-card:active{cursor:grabbing;transform:translateY(0) scale(.98)}
 .kc-meta{display:flex;align-items:center;justify-content:space-between;margin-top:8px}
 
 /* ── WHATSAPP ── */
