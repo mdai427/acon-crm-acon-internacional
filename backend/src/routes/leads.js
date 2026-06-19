@@ -167,7 +167,7 @@ router.put('/:id', async (req, res) => {
     const prevStage = lead.stage;
     const updates = req.body;
 
-    // Si cambia de etapa, registrar actividad y re-scorear
+    // Si cambia de etapa, registrar actividad
     if (updates.stage && updates.stage !== prevStage) {
       await Activity.create({
         lead: lead._id,
@@ -176,10 +176,6 @@ router.put('/:id', async (req, res) => {
         direction: 'internal',
         stageChange: { from: prevStage, to: updates.stage },
         content: `Etapa cambiada: ${prevStage} → ${updates.stage}`
-      });
-      // Re-score cuando cambia de etapa (fire-and-forget)
-      setImmediate(() => {
-        scoreLeadWithAI(req.params.id).catch(e => console.error(`Score error ${req.params.id}:`, e.message));
       });
     }
 
@@ -249,6 +245,47 @@ router.post('/:id/assign', auth, async (req, res) => {
 
     req.io?.to(`user_${userId}`).emit('lead_assigned', lead);
     res.json({ success: true, data: lead });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// POST /api/leads/import — bulk import
+router.post('/import', async (req, res) => {
+  try {
+    const { leads: rows } = req.body;
+    if (!Array.isArray(rows) || !rows.length) {
+      return res.status(400).json({ success: false, message: 'No hay filas para importar' });
+    }
+
+    let created = 0;
+    let skipped = 0;
+
+    for (const row of rows) {
+      try {
+        if (!row.company && !row.contact) { skipped++; continue; }
+        const data = {
+          company: row.company || row.contact || 'Sin nombre',
+          contact: row.contact || '',
+          email: row.email || '',
+          phone: row.phone || '',
+          whatsapp: row.whatsapp || row.phone || '',
+          source: row.source || 'other',
+          stage: row.stage || 'new',
+          country: row.country || 'México',
+          notes: row.notes || '',
+          value: parseFloat(row.value) || 0,
+          services: row.services ? row.services.split(',').map(s => s.trim()).filter(Boolean) : [],
+          assignedTo: req.user._id,
+        };
+        await Lead.create(data);
+        created++;
+      } catch (e) {
+        skipped++;
+      }
+    }
+
+    res.json({ success: true, data: { created, skipped, total: rows.length } });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

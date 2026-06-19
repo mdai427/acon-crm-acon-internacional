@@ -55,14 +55,6 @@ const leadSchema = new mongoose.Schema({
   aiQualification: { type: String }, // razon del score
   autoReplySent:   { type: Boolean, default: false },
   
-  // ---- Contactos adicionales ----
-  additionalContacts: [{
-    name:  { type: String, required: true },
-    role:  { type: String },
-    email: { type: String },
-    phone: { type: String },
-  }],
-
   // ---- Metadata ----
   tags:     [{ type: String }],
   notes:    { type: String },

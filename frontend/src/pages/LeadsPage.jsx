@@ -1,21 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { getLeads, createLead, deleteLead } from '../services/api';
 import { ScoreBadge, StageBadge, SourceBadge } from '../components/Badges';
-import ConfirmModal from '../components/ConfirmModal';
 
 const STAGES = ['new','contacted','qualified','proposal','negotiation','closed_won','closed_lost'];
 const SOURCES = ['web','facebook','instagram','linkedin','referral','whatsapp','email','cold_call','other'];
-const SERVICES = [
-  { id: 'maritimo_import',    label: 'Marítimo Importación' },
-  { id: 'maritimo_export',    label: 'Marítimo Exportación' },
-  { id: 'aereo_import',       label: 'Aéreo Importación' },
-  { id: 'aereo_export',       label: 'Aéreo Exportación' },
-  { id: 'terrestre_usa',      label: 'Terrestre USA/CAN' },
-  { id: 'terrestre_nacional', label: 'Terrestre Nacional' },
-  { id: 'despacho_aduanal',   label: 'Despacho Aduanal' },
-  { id: 'almacenaje',         label: 'Almacenaje' },
-  { id: 'seguro_carga',       label: 'Seguro de Carga' },
-];
+const SERVICES = ['terrestre_nacional','terrestre_internacional','maritimo','aereo','almacenaje','aduana','distribucion'];
 
 export default function LeadsPage({ toast, onSelect }) {
   const [leads, setLeads] = useState([]);
@@ -24,7 +13,6 @@ export default function LeadsPage({ toast, onSelect }) {
   const [stageFilter, setStageFilter] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ company:'', contact:'', email:'', phone:'', whatsapp:'', source:'web', stage:'new', country:'México', services:[] });
-  const [confirmDelete, setConfirmDelete] = useState(null); // leadId to delete
 
   const load = () => {
     setLoading(true);
@@ -50,18 +38,18 @@ export default function LeadsPage({ toast, onSelect }) {
   };
 
   const handleDelete = async (id) => {
+    if (!window.confirm('¿Eliminar este lead?')) return;
     try {
       await deleteLead(id);
       toast('Lead eliminado', 'success');
       load();
     } catch { toast('Error al eliminar', 'error'); }
-    setConfirmDelete(null);
   };
 
-  const toggleService = (id) => {
+  const toggleService = (svc) => {
     setForm(f => ({
       ...f,
-      services: f.services.includes(id) ? f.services.filter(s => s !== id) : [...f.services, id]
+      services: f.services.includes(svc) ? f.services.filter(s => s !== svc) : [...f.services, svc]
     }));
   };
 
@@ -136,7 +124,7 @@ export default function LeadsPage({ toast, onSelect }) {
                     </td>
                     <td onClick={e => e.stopPropagation()}>
                       <button className="btn btn-ghost btn-sm" onClick={() => onSelect(l._id)}>Ver</button>
-                      <button className="btn btn-ghost btn-sm" style={{ marginLeft: 6, color: 'var(--red)' }} onClick={() => setConfirmDelete(l._id)}>✕</button>
+                      <button className="btn btn-ghost btn-sm" style={{ marginLeft: 6, color: 'var(--red)' }} onClick={() => handleDelete(l._id)}>✕</button>
                     </td>
                   </tr>
                 ))}
@@ -145,16 +133,6 @@ export default function LeadsPage({ toast, onSelect }) {
           </div>
         )}
       </div>
-
-      <ConfirmModal
-        isOpen={!!confirmDelete}
-        title="Eliminar Lead"
-        message="¿Estás seguro? El lead será archivado y no aparecerá en la lista."
-        confirmLabel="Eliminar"
-        danger
-        onConfirm={() => handleDelete(confirmDelete)}
-        onCancel={() => setConfirmDelete(null)}
-      />
 
       {/* Modal nuevo lead */}
       {showModal && (
@@ -199,10 +177,10 @@ export default function LeadsPage({ toast, onSelect }) {
             <div className="form-group">
               <label className="form-label">Servicios de interés</label>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                {SERVICES.map(({ id, label }) => (
-                  <button key={id} type="button"
-                    className={`btn btn-sm ${form.services.includes(id) ? 'btn-primary' : 'btn-ghost'}`}
-                    onClick={() => toggleService(id)}>{label}</button>
+                {SERVICES.map(s => (
+                  <button key={s} type="button"
+                    className={`btn btn-sm ${form.services.includes(s) ? 'btn-primary' : 'btn-ghost'}`}
+                    onClick={() => toggleService(s)}>{s}</button>
                 ))}
               </div>
             </div>

@@ -5,7 +5,7 @@ import {
   PieChart, Pie, Cell, Legend, RadarChart, Radar, PolarGrid,
   PolarAngleAxis, PolarRadiusAxis
 } from 'recharts';
-import { getDashboard, getTeamReport, getConversionReport, exportCSV, rescoreAllLeads, getOperationsReport } from '../services/api';
+import { getDashboard, getTeamReport, getConversionReport, exportCSV, rescoreAllLeads } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import {
   FileDown, FileSpreadsheet, RefreshCw, TrendingUp, Users,
@@ -112,7 +112,6 @@ export default function ReportsPage({ toast }) {
   const [data, setData]       = useState(null);
   const [team, setTeam]       = useState([]);
   const [conv, setConv]       = useState(null);
-  const [opsReport, setOpsReport] = useState(null);
   const [loading, setLoading] = useState(true);
   const [rescoring, setRescoring] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -120,12 +119,11 @@ export default function ReportsPage({ toast }) {
 
   const load = useCallback(() => {
     setLoading(true);
-    const reqs = [getDashboard(), getOperationsReport()];
+    const reqs = [getDashboard()];
     if (isAdmin) reqs.push(getTeamReport(), getConversionReport());
     Promise.all(reqs)
-      .then(([r1, rOps, r2, r3]) => {
+      .then(([r1, r2, r3]) => {
         setData(r1.data.data);
-        setOpsReport(rOps.data.data);
         if (r2) setTeam(r2.data.data || []);
         if (r3) setConv(r3.data.data);
       })
@@ -182,8 +180,7 @@ export default function ReportsPage({ toast }) {
   }));
 
   const tabs = [
-    { id: 'overview',    label: 'Resumen' },
-    { id: 'operations',  label: 'Operaciones' },
+    { id: 'overview',   label: 'Resumen' },
     ...(isAdmin ? [
       { id: 'conversion', label: 'Conversión' },
       { id: 'team',       label: 'Equipo' },
@@ -309,86 +306,6 @@ export default function ReportsPage({ toast }) {
                   </div>
                 </div>
               </div>
-            )}
-          </>
-        )}
-
-        {/* ── TAB: OPERATIONS ── */}
-        {tab === 'operations' && (
-          <>
-            {opsReport ? (
-              <>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
-                  {/* By service type */}
-                  <div className="card">
-                    <div style={{ fontWeight: 700, color: 'var(--navy-900)', marginBottom: 16, fontSize: 14 }}>Operaciones por Servicio</div>
-                    <ResponsiveContainer width="100%" height={220}>
-                      <BarChart data={opsReport.byService.map(s => ({ name: s._id?.replace(/_/g, ' '), count: s.count }))} layout="vertical" barCategoryGap="25%">
-                        <CartesianGrid strokeDasharray="3 3" stroke="#F0F1F3" horizontal={false} />
-                        <XAxis type="number" tick={{ fill: '#9AA3AE', fontSize: 11 }} axisLine={false} tickLine={false} />
-                        <YAxis type="category" dataKey="name" tick={{ fill: '#5A6472', fontSize: 11 }} axisLine={false} tickLine={false} width={120} />
-                        <Tooltip content={<CustomTooltip />} />
-                        <Bar dataKey="count" name="Ops" fill="var(--navy-900)" radius={[0, 5, 5, 0]}>
-                          {opsReport.byService.map((_, i) => <Cell key={i} fill={PALETTE[i % PALETTE.length]} />)}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                  {/* By status */}
-                  <div className="card">
-                    <div style={{ fontWeight: 700, color: 'var(--navy-900)', marginBottom: 16, fontSize: 14 }}>Estado de Embarques</div>
-                    <ResponsiveContainer width="100%" height={220}>
-                      <PieChart>
-                        <Pie data={opsReport.byStatus} dataKey="count" nameKey="_id" cx="50%" cy="50%" outerRadius={90} innerRadius={55} paddingAngle={2}
-                          label={({ _id, percent }) => `${(_id || '').replace(/_/g, ' ')} ${Math.round(percent * 100)}%`}
-                          labelLine={false}>
-                          {opsReport.byStatus.map((_, i) => <Cell key={i} fill={PALETTE[i % PALETTE.length]} />)}
-                        </Pie>
-                        <Tooltip content={<CustomTooltip />} />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-
-                {/* Top routes */}
-                <div className="card" style={{ marginBottom: 16 }}>
-                  <div style={{ fontWeight: 700, color: 'var(--navy-900)', marginBottom: 14, fontSize: 14 }}>Rutas más Frecuentes</div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {opsReport.topRoutes.map((r, i) => (
-                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '8px 12px', background: 'var(--gray-50)', borderRadius: 8 }}>
-                        <div style={{ width: 22, height: 22, borderRadius: 6, background: PALETTE[i % PALETTE.length], color: '#fff', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{i + 1}</div>
-                        <div style={{ flex: 1, fontWeight: 600, fontSize: 13 }}>{r._id?.origin || '—'} → {r._id?.destination || '—'}</div>
-                        <div style={{ fontSize: 12, color: 'var(--text3)' }}>{r.carriers?.filter(Boolean).slice(0,2).join(', ') || '—'}</div>
-                        <div style={{ fontWeight: 700, color: 'var(--orange-500)', fontSize: 13 }}>{r.count} ops</div>
-                      </div>
-                    ))}
-                    {opsReport.topRoutes.length === 0 && <div style={{ color: 'var(--text3)', textAlign: 'center', padding: 20 }}>Sin operaciones registradas</div>}
-                  </div>
-                </div>
-
-                {/* Docs expiring */}
-                {opsReport.docsExpiring?.length > 0 && (
-                  <div className="card">
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, color: 'var(--red)', marginBottom: 14, fontSize: 14 }}>
-                      <AlertTriangle size={16} /> Documentos por Vencer (7 días)
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      {opsReport.docsExpiring.map((op, i) => (
-                        <div key={i} style={{ padding: '8px 12px', background: 'rgba(220,38,38,.04)', border: '1px solid rgba(220,38,38,.15)', borderRadius: 8 }}>
-                          <div style={{ fontWeight: 600, fontSize: 13 }}>{op.bookingNumber} — {op.clientName}</div>
-                          {op.documents.filter(d => d.deadline && new Date(d.deadline) <= new Date(Date.now() + 7*24*60*60*1000) && d.status !== 'received').map((d, j) => (
-                            <div key={j} style={{ fontSize: 12, color: 'var(--red)', marginTop: 3 }}>
-                              {d.type}: vence {new Date(d.deadline).toLocaleDateString('es-MX')}
-                            </div>
-                          ))}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </>
-            ) : (
-              <div className="card"><div className="empty-state">Sin datos de operaciones</div></div>
             )}
           </>
         )}

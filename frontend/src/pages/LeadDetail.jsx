@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { getLead, updateLead, getActivities, createActivity, draftEmail, rescoreLead, sendEmail } from '../services/api';
 import { ScoreBadge, StageBadge, SourceBadge } from '../components/Badges';
-import { UserPlus, Trash2 } from 'lucide-react';
 
 const STAGES = ['new','contacted','qualified','proposal','negotiation','closed_won','closed_lost'];
 const STAGE_LABELS = { new:'Nuevo', contacted:'Contactado', qualified:'Calificado', proposal:'Propuesta', negotiation:'Negociación', closed_won:'Ganado', closed_lost:'Perdido' };
@@ -15,9 +14,6 @@ export default function LeadDetail({ leadId, toast, onBack }) {
   const [form, setForm] = useState({});
   const [draftLoading, setDraftLoading] = useState(false);
   const [draft, setDraft] = useState(null);
-  const [contacts, setContacts] = useState([]);
-  const [newContact, setNewContact] = useState({ name: '', email: '', phone: '', role: '' });
-  const [showContactForm, setShowContactForm] = useState(false);
 
   const load = async () => {
     try {
@@ -25,7 +21,6 @@ export default function LeadDetail({ leadId, toast, onBack }) {
       const l = lRes.data.data;
       setLead(l);
       setForm({ stage: l.stage, value: l.value, priority: l.priority, notes: l.notes });
-      setContacts(l.additionalContacts || []);
       setActivities(aRes.data.data || []);
     } catch { toast('Error al cargar lead', 'error'); }
     finally { setLoading(false); }
@@ -58,27 +53,6 @@ export default function LeadDetail({ leadId, toast, onBack }) {
       toast('Score actualizado con IA', 'success');
       load();
     } catch { toast('OpenAI no configurado', 'error'); }
-  };
-
-  const addContact = async () => {
-    if (!newContact.name) return toast('El nombre es requerido', 'error');
-    const updated = [...contacts, newContact];
-    try {
-      await updateLead(leadId, { additionalContacts: updated });
-      setContacts(updated);
-      setNewContact({ name: '', email: '', phone: '', role: '' });
-      setShowContactForm(false);
-      toast('Contacto agregado', 'success');
-    } catch { toast('Error al agregar contacto', 'error'); }
-  };
-
-  const removeContact = async (idx) => {
-    const updated = contacts.filter((_, i) => i !== idx);
-    try {
-      await updateLead(leadId, { additionalContacts: updated });
-      setContacts(updated);
-      toast('Contacto eliminado', 'success');
-    } catch { toast('Error al eliminar contacto', 'error'); }
   };
 
   const handleDraftEmail = async () => {
@@ -212,55 +186,6 @@ export default function LeadDetail({ leadId, toast, onBack }) {
               )}
             </div>
           )}
-
-          {/* Contactos adicionales */}
-          <div className="card" style={{ marginBottom: 16 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-              <div style={{ fontWeight: 700 }}>Contactos</div>
-              <button className="btn btn-ghost btn-sm" style={{ display: 'flex', alignItems: 'center', gap: 5 }} onClick={() => setShowContactForm(v => !v)}>
-                <UserPlus size={13} /> Agregar
-              </button>
-            </div>
-            {/* Contacto principal */}
-            <div style={{ padding: '8px 10px', background: 'var(--gray-50)', borderRadius: 7, border: '1px solid var(--gray-200)', marginBottom: 8 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: 13 }}>{contactName} <span style={{ fontSize: 10, color: 'var(--orange-500)', marginLeft: 5 }}>Principal</span></div>
-                  <div style={{ fontSize: 12, color: 'var(--text3)' }}>{contactEmail}</div>
-                  {(lead.contact?.whatsapp || lead.whatsapp) && <div style={{ fontSize: 12, color: 'var(--text3)' }}>{lead.contact?.whatsapp || lead.whatsapp}</div>}
-                </div>
-              </div>
-            </div>
-            {/* Contactos adicionales */}
-            {contacts.map((c, i) => (
-              <div key={i} style={{ padding: '8px 10px', background: 'var(--gray-50)', borderRadius: 7, border: '1px solid var(--gray-200)', marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: 13 }}>{c.name} {c.role && <span style={{ fontSize: 10, color: 'var(--text3)', marginLeft: 5 }}>{c.role}</span>}</div>
-                  {c.email && <div style={{ fontSize: 12, color: 'var(--text3)' }}>{c.email}</div>}
-                  {c.phone && <div style={{ fontSize: 12, color: 'var(--text3)' }}>{c.phone}</div>}
-                </div>
-                <button className="btn btn-ghost btn-sm" style={{ color: 'var(--red)', padding: '2px 6px' }} onClick={() => removeContact(i)}>
-                  <Trash2 size={13} />
-                </button>
-              </div>
-            ))}
-            {showContactForm && (
-              <div style={{ marginTop: 10, padding: 12, background: 'var(--gray-50)', borderRadius: 8, border: '1px solid var(--gray-200)' }}>
-                <div className="form-row" style={{ marginBottom: 8 }}>
-                  <input className="form-input" placeholder="Nombre *" value={newContact.name} onChange={e => setNewContact(c => ({...c, name: e.target.value}))} />
-                  <input className="form-input" placeholder="Cargo / Rol" value={newContact.role} onChange={e => setNewContact(c => ({...c, role: e.target.value}))} />
-                </div>
-                <div className="form-row" style={{ marginBottom: 10 }}>
-                  <input className="form-input" placeholder="Email" value={newContact.email} onChange={e => setNewContact(c => ({...c, email: e.target.value}))} />
-                  <input className="form-input" placeholder="Teléfono / WhatsApp" value={newContact.phone} onChange={e => setNewContact(c => ({...c, phone: e.target.value}))} />
-                </div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button className="btn btn-primary btn-sm" onClick={addContact}>Guardar Contacto</button>
-                  <button className="btn btn-ghost btn-sm" onClick={() => setShowContactForm(false)}>Cancelar</button>
-                </div>
-              </div>
-            )}
-          </div>
 
           {/* Agregar nota */}
           <div className="card">

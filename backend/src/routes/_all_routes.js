@@ -31,6 +31,69 @@ agentsRouter.post('/rescore/:leadId', async (req, res) => {
   }
 });
 
+agentsRouter.post('/campaign', async (req, res) => {
+  try {
+    const { leadIds, templateId, channel, customBody } = req.body;
+    if (!leadIds || !leadIds.length) {
+      return res.status(400).json({ success: false, message: 'Se requiere al menos un lead' });
+    }
+
+    // Respond immediately — process in background
+    res.json({ success: true, message: `Campaña iniciada para ${leadIds.length} lead(s)`, data: { sent: leadIds.length } });
+
+    setImmediate(async () => {
+      try {
+        const Activity = require('../models/Activity');
+        const axios = require('axios');
+        const Template = templateId ? require('../models/Template') : null;
+        let templateDoc = null;
+        if (Template && templateId) {
+          templateDoc = await Template.findById(templateId).catch(() => null);
+        }
+
+        for (const leadId of leadIds) {
+          try {
+            const lead = await Lead.findById(leadId);
+            if (!lead) continue;
+
+            const body = customBody || (templateDoc ? templateDoc.body : '');
+            const resolvedBody = body
+              .replace(/\{\{nombre\}\}/gi, lead.contact || '')
+              .replace(/\{\{empresa\}\}/gi, lead.company || '')
+              .replace(/\{\{servicio\}\}/gi, (lead.services || []).join(', ') || '');
+
+            if (channel === 'whatsapp' && process.env.META_WA_TOKEN && process.env.META_WA_PHONE_ID) {
+              const phone = (lead.whatsapp || lead.phone || '').replace(/\D/g, '');
+              if (phone) {
+                await axios.post(
+                  `https://graph.facebook.com/v19.0/${process.env.META_WA_PHONE_ID}/messages`,
+                  { messaging_product: 'whatsapp', to: phone, type: 'text', text: { body: resolvedBody } },
+                  { headers: { Authorization: `Bearer ${process.env.META_WA_TOKEN}`, 'Content-Type': 'application/json' } }
+                ).catch(() => {});
+              }
+            }
+
+            await Activity.create({
+              lead: leadId,
+              type: 'whatsapp',
+              direction: 'outbound',
+              content: resolvedBody,
+              channel: channel || 'whatsapp',
+              campaignSent: true,
+            });
+          } catch (err) {
+            console.error('Campaign lead error:', leadId, err.message);
+          }
+        }
+      } catch (err) {
+        console.error('Campaign error:', err.message);
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 // ============================================
 // routes/users.js
 // ============================================

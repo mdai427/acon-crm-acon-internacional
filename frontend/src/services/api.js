@@ -58,7 +58,6 @@ export const getTeamReport = () => api.get('/reports/team');
 export const getConversionReport = () => api.get('/reports/conversion');
 export const rescoreAllLeads = () => api.post('/leads/rescore-all');
 export const getAIInsights = () => api.get('/reports/ai-insights');
-export const getOperationsReport = () => api.get('/reports/operations');
 export const exportCSV = () => api.get('/reports/export', { responseType: 'blob' });
 
 // Users
@@ -100,7 +99,6 @@ export const executeFollowUpRule = (id) => api.post(`/followups/execute/${id}`);
 
 // Operations
 export const getOperations = (params) => api.get('/operations', { params });
-export const getOperationsSummary = () => api.get('/operations/summary');
 export const getOperation = (id) => api.get(`/operations/${id}`);
 export const createOperation = (data) => api.post('/operations', data);
 export const updateOperation = (id, data) => api.put(`/operations/${id}`, data);
@@ -111,3 +109,13 @@ export const deleteOperation = (id) => api.delete(`/operations/${id}`);
 // AI Agents
 export const draftEmail = (data) => api.post('/agents/draft-email', data);
 export const rescoreLead = (id) => api.post(`/agents/rescore/${id}`);
+export const runCampaign = (data) => api.post('/agents/campaign', data);
+
+// Templates
+export const getTemplates2 = (params) => api.get('/templates', { params });
+export const createTemplate = (data) => api.post('/templates', data);
+export const updateTemplate = (id, data) => api.put(`/templates/${id}`, data);
+export const deleteTemplate = (id) => api.delete(`/templates/${id}`);
+
+// Import
+export const importLeads = (data) => api.post('/leads/import', data);

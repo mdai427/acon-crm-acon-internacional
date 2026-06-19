@@ -32,6 +32,7 @@ const n8nRoutes    = require('./routes/n8n');
 const operationsRoutes = require('./routes/operations');
 const quotesRoutes     = require('./routes/quotes');
 const followupsRoutes  = require('./routes/followups');
+const templatesRoutes  = require('./routes/templates');
 
 const app = express();
 const server = http.createServer(app);
@@ -103,6 +104,7 @@ app.use('/api/n8n',          n8nRoutes);
 app.use('/api/operations',   operationsRoutes);
 app.use('/api/quotes',       quotesRoutes);
 app.use('/api/followups',    followupsRoutes);
+app.use('/api/templates',   templatesRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

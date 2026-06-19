@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import './index.css';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Toast, useToast } from './components/Toast';
-import { useIdleLogout } from './hooks/useIdleLogout';
 import LoginPage from './pages/LoginPage';
 import Dashboard from './pages/Dashboard';
 import LeadsPage from './pages/LeadsPage';
@@ -16,10 +15,13 @@ import OperationsPage from './pages/OperationsPage';
 import UsersPage from './pages/UsersPage';
 import QuoterPage from './pages/QuoterPage';
 import FollowUpsPage from './pages/FollowUpsPage';
+import TemplatesPage from './pages/TemplatesPage';
+import ImportPage from './pages/ImportPage';
+import { useIdleLogout } from './hooks/useIdleLogout';
 import {
   LayoutDashboard, Users, Kanban, MessageSquare,
   BarChart3, Settings, Plug, Package, UserPlus,
-  Calculator, Zap, LogOut, Bell
+  Calculator, Zap, LogOut, Bell, FileText, Upload
 } from 'lucide-react';
 
 const NAV = [
@@ -29,8 +31,10 @@ const NAV = [
   { id: 'operations',  label: 'Operaciones',     Icon: Package,         section: 'main' },
   { id: 'quoter',      label: 'Cotizador',       Icon: Calculator,      section: 'main' },
   { id: 'whatsapp',    label: 'WhatsApp',        Icon: MessageSquare,   section: 'main' },
+  { id: 'import',      label: 'Importar Leads',  Icon: Upload,          section: 'main' },
   { id: 'reports',     label: 'Reportes',        Icon: BarChart3,       section: 'analytics' },
   { id: 'followups',   label: 'Automatizaciones', Icon: Zap,            section: 'analytics' },
+  { id: 'templates',   label: 'Plantillas',      Icon: FileText,        section: 'analytics' },
   { id: 'users',       label: 'Usuarios',        Icon: UserPlus,        section: 'config' },
   { id: 'config',      label: 'Configuración',   Icon: Settings,        section: 'config' },
   { id: 'integrations',label: 'Estado APIs',     Icon: Plug,            section: 'config' },
@@ -43,7 +47,20 @@ function CRMApp() {
   const { toasts, setToasts, show: toast } = useToast();
   const [page, setPage] = useState('dashboard');
   const [selectedLeadId, setSelectedLeadId] = useState(null);
-  const { countdown, stayActive } = useIdleLogout(logout, !!user);
+  const [showIdleWarning, setShowIdleWarning] = useState(false);
+
+  const { countdown, stayActive } = useIdleLogout(() => {
+    logout();
+  }, true);
+
+  // Show warning when countdown starts
+  React.useEffect(() => {
+    if (countdown !== null) {
+      setShowIdleWarning(true);
+    } else {
+      setShowIdleWarning(false);
+    }
+  }, [countdown]);
 
   const handleSelectLead = (id) => { setSelectedLeadId(id); setPage('lead_detail'); };
   const handleBackFromLead = () => { setSelectedLeadId(null); setPage('leads'); };
@@ -125,24 +142,29 @@ function CRMApp() {
           {page === 'followups'   && <FollowUpsPage toast={toast} />}
           {page === 'users'       && <UsersPage toast={toast} />}
           {page === 'integrations'&& <IntegrationsPage toast={toast} />}
+          {page === 'templates'   && <TemplatesPage toast={toast} />}
+          {page === 'import'      && <ImportPage toast={toast} onNavigate={navigate} />}
         </div>
       </div>
 
       <Toast toasts={toasts} setToasts={setToasts} />
 
-      {/* ── Aviso de cierre por inactividad ── */}
-      {countdown !== null && (
+      {/* Idle logout warning */}
+      {showIdleWarning && countdown !== null && (
         <div className="modal-overlay" style={{ zIndex: 9999 }}>
           <div className="modal" style={{ maxWidth: 380, textAlign: 'center' }}>
-            <div style={{ fontSize: 40, marginBottom: 12 }}>⏱️</div>
-            <div className="modal-title" style={{ marginBottom: 8 }}>Sesión por cerrar</div>
-            <p style={{ color: 'var(--text2)', fontSize: 14, marginBottom: 20 }}>
-              Por inactividad, tu sesión se cerrará en{' '}
-              <strong style={{ color: 'var(--red)' }}>{countdown}s</strong>.
+            <div className="modal-header">
+              <div className="modal-title">Sesión por expirar</div>
+            </div>
+            <p style={{ color: 'var(--text2)', fontSize: 14, margin: '12px 0 20px' }}>
+              Tu sesión cerrará en <strong>{countdown}</strong> segundo{countdown !== 1 ? 's' : ''} por inactividad.
             </p>
-            <button className="btn btn-primary" style={{ width: '100%' }} onClick={stayActive}>
-              Continuar sesión
-            </button>
+            <div className="modal-actions" style={{ justifyContent: 'center' }}>
+              <button className="btn" style={{ background: 'var(--orange-500)', color: '#fff' }} onClick={() => { stayActive(); setShowIdleWarning(false); }}>
+                Seguir conectado
+              </button>
+              <button className="btn btn-ghost" onClick={logout}>Cerrar sesión</button>
+            </div>
           </div>
         </div>
       )}
