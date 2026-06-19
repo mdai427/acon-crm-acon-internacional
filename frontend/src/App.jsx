@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import './index.css';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Toast, useToast } from './components/Toast';
+import { useIdleLogout } from './hooks/useIdleLogout';
 import LoginPage from './pages/LoginPage';
 import Dashboard from './pages/Dashboard';
 import LeadsPage from './pages/LeadsPage';
@@ -42,6 +43,7 @@ function CRMApp() {
   const { toasts, setToasts, show: toast } = useToast();
   const [page, setPage] = useState('dashboard');
   const [selectedLeadId, setSelectedLeadId] = useState(null);
+  const { countdown, stayActive } = useIdleLogout(logout, !!user);
 
   const handleSelectLead = (id) => { setSelectedLeadId(id); setPage('lead_detail'); };
   const handleBackFromLead = () => { setSelectedLeadId(null); setPage('leads'); };
@@ -127,6 +129,23 @@ function CRMApp() {
       </div>
 
       <Toast toasts={toasts} setToasts={setToasts} />
+
+      {/* ── Aviso de cierre por inactividad ── */}
+      {countdown !== null && (
+        <div className="modal-overlay" style={{ zIndex: 9999 }}>
+          <div className="modal" style={{ maxWidth: 380, textAlign: 'center' }}>
+            <div style={{ fontSize: 40, marginBottom: 12 }}>⏱️</div>
+            <div className="modal-title" style={{ marginBottom: 8 }}>Sesión por cerrar</div>
+            <p style={{ color: 'var(--text2)', fontSize: 14, marginBottom: 20 }}>
+              Por inactividad, tu sesión se cerrará en{' '}
+              <strong style={{ color: 'var(--red)' }}>{countdown}s</strong>.
+            </p>
+            <button className="btn btn-primary" style={{ width: '100%' }} onClick={stayActive}>
+              Continuar sesión
+            </button>
+          </div>
+        </div>
+      )}
     </>
   );
 }
