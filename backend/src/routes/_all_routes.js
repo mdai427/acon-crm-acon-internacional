@@ -239,16 +239,44 @@ pipelineRouter.get('/kanban', async (req, res) => {
     const filter = { isActive: true };
     if (req.user.role === 'executive') filter.assignedTo = req.user._id;
 
-    const stages = ['new','contacted','qualified','proposal','negotiation','closed_won','closed_lost'];
-    const result = {};
+    const STAGES = ['new','contacted','qualified','proposal','negotiation','closed_won','closed_lost'];
+    const SELECT = { company:1, contact:1, stage:1, score:1, priority:1, value:1,
+                     source:1, services:1, createdAt:1, lastContactDate:1,
+                     daysSinceLastContact:1, assignedTo:1 };
 
-    await Promise.all(stages.map(async (stage) => {
-      result[stage] = await Lead.find({ ...filter, stage })
-        .populate('assignedTo', 'name avatar')
-        .sort({ score: -1, updatedAt: -1 })
-        .limit(20)
-        .select('company contact stage score priority value source services createdAt lastContactDate daysSinceLastContact assignedTo');
-    }));
+    // Una sola query con $facet en lugar de 7 queries paralelas
+    const [agg] = await Lead.aggregate([
+      { $match: filter },
+      { $sort: { score: -1, updatedAt: -1 } },
+      { $facet: Object.fromEntries(
+          STAGES.map(s => [s, [
+            { $match: { stage: s } },
+            { $limit: 20 },
+            { $project: SELECT },
+          ]])
+        )
+      },
+    ]);
+
+    // Populate assignedTo en memoria (evita N+1 de populate por stage)
+    const allUserIds = new Set();
+    for (const stage of STAGES) {
+      for (const lead of agg[stage] || []) {
+        if (lead.assignedTo) allUserIds.add(String(lead.assignedTo));
+      }
+    }
+    const User = require('mongoose').model('User');
+    const users = await User.find({ _id: { $in: [...allUserIds] } })
+      .select('name avatar').lean();
+    const userMap = Object.fromEntries(users.map(u => [String(u._id), u]));
+
+    const result = {};
+    for (const stage of STAGES) {
+      result[stage] = (agg[stage] || []).map(lead => ({
+        ...lead,
+        assignedTo: lead.assignedTo ? (userMap[String(lead.assignedTo)] || lead.assignedTo) : null,
+      }));
+    }
 
     res.json({ success: true, data: result });
   } catch (error) {

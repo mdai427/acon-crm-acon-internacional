@@ -18,4 +18,7 @@ const templateSchema = new mongoose.Schema({
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
 }, { timestamps: true });
 
+templateSchema.index({ stage: 1, channel: 1 });    // filtro compuesto en GET /
+templateSchema.index({ isDefault: 1 });             // filtro de plantillas default
+
 module.exports = mongoose.model('Template', templateSchema);

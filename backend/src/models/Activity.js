@@ -50,8 +50,10 @@ const activitySchema = new mongoose.Schema({
   metadata: { type: mongoose.Schema.Types.Mixed }
 }, { timestamps: true });
 
-activitySchema.index({ lead: 1, createdAt: -1 });
-activitySchema.index({ user: 1, createdAt: -1 });
+activitySchema.index({ lead: 1, createdAt: -1 });      // timeline por lead
+activitySchema.index({ user: 1, createdAt: -1 });      // actividades por ejecutivo
 activitySchema.index({ type: 1 });
+activitySchema.index({ lead: 1, isAuto: 1 });           // cooldown check en followups
+activitySchema.index({ createdAt: -1 });                // reports / dashboard últimos 30 días
 
 module.exports = mongoose.model('Activity', activitySchema);

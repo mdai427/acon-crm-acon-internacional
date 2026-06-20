@@ -43,12 +43,14 @@ router.get('/', async (req, res) => {
     const sort = { [sortBy]: sortDir === 'asc' ? 1 : -1 };
     const skip = (Number(page) - 1) * Number(limit);
 
+    const safeLimit = Math.min(Number(limit) || 25, 100); // máximo 100 por página
     const [leads, total] = await Promise.all([
       Lead.find(filter)
         .populate('assignedTo', 'name email avatar')
         .sort(sort)
         .skip(skip)
-        .limit(Number(limit)),
+        .limit(safeLimit)
+        .lean(),
       Lead.countDocuments(filter)
     ]);
 
@@ -117,7 +119,8 @@ router.get('/:id', async (req, res) => {
     const activities = await Activity.find({ lead: lead._id })
       .populate('user', 'name avatar')
       .sort({ createdAt: -1 })
-      .limit(50);
+      .limit(50)
+      .lean();
 
     res.json({ success: true, data: lead, activities });
   } catch (error) {

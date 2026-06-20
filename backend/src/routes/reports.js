@@ -138,41 +138,65 @@ router.get('/conversion', adminOnly, async (req, res) => {
 });
 
 // GET /api/reports/team — solo admin
+// Optimizado: 2 aggregations en lugar de N*3 queries (N=# ejecutivos)
 router.get('/team', adminOnly, async (req, res) => {
   try {
-    const executives = await User.find({ role: 'executive', isActive: true });
-    
-    const teamData = await Promise.all(executives.map(async (exec) => {
-      const [total, byStage, recentActivities] = await Promise.all([
-        Lead.countDocuments({ assignedTo: exec._id, isActive: true }),
-        Lead.aggregate([
-          { $match: { assignedTo: exec._id, isActive: true } },
-          { $group: { _id: '$stage', count: { $sum: 1 }, value: { $sum: '$value' } } }
-        ]),
-        Activity.countDocuments({
-          user: exec._id,
-          createdAt: { $gte: new Date(Date.now() - 7*24*60*60*1000) }
-        })
-      ]);
+    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
-      const stageMap = byStage.reduce((a, s) => { a[s._id] = s; return a; }, {});
-      const closedWon = stageMap['closed_won']?.count || 0;
-      const closedLost = stageMap['closed_lost']?.count || 0;
+    // 1) Leads agrupados por ejecutivo + etapa en una sola aggregation
+    const [leadStats, activityStats, executives] = await Promise.all([
+      Lead.aggregate([
+        { $match: { isActive: true } },
+        { $group: {
+          _id: { assignedTo: '$assignedTo', stage: '$stage' },
+          count: { $sum: 1 },
+          value: { $sum: '$value' },
+        }},
+      ]),
+      // 2) Actividades de esta semana agrupadas por usuario
+      Activity.aggregate([
+        { $match: { createdAt: { $gte: weekAgo } } },
+        { $group: { _id: '$user', count: { $sum: 1 } } },
+      ]),
+      // 3) Lista de ejecutivos (tabla pequeña, OK)
+      User.find({ role: 'executive', isActive: true }).select('name email avatar').lean(),
+    ]);
+
+    // Indexar resultados en memoria para O(1) lookup
+    const leadsByExec = {}; // { execId: { stage: { count, value } } }
+    for (const row of leadStats) {
+      const execId = String(row._id.assignedTo);
+      if (!leadsByExec[execId]) leadsByExec[execId] = {};
+      leadsByExec[execId][row._id.stage] = { count: row.count, value: row.value };
+    }
+    const activitiesByUser = {};
+    for (const row of activityStats) {
+      activitiesByUser[String(row._id)] = row.count;
+    }
+
+    const teamData = executives.map(exec => {
+      const stages = leadsByExec[String(exec._id)] || {};
+      const closedWon  = stages['closed_won']?.count  || 0;
+      const closedLost = stages['closed_lost']?.count || 0;
       const closedTotal = closedWon + closedLost;
+      const totalLeads = Object.values(stages).reduce((a, s) => a + s.count, 0);
+      const activePipeline = Object.entries(stages)
+        .filter(([s]) => !['closed_won', 'closed_lost'].includes(s))
+        .reduce((a, [, s]) => a + (s.value || 0), 0);
+
       return {
         executive: { _id: exec._id, name: exec.name, email: exec.email, avatar: exec.avatar },
         stats: {
-          totalLeads: total,
+          totalLeads,
           closedWon,
           closedLost,
           winRate: closedTotal > 0 ? Math.round((closedWon / closedTotal) * 100) : 0,
-          closedValue: stageMap['closed_won']?.value || 0,
-          activePipeline: byStage.filter(s => !['closed_won','closed_lost'].includes(s._id))
-            .reduce((a, s) => a + (s.value || 0), 0),
-          activitiesThisWeek: recentActivities
-        }
+          closedValue: stages['closed_won']?.value || 0,
+          activePipeline,
+          activitiesThisWeek: activitiesByUser[String(exec._id)] || 0,
+        },
       };
-    }));
+    });
 
     res.json({ success: true, data: teamData });
   } catch (error) {
@@ -197,7 +221,10 @@ router.get('/export', async (req, res) => {
     if (req.user.role === 'executive') filter.assignedTo = req.user._id;
     if (req.query.stage) filter.stage = req.query.stage;
 
-    const leads = await Lead.find(filter).populate('assignedTo', 'name');
+    const leads = await Lead.find(filter)
+      .populate('assignedTo', 'name')
+      .lean()
+      .limit(5000); // guard para colecciones grandes
 
     const headers = ['Empresa','Contacto','Email','Telefono','Etapa','Fuente','Score','Valor USD','Ejecutivo','Creado'];
     const rows = leads.map(l => [

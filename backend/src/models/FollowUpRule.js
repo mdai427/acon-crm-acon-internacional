@@ -31,4 +31,7 @@ const followUpRuleSchema = new mongoose.Schema({
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
 }, { timestamps: true });
 
+followUpRuleSchema.index({ isActive: 1 });           // GET /rules y /pending
+followUpRuleSchema.index({ 'trigger.type': 1 });    // branch logic en execute
+
 module.exports = mongoose.model('FollowUpRule', followUpRuleSchema);

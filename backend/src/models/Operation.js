@@ -72,4 +72,14 @@ operationSchema.pre('validate', async function (next) {
   next();
 });
 
+// bookingNumber tiene unique:true (auto-index), se refuerza explícitamente
+operationSchema.index({ bookingNumber: 1 });
+operationSchema.index({ isActive: 1 });
+operationSchema.index({ isActive: 1, status: 1 });       // filtro más común
+operationSchema.index({ isActive: 1, serviceType: 1 });  // filtro de tipo
+operationSchema.index({ lead: 1 });                       // join con lead
+operationSchema.index({ assignedTo: 1 });
+operationSchema.index({ createdAt: -1 });                 // sort por fecha
+operationSchema.index({ eta: 1 });                        // alertas de vencimiento
+
 module.exports = mongoose.model('Operation', operationSchema);

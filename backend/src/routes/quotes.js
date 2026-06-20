@@ -16,12 +16,17 @@ router.get('/', auth, async (req, res) => {
       { folio: { $regex: search, $options: 'i' } },
       { clientName: { $regex: search, $options: 'i' } },
     ];
+    const page  = Math.max(1, Number(req.query.page) || 1);
+    const lim   = Math.min(Number(req.query.limit) || 50, 100);
     const quotes = await Quote.find(filter)
       .populate('lead', 'company contact')
       .populate('createdBy', 'name')
       .sort({ createdAt: -1 })
-      .limit(200);
-    res.json({ success: true, data: quotes });
+      .skip((page - 1) * lim)
+      .limit(lim)
+      .lean();
+    const total = await Quote.countDocuments(filter);
+    res.json({ success: true, data: quotes, pagination: { total, page, pages: Math.ceil(total / lim), limit: lim } });
   } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 });
 

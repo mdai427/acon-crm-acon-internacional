@@ -77,11 +77,31 @@ leadSchema.virtual('inactiveDays').get(function() {
   return Math.floor((Date.now() - this.lastContactDate) / (1000 * 60 * 60 * 24));
 });
 
-// Indices para busquedas rapidas
-leadSchema.index({ assignedTo: 1, stage: 1 });
-leadSchema.index({ company: 'text', contact: 'text', email: 'text' });
+// ── Índices base ─────────────────────────────────────────────
+leadSchema.index({ company: 'text', contact: 'text', email: 'text' }); // búsqueda full-text
 leadSchema.index({ createdAt: -1 });
-leadSchema.index({ score: -1 });
 leadSchema.index({ nextFollowUpDate: 1 });
+
+// ── Índices compuestos de alta frecuencia ────────────────────
+// isActive aparece en prácticamente todas las queries como primer filtro
+leadSchema.index({ isActive: 1 });
+leadSchema.index({ isActive: 1, assignedTo: 1 });          // dashboard / reports / pipeline
+leadSchema.index({ isActive: 1, stage: 1 });               // pipeline kanban / contacts
+leadSchema.index({ isActive: 1, score: -1 });              // copilot suggestions / rescore
+leadSchema.index({ isActive: 1, lastContactDate: 1 });     // followups pending
+leadSchema.index({ isActive: 1, stage: 1, score: -1 });    // kanban ordenado por score
+leadSchema.index({ isActive: 1, assignedTo: 1, stage: 1 }); // reportes de equipo
+
+// ── Deduplicación n8n / WhatsApp webhook ────────────────────
+leadSchema.index({ email: 1, isActive: 1 });
+leadSchema.index({ whatsapp: 1, isActive: 1 });
+leadSchema.index({ phone: 1, isActive: 1 });
+
+// ── Filtros de segmentación (campañas / reports) ─────────────
+leadSchema.index({ country: 1 });
+leadSchema.index({ source: 1 });
+leadSchema.index({ services: 1 });                         // $in queries en marketing
+leadSchema.index({ priority: 1 });
+leadSchema.index({ value: -1 });                           // sort por valor
 
 module.exports = mongoose.model('Lead', leadSchema);

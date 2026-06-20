@@ -46,4 +46,8 @@ userSchema.methods.toJSON = function() {
   return obj;
 };
 
+// email ya tiene unique:true (auto-index), se define explícitamente para claridad
+userSchema.index({ email: 1 });
+userSchema.index({ isActive: 1, role: 1 }); // team reports filter
+
 module.exports = mongoose.model('User', userSchema);

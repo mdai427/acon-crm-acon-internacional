@@ -17,12 +17,19 @@ router.get('/', auth, async (req, res) => {
       { origin: { $regex: search, $options: 'i' } },
       { destination: { $regex: search, $options: 'i' } },
     ];
-    const ops = await Operation.find(filter)
-      .populate('lead', 'company contact')
-      .populate('assignedTo', 'name')
-      .sort({ createdAt: -1 })
-      .limit(Number(limit));
-    res.json({ success: true, data: ops });
+    const safeLimit = Math.min(Number(limit) || 50, 100);
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const [ops, total] = await Promise.all([
+      Operation.find(filter)
+        .populate('lead', 'company contact')
+        .populate('assignedTo', 'name')
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * safeLimit)
+        .limit(safeLimit)
+        .lean(),
+      Operation.countDocuments(filter),
+    ]);
+    res.json({ success: true, data: ops, pagination: { total, page, pages: Math.ceil(total / safeLimit), limit: safeLimit } });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
