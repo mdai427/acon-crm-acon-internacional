@@ -48,9 +48,24 @@ export const getConversation = (leadId) => api.get(`/whatsapp/conversations/${le
 export const sendWhatsApp = (data) => api.post('/whatsapp/send', data);
 export const sendTemplate = (data) => api.post('/whatsapp/template', data);
 
-// Email
+// Email (SMTP)
 export const sendEmail = (data) => api.post('/email/send', data);
 export const getTemplates = () => api.get('/email/templates');
+
+// Gmail (OAuth)
+export const getGmailMessages = (contactEmail, maxResults = 20) =>
+  api.get('/gmail/messages', { params: { contactEmail, maxResults } });
+export const sendGmailMessage = (data) => api.post('/gmail/send', data);
+
+// Google Calendar
+export const getCalendarEvents = (q) => api.get('/calendar/events', { params: { q } });
+export const createCalendarEvent = (data) => api.post('/calendar/events', data);
+export const deleteCalendarEvent = (eventId) => api.delete(`/calendar/events/${eventId}`);
+
+// OAuth
+export const getOAuthStatus = () => api.get('/oauth/status');
+export const connectGoogle = () => api.get('/oauth/google/url');
+export const disconnectOAuth = (provider) => api.delete(`/oauth/disconnect/${provider}`);
 
 // Reports
 export const getDashboard = () => api.get('/reports/dashboard');
@@ -59,6 +74,8 @@ export const getConversionReport = () => api.get('/reports/conversion');
 export const rescoreAllLeads = () => api.post('/leads/rescore-all');
 export const getAIInsights = () => api.get('/reports/ai-insights');
 export const exportCSV = () => api.get('/reports/export', { responseType: 'blob' });
+export const getOperationsSummary = () => api.get('/operations/summary');
+export const getOperationsReport = () => api.get('/reports/operations');
 
 // Users
 export const getUsers = () => api.get('/users');
@@ -67,10 +84,8 @@ export const updateUser = (id, data) => api.put(`/users/${id}`, data);
 export const deleteUser = (id) => api.delete(`/users/${id}`);
 export const resetUserPassword = (id, newPassword) => api.put(`/users/${id}/reset-password`, { newPassword });
 
-// Integrations
+// Integrations / Config
 export const getIntegrations = () => api.get('/integrations/status');
-
-// Config / Integraciones
 export const getConfig = () => api.get('/config');
 export const saveWhatsAppConfig = (d) => api.post('/config/whatsapp', d);
 export const testWhatsApp = () => api.post('/config/whatsapp/test');
@@ -78,37 +93,29 @@ export const saveEmailConfig = (d) => api.post('/config/email', d);
 export const testEmail = (d) => api.post('/config/email/test', d);
 export const saveOpenAIConfig = (d) => api.post('/config/openai', d);
 export const testOpenAI = () => api.post('/config/openai/test');
-export const saveFBConfig = (d) => api.post('/config/facebook', d);
-export const testFacebook = () => api.post('/config/facebook/test');
-
-// Quotes
-export const getQuotes = (params) => api.get('/quotes', { params });
-export const getQuote = (id) => api.get(`/quotes/${id}`);
-export const createQuote = (data) => api.post('/quotes', data);
-export const updateQuote = (id, data) => api.put(`/quotes/${id}`, data);
-export const updateQuoteStatus = (id, status) => api.put(`/quotes/${id}/status`, { status });
-export const deleteQuote = (id) => api.delete(`/quotes/${id}`);
-
-// Follow-up Rules
-export const getFollowUpRules = () => api.get('/followups/rules');
-export const createFollowUpRule = (data) => api.post('/followups/rules', data);
-export const updateFollowUpRule = (id, data) => api.put(`/followups/rules/${id}`, data);
-export const deleteFollowUpRule = (id) => api.delete(`/followups/rules/${id}`);
-export const getPendingFollowUps = () => api.get('/followups/pending');
-export const executeFollowUpRule = (id) => api.post(`/followups/execute/${id}`);
 
 // Operations
 export const getOperations = (params) => api.get('/operations', { params });
-export const getOperation = (id) => api.get(`/operations/${id}`);
 export const createOperation = (data) => api.post('/operations', data);
 export const updateOperation = (id, data) => api.put(`/operations/${id}`, data);
-export const updateOperationStatus = (id, status) => api.put(`/operations/${id}/status`, { status });
-export const updateOperationDocument = (id, data) => api.put(`/operations/${id}/document`, data);
 export const deleteOperation = (id) => api.delete(`/operations/${id}`);
+export const updateOperationStatus = (id, status) => api.put(`/operations/${id}/status`, { status });
 
-// AI Agents
+// Quotes
+export const getQuotes = (params) => api.get('/quotes', { params });
+export const createQuote = (data) => api.post('/quotes', data);
+export const updateQuote = (id, data) => api.put(`/quotes/${id}`, data);
+export const deleteQuote = (id) => api.delete(`/quotes/${id}`);
+
+// Follow-ups
+export const getFollowUps = () => api.get('/followups');
+export const createFollowUp = (data) => api.post('/followups', data);
+export const updateFollowUp = (id, data) => api.put(`/followups/${id}`, data);
+export const deleteFollowUp = (id) => api.delete(`/followups/${id}`);
+
+// AI
 export const draftEmail = (data) => api.post('/agents/draft-email', data);
-export const rescoreLead = (id) => api.post(`/agents/rescore/${id}`);
+export const rescoreLead = (id) => api.post(`/leads/${id}/rescore`);
 export const runCampaign = (data) => api.post('/agents/campaign', data);
 
 // Templates

@@ -1,8 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import {
+  AreaChart, Area, BarChart, Bar,
+  XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
+  PieChart, Pie, Cell
+} from 'recharts';
 import { getDashboard } from '../services/api';
 import { StageBadge } from '../components/Badges';
-import { Users, TrendingUp, CheckCircle2, DollarSign, Package, Plus, BarChart3 } from 'lucide-react';
+import { Users, TrendingUp, CheckCircle2, DollarSign, Package, Plus, BarChart3, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 
 const COLORS = ['#F2641E', '#2563EB', '#16A34A', '#7C3AED', '#CA8A04', '#DC2626', '#0891B2'];
 
@@ -16,16 +20,21 @@ const PIPELINE_STAGES = [
   { id: 'closed_lost', label: 'Perdidos',    color: '#DC2626' },
 ];
 
-const KPI_TOOLTIP = {
-  contentStyle: {
-    background: '#fff',
-    border: '1px solid #E3E6EA',
-    borderRadius: 8,
-    fontSize: 12,
-    boxShadow: '0 4px 12px rgba(0,0,0,.08)',
-    color: '#1A1F2E',
-  },
-  cursor: { fill: 'rgba(242,100,30,.06)' }
+const CustomTooltip = ({ active, payload, label }) => {
+  if (!active || !payload?.length) return null;
+  return (
+    <div style={{
+      background: '#fff', border: '1px solid #E3E6EA', borderRadius: 10,
+      padding: '10px 14px', boxShadow: '0 8px 24px rgba(0,0,0,.1)', fontSize: 12,
+    }}>
+      <div style={{ fontWeight: 700, color: '#0B2545', marginBottom: 4 }}>{label}</div>
+      {payload.map((p, i) => (
+        <div key={i} style={{ color: p.color, fontWeight: 600 }}>
+          {p.value} leads
+        </div>
+      ))}
+    </div>
+  );
 };
 
 export default function Dashboard({ user, onNavigate }) {
@@ -42,7 +51,7 @@ export default function Dashboard({ user, onNavigate }) {
   const stats = data?.summary || { totalLeads: 0, activeDeals: 0, closedWon: 0, pipelineValue: 0 };
   const pipeline = data?.byStage || [];
   const sourceData = data?.bySource || [];
-  const trendData = data?.monthlyTrend || [
+  const trendData = data?.monthlyTrend?.length ? data.monthlyTrend : [
     { mes: 'Ene', leads: 8 }, { mes: 'Feb', leads: 14 }, { mes: 'Mar', leads: 19 },
     { mes: 'Abr', leads: 22 }, { mes: 'May', leads: 17 }, { mes: 'Jun', leads: 28 },
   ];
@@ -50,6 +59,11 @@ export default function Dashboard({ user, onNavigate }) {
   if (loading) return <div className="loading"><div className="spinner" />Cargando dashboard...</div>;
 
   const maxPipeline = Math.max(...PIPELINE_STAGES.map(s => pipeline.find(p => p._id === s.id)?.count || 0), 1);
+
+  // Compute trend delta (last 2 months)
+  const lastVal = trendData[trendData.length - 1]?.leads || 0;
+  const prevVal = trendData[trendData.length - 2]?.leads || 0;
+  const trendDelta = prevVal ? Math.round(((lastVal - prevVal) / prevVal) * 100) : 0;
 
   return (
     <div className="page">
@@ -74,31 +88,22 @@ export default function Dashboard({ user, onNavigate }) {
       </div>
 
       {/* KPIs */}
-      <div className="stats-grid">
-        <div className="stat-card">
-          <div className="stat-icon orange"><Users size={18} /></div>
-          <div className="stat-label">Total Leads</div>
-          <div className="stat-value">{stats.totalLeads || 0}</div>
-          <div className="stat-delta up">Pipeline activo</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-icon green"><TrendingUp size={18} /></div>
-          <div className="stat-label">Deals Activos</div>
-          <div className="stat-value">{stats.activeDeals || 0}</div>
-          <div className="stat-delta">En proceso</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-icon blue"><CheckCircle2 size={18} /></div>
-          <div className="stat-label">Ganados</div>
-          <div className="stat-value">{stats.closedWon || 0}</div>
-          <div className="stat-delta up">Cerrados con éxito</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-icon navy"><DollarSign size={18} /></div>
-          <div className="stat-label">Valor Pipeline</div>
-          <div className="stat-value">${((stats.pipelineValue || 0) / 1000).toFixed(0)}K</div>
-          <div className="stat-delta">USD estimado</div>
-        </div>
+      <div className="stats-grid" style={{ marginBottom: 20 }}>
+        {[
+          { label: 'Total Leads', value: stats.totalLeads || 0, delta: 'Pipeline activo', up: true, Icon: Users, color: '#F2641E' },
+          { label: 'Deals Activos', value: stats.activeDeals || 0, delta: 'En proceso', up: false, Icon: TrendingUp, color: '#2563EB' },
+          { label: 'Ganados', value: stats.closedWon || 0, delta: 'Cerrados con éxito', up: true, Icon: CheckCircle2, color: '#16A34A' },
+          { label: 'Valor Pipeline', value: `$${((stats.pipelineValue || 0) / 1000).toFixed(0)}K`, delta: 'USD estimado', up: true, Icon: DollarSign, color: '#0B2545' },
+        ].map(({ label, value, delta, up, Icon, color }) => (
+          <div key={label} className="stat-card">
+            <div className="stat-icon" style={{ background: `${color}14`, color }}>
+              <Icon size={18} strokeWidth={1.75} />
+            </div>
+            <div className="stat-label">{label}</div>
+            <div className="stat-value">{value}</div>
+            <div className={`stat-delta ${up ? 'up' : ''}`}>{delta}</div>
+          </div>
+        ))}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
@@ -113,7 +118,7 @@ export default function Dashboard({ user, onNavigate }) {
                   <span style={{ color: 'var(--gray-500)' }}>{s.label}</span>
                   <span style={{ fontWeight: 700, color: s.color }}>{count}</span>
                 </div>
-                <div style={{ height: 5, background: 'var(--gray-100)', borderRadius: 3 }}>
+                <div style={{ height: 6, background: 'var(--gray-100)', borderRadius: 3 }}>
                   <div style={{ height: '100%', width: `${(count / maxPipeline) * 100}%`, background: s.color, borderRadius: 3, transition: 'width .6s' }} />
                 </div>
               </div>
@@ -121,16 +126,42 @@ export default function Dashboard({ user, onNavigate }) {
           })}
         </div>
 
-        {/* Tendencia mensual */}
+        {/* Tendencia mensual — Area chart with gradient */}
         <div className="card">
-          <div style={{ fontWeight: 700, marginBottom: 16, color: 'var(--navy-900)', fontSize: 14 }}>Leads por Mes</div>
-          <ResponsiveContainer width="100%" height={200}>
-            <LineChart data={trendData}>
-              <XAxis dataKey="mes" tick={{ fill: 'var(--gray-400)', fontSize: 11 }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fill: 'var(--gray-400)', fontSize: 11 }} axisLine={false} tickLine={false} />
-              <Tooltip {...KPI_TOOLTIP} />
-              <Line type="monotone" dataKey="leads" stroke="var(--orange-500)" strokeWidth={2.5} dot={{ fill: 'var(--orange-500)', r: 4, strokeWidth: 0 }} activeDot={{ r: 6 }} />
-            </LineChart>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
+            <div style={{ fontWeight: 700, color: 'var(--navy-900)', fontSize: 14 }}>Leads por Mes</div>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 700,
+              color: trendDelta >= 0 ? '#16A34A' : '#DC2626',
+              background: trendDelta >= 0 ? '#DCFCE7' : '#FEE2E2',
+              padding: '3px 8px', borderRadius: 20,
+            }}>
+              {trendDelta >= 0 ? <ArrowUpRight size={13} /> : <ArrowDownRight size={13} />}
+              {Math.abs(trendDelta)}% vs mes anterior
+            </div>
+          </div>
+          <div style={{ fontSize: 28, fontWeight: 800, color: '#0B2545', marginBottom: 2 }}>{lastVal}</div>
+          <div style={{ fontSize: 11, color: '#9AA3AE', marginBottom: 14 }}>leads este mes</div>
+          <ResponsiveContainer width="100%" height={160}>
+            <AreaChart data={trendData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+              <defs>
+                <linearGradient id="dashGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#F2641E" stopOpacity={0.18} />
+                  <stop offset="100%" stopColor="#F2641E" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#F0F1F3" vertical={false} />
+              <XAxis dataKey="mes" tick={{ fill: '#9AA3AE', fontSize: 11 }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fill: '#9AA3AE', fontSize: 11 }} axisLine={false} tickLine={false} />
+              <Tooltip content={<CustomTooltip />} />
+              <Area
+                type="monotone" dataKey="leads"
+                stroke="#F2641E" strokeWidth={2.5}
+                fill="url(#dashGrad)"
+                dot={{ fill: '#F2641E', r: 4, strokeWidth: 0 }}
+                activeDot={{ r: 6, strokeWidth: 0, fill: '#F2641E' }}
+              />
+            </AreaChart>
           </ResponsiveContainer>
         </div>
       </div>
@@ -145,7 +176,7 @@ export default function Dashboard({ user, onNavigate }) {
                 <Pie data={sourceData} dataKey="count" nameKey="_id" cx="50%" cy="50%" outerRadius={78} innerRadius={48} paddingAngle={2}>
                   {sourceData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                 </Pie>
-                <Tooltip {...KPI_TOOLTIP} />
+                <Tooltip />
               </PieChart>
             </ResponsiveContainer>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>

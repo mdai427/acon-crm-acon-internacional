@@ -33,6 +33,9 @@ const operationsRoutes = require('./routes/operations');
 const quotesRoutes     = require('./routes/quotes');
 const followupsRoutes  = require('./routes/followups');
 const templatesRoutes  = require('./routes/templates');
+const { router: oauthRoutes } = require('./routes/oauth');
+const calendarRoutes   = require('./routes/userCalendar');
+const gmailRoutes      = require('./routes/gmail');
 
 const app = express();
 const server = http.createServer(app);
@@ -104,7 +107,10 @@ app.use('/api/n8n',          n8nRoutes);
 app.use('/api/operations',   operationsRoutes);
 app.use('/api/quotes',       quotesRoutes);
 app.use('/api/followups',    followupsRoutes);
-app.use('/api/templates',   templatesRoutes);
+app.use('/api/templates',    templatesRoutes);
+app.use('/api/oauth',        oauthRoutes);
+app.use('/api/calendar',     calendarRoutes);
+app.use('/api/gmail',        gmailRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
