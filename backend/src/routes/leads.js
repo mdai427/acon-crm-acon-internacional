@@ -5,6 +5,7 @@ const Activity = require('../models/Activity');
 const { auth, adminOnly } = require('../middleware/auth');
 const { scoreLeadWithAI } = require('../services/aiAgent');
 const { invalidateLead } = require('../services/cache');
+const { enqueue } = require('../services/jobQueue');
 
 // Todos los endpoints requieren autenticación
 router.use(auth);
@@ -205,27 +206,11 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
-// POST /api/leads/rescore-all — rescora todos los leads con score=0 (admin)
+// POST /api/leads/rescore-all — encola rescoring en background (admin)
 router.post('/rescore-all', adminOnly, async (req, res) => {
   try {
-    const leads = await Lead.find({ isActive: true, score: 0 }).select('_id');
-    res.json({ success: true, message: `Rescoring ${leads.length} leads en segundo plano...`, count: leads.length });
-
-    // Ejecutar en background sin bloquear respuesta
-    (async () => {
-      let ok = 0, fail = 0;
-      for (const l of leads) {
-        try {
-          await scoreLeadWithAI(l._id);
-          ok++;
-        } catch (e) {
-          console.error(`Rescore failed for ${l._id}:`, e.message);
-          fail++;
-        }
-        await new Promise(r => setTimeout(r, 200)); // Throttle
-      }
-      console.log(`✅ Rescore completo: ${ok} ok, ${fail} errores`);
-    })().catch(console.error);
+    const job = await enqueue('lead_rescore_all', {}, req.user._id);
+    res.status(202).json({ success: true, message: 'Rescoring encolado en background', data: { jobId: job._id } });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -256,42 +241,16 @@ router.post('/:id/assign', auth, async (req, res) => {
   }
 });
 
-// POST /api/leads/import — bulk import
+// POST /api/leads/import — bulk import (async, returns jobId)
 router.post('/import', async (req, res) => {
   try {
     const { leads: rows } = req.body;
     if (!Array.isArray(rows) || !rows.length) {
       return res.status(400).json({ success: false, message: 'No hay filas para importar' });
     }
-
-    let created = 0;
-    let skipped = 0;
-
-    for (const row of rows) {
-      try {
-        if (!row.company && !row.contact) { skipped++; continue; }
-        const data = {
-          company: row.company || row.contact || 'Sin nombre',
-          contact: row.contact || '',
-          email: row.email || '',
-          phone: row.phone || '',
-          whatsapp: row.whatsapp || row.phone || '',
-          source: row.source || 'other',
-          stage: row.stage || 'new',
-          country: row.country || 'México',
-          notes: row.notes || '',
-          value: parseFloat(row.value) || 0,
-          services: row.services ? row.services.split(',').map(s => s.trim()).filter(Boolean) : [],
-          assignedTo: req.user._id,
-        };
-        await Lead.create(data);
-        created++;
-      } catch (e) {
-        skipped++;
-      }
-    }
-
-    res.json({ success: true, data: { created, skipped, total: rows.length } });
+    const job = await enqueue('leads_import', { rows, userId: req.user._id }, req.user._id);
+    invalidateLead(String(req.user._id));
+    res.status(202).json({ success: true, message: `Importando ${rows.length} leads en background`, data: { jobId: job._id, total: rows.length } });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

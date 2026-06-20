@@ -172,3 +172,7 @@ export const disconnectAdPlatform = (provider) => api.delete(`/ads/disconnect/${
 export const getMetaAdAccounts = () => api.get('/ads/meta/accounts');
 export const getLinkedInAdAccounts = () => api.get('/ads/linkedin/accounts');
 export const createAdCampaign = (data) => api.post('/ads/campaign', data);
+
+// Background Jobs
+export const getJob = (id) => api.get(`/jobs/${id}`);
+export const getRecentJobs = () => api.get('/jobs');

@@ -6,6 +6,7 @@ const Lead = require('../models/Lead');
 const Activity = require('../models/Activity');
 const { cacheMiddleware } = require('../middleware/cacheMiddleware');
 const { TTL, invalidateMarketing } = require('../services/cache');
+const { enqueue } = require('../services/jobQueue');
 
 // ── Schemas ──────────────────────────────────────────────────────
 const campaignSchema = new mongoose.Schema({
@@ -87,38 +88,15 @@ router.delete('/campaigns/:id', async (req, res) => {
   } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 
-// POST /api/marketing/campaigns/:id/launch — launch campaign
+// POST /api/marketing/campaigns/:id/launch — enqueue async job
 router.post('/campaigns/:id/launch', async (req, res) => {
   try {
     const campaign = await Campaign.findById(req.params.id);
     if (!campaign) return res.status(404).json({ success: false, message: 'Campaña no encontrada' });
 
-    // Build segment filter
-    const filter = { isActive: true };
-    if (campaign.segment?.services?.length) filter.services = { $in: campaign.segment.services };
-    if (campaign.segment?.stages?.length) filter.stage = { $in: campaign.segment.stages };
-    if (campaign.segment?.countries?.length) filter.country = { $in: campaign.segment.countries };
-    if (campaign.segment?.minScore) filter.score = { $gte: campaign.segment.minScore };
-
-    const leads = await Lead.find(filter).select('_id company contact email').limit(500);
-    await Campaign.findByIdAndUpdate(req.params.id, { status: 'running', sentCount: leads.length });
-
-    res.json({ success: true, data: { leadsTargeted: leads.length, message: `Campaña lanzada para ${leads.length} leads` } });
-
-    // Background: create activities for each lead
-    setImmediate(async () => {
-      for (const lead of leads) {
-        try {
-          await Activity.create({
-            lead: lead._id,
-            type: 'email',
-            content: `Campaña "${campaign.name}": ${campaign.subject || campaign.name}`,
-            direction: 'outbound',
-            user: req.user._id,
-          });
-        } catch {}
-      }
-    });
+    const job = await enqueue('campaign_launch', { campaignId: req.params.id, userId: req.user._id }, req.user._id);
+    invalidateMarketing();
+    res.status(202).json({ success: true, data: { jobId: job._id, message: 'Campaña en cola de procesamiento' } });
   } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 
