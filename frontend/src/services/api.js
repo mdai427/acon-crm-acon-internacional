@@ -100,12 +100,14 @@ export const createOperation = (data) => api.post('/operations', data);
 export const updateOperation = (id, data) => api.put(`/operations/${id}`, data);
 export const deleteOperation = (id) => api.delete(`/operations/${id}`);
 export const updateOperationStatus = (id, status) => api.put(`/operations/${id}/status`, { status });
+export const updateOperationDocument = (id, data) => api.put(`/operations/${id}/document`, data);
 
 // Quotes
 export const getQuotes = (params) => api.get('/quotes', { params });
 export const createQuote = (data) => api.post('/quotes', data);
 export const updateQuote = (id, data) => api.put(`/quotes/${id}`, data);
 export const deleteQuote = (id) => api.delete(`/quotes/${id}`);
+export const updateQuoteStatus = (id, status) => api.put(`/quotes/${id}/status`, { status });
 
 // Follow-ups
 export const getFollowUps = () => api.get('/followups');
