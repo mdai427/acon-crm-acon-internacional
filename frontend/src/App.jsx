@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import './index.css';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Toast, useToast } from './components/Toast';
@@ -25,28 +25,31 @@ import {
   LayoutDashboard, Users, Kanban, MessageSquare,
   BarChart3, Settings, Plug, Package, UserPlus,
   Calculator, Zap, LogOut, Bell, FileText, Upload,
-  Megaphone, HeartHandshake, TrendingUp
+  Megaphone, HeartHandshake, Menu, X, ChevronRight
 } from 'lucide-react';
 
 const NAV = [
-  { id: 'dashboard',    label: 'Dashboard',        Icon: LayoutDashboard, section: 'ventas' },
-  { id: 'leads',        label: 'Leads',             Icon: Users,           section: 'ventas' },
-  { id: 'pipeline',     label: 'Pipeline',          Icon: Kanban,          section: 'ventas' },
-  { id: 'operations',   label: 'Operaciones',       Icon: Package,         section: 'ventas' },
-  { id: 'quoter',       label: 'Cotizador',         Icon: Calculator,      section: 'ventas' },
-  { id: 'whatsapp',     label: 'WhatsApp',          Icon: MessageSquare,   section: 'ventas' },
-  { id: 'import',       label: 'Importar Leads',    Icon: Upload,          section: 'ventas' },
-  { id: 'marketing',    label: 'Campañas',          Icon: Megaphone,       section: 'marketing' },
-  { id: 'followups',    label: 'Automatizaciones',  Icon: Zap,             section: 'marketing' },
-  { id: 'templates',    label: 'Plantillas',        Icon: FileText,        section: 'marketing' },
-  { id: 'postventa',    label: 'Post-Venta',        Icon: HeartHandshake,  section: 'marketing' },
-  { id: 'reports',      label: 'Reportes',          Icon: BarChart3,       section: 'analytics' },
-  { id: 'users',        label: 'Usuarios',          Icon: UserPlus,        section: 'config' },
-  { id: 'config',       label: 'Configuración',     Icon: Settings,        section: 'config' },
-  { id: 'integrations', label: 'Integraciones',     Icon: Plug,            section: 'config' },
+  { id: 'dashboard',    label: 'Dashboard',        Icon: LayoutDashboard, section: 'ventas',    mobile: true,  mobileOrder: 0 },
+  { id: 'leads',        label: 'Leads',             Icon: Users,           section: 'ventas',    mobile: true,  mobileOrder: 1 },
+  { id: 'pipeline',     label: 'Pipeline',          Icon: Kanban,          section: 'ventas',    mobile: true,  mobileOrder: 2 },
+  { id: 'operations',   label: 'Operaciones',       Icon: Package,         section: 'ventas',    mobile: false },
+  { id: 'quoter',       label: 'Cotizador',         Icon: Calculator,      section: 'ventas',    mobile: false },
+  { id: 'whatsapp',     label: 'WhatsApp',          Icon: MessageSquare,   section: 'ventas',    mobile: true,  mobileOrder: 3 },
+  { id: 'import',       label: 'Importar',          Icon: Upload,          section: 'ventas',    mobile: false },
+  { id: 'marketing',    label: 'Campañas',          Icon: Megaphone,       section: 'marketing', mobile: false },
+  { id: 'followups',    label: 'Automatiz.',        Icon: Zap,             section: 'marketing', mobile: false },
+  { id: 'templates',    label: 'Plantillas',        Icon: FileText,        section: 'marketing', mobile: false },
+  { id: 'postventa',    label: 'Post-Venta',        Icon: HeartHandshake,  section: 'marketing', mobile: false },
+  { id: 'reports',      label: 'Reportes',          Icon: BarChart3,       section: 'analytics', mobile: true,  mobileOrder: 4 },
+  { id: 'users',        label: 'Usuarios',          Icon: UserPlus,        section: 'config',    mobile: false },
+  { id: 'config',       label: 'Configuración',     Icon: Settings,        section: 'config',    mobile: false },
+  { id: 'integrations', label: 'Integraciones',     Icon: Plug,            section: 'config',    mobile: false },
 ];
 
 const SECTIONS = { ventas: 'Ventas', marketing: 'Marketing', analytics: 'Análisis', config: 'Configuración' };
+
+// Mobile bottom nav — 5 most important items
+const MOBILE_NAV = NAV.filter(n => n.mobile).sort((a, b) => a.mobileOrder - b.mobileOrder);
 
 function CRMApp() {
   const { user, logout } = useAuth();
@@ -54,6 +57,8 @@ function CRMApp() {
   const [page, setPage] = useState('dashboard');
   const [selectedLeadId, setSelectedLeadId] = useState(null);
   const [showIdleWarning, setShowIdleWarning] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const sidebarRef = useRef(null);
 
   const { countdown, stayActive } = useIdleLogout(() => { logout(); }, true);
 
@@ -61,9 +66,21 @@ function CRMApp() {
     setShowIdleWarning(countdown !== null);
   }, [countdown]);
 
-  const handleSelectLead = (id) => { setSelectedLeadId(id); setPage('lead_detail'); };
+  // Close sidebar on outside click (mobile)
+  useEffect(() => {
+    const handler = (e) => {
+      if (sidebarOpen && sidebarRef.current && !sidebarRef.current.contains(e.target)) {
+        setSidebarOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    document.addEventListener('touchstart', handler);
+    return () => { document.removeEventListener('mousedown', handler); document.removeEventListener('touchstart', handler); };
+  }, [sidebarOpen]);
+
+  const handleSelectLead = (id) => { setSelectedLeadId(id); setPage('lead_detail'); setSidebarOpen(false); };
   const handleBackFromLead = () => { setSelectedLeadId(null); setPage('leads'); };
-  const navigate = (p) => { setSelectedLeadId(null); setPage(p); };
+  const navigate = (p) => { setSelectedLeadId(null); setPage(p); setSidebarOpen(false); };
 
   const navBySections = NAV.reduce((acc, n) => {
     acc[n.section] = acc[n.section] || [];
@@ -71,40 +88,66 @@ function CRMApp() {
     return acc;
   }, {});
 
+  const activePage = page === 'lead_detail' ? 'leads' : page;
+
   return (
     <>
+      {/* Mobile sidebar overlay */}
+      {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
+
       <div className="app">
         {/* TOPBAR */}
         <div className="topbar">
+          {/* Hamburger — mobile only */}
+          <button className="hamburger" onClick={() => setSidebarOpen(o => !o)} aria-label="Menú">
+            {sidebarOpen ? <X size={18} /> : <Menu size={18} />}
+          </button>
+
           <div className="logo">
             <span className="logo-accent">ACON</span>
-            <span style={{ color: '#fff', fontWeight: 400 }}>Internacional</span>
-            <span>· Worldwide Logística</span>
+            <span className="logo-full"> Internacional</span>
+            <span className="logo-sub">· Worldwide</span>
           </div>
-          <div style={{ color: 'rgba(255,255,255,.45)', fontSize: 12 }}>
-            {new Date().toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+
+          <div className="topbar-date">
+            {new Date().toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric', month: 'short' })}
           </div>
-          <button className="top-btn" style={{ gap: 6 }}>
-            <Bell size={13} /> Notificaciones
+
+          <button className="top-btn top-btn-notif">
+            <Bell size={13} />
+            <span className="top-btn-label">Notif.</span>
           </button>
+
           <div className="avatar" title={user?.name} onClick={logout}>
             {user?.name?.slice(0, 2).toUpperCase() || 'AC'}
           </div>
         </div>
 
         {/* SIDEBAR */}
-        <div className="sidebar">
+        <div ref={sidebarRef} className={`sidebar ${sidebarOpen ? 'sidebar-open' : ''}`}>
+          {/* Mobile close */}
+          <div className="sidebar-close-row">
+            <div className="sidebar-brand">
+              <span style={{ color: 'var(--orange-500)', fontWeight: 800 }}>ACON</span>
+              <span style={{ color: 'rgba(255,255,255,.7)', fontWeight: 400 }}> CRM</span>
+            </div>
+            <button className="sidebar-close-btn" onClick={() => setSidebarOpen(false)}>
+              <X size={16} />
+            </button>
+          </div>
+
           {Object.entries(navBySections).map(([section, items]) => (
             <div key={section} className="nav-section">
               <div className="nav-label">{SECTIONS[section]}</div>
               {items.map(({ id, label, Icon }) => (
                 <button
                   key={id}
-                  className={`nav-item ${(page === id || (page === 'lead_detail' && id === 'leads')) ? 'active' : ''}`}
+                  className={`nav-item ${activePage === id ? 'active' : ''}`}
                   onClick={() => navigate(id)}
                 >
                   <span className="nav-icon"><Icon size={16} strokeWidth={1.75} /></span>
-                  {label}
+                  <span className="nav-item-label">{label}</span>
+                  {activePage === id && <ChevronRight size={12} className="nav-chevron" />}
                 </button>
               ))}
             </div>
@@ -147,7 +190,21 @@ function CRMApp() {
         </div>
       </div>
 
-      {/* Copilot IA — always visible when logged in */}
+      {/* MOBILE BOTTOM NAV */}
+      <nav className="mobile-nav">
+        {MOBILE_NAV.map(({ id, label, Icon }) => (
+          <button
+            key={id}
+            className={`mobile-nav-item ${activePage === id ? 'active' : ''}`}
+            onClick={() => navigate(id)}
+          >
+            <Icon size={20} strokeWidth={activePage === id ? 2.5 : 1.75} />
+            <span>{label}</span>
+          </button>
+        ))}
+      </nav>
+
+      {/* Copilot IA */}
       <CopilotDrawer toast={toast} />
 
       <Toast toasts={toasts} setToasts={setToasts} />
