@@ -113,6 +113,14 @@ export const createFollowUp = (data) => api.post('/followups', data);
 export const updateFollowUp = (id, data) => api.put(`/followups/${id}`, data);
 export const deleteFollowUp = (id) => api.delete(`/followups/${id}`);
 
+// Follow-up Rules
+export const getFollowUpRules = () => api.get('/followups/rules');
+export const createFollowUpRule = (data) => api.post('/followups/rules', data);
+export const updateFollowUpRule = (id, data) => api.put(`/followups/rules/${id}`, data);
+export const deleteFollowUpRule = (id) => api.delete(`/followups/rules/${id}`);
+export const getPendingFollowUps = () => api.get('/followups/pending');
+export const executeFollowUpRule = (ruleId) => api.post(`/followups/rules/${ruleId}/execute`);
+
 // AI
 export const draftEmail = (data) => api.post('/agents/draft-email', data);
 export const rescoreLead = (id) => api.post(`/leads/${id}/rescore`);
