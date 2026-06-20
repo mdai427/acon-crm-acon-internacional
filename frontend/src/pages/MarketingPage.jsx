@@ -288,22 +288,69 @@ export default function MarketingPage({ toast }) {
       )}
 
       {/* Tabs */}
-      <div style={{ display: 'flex', borderBottom: '1px solid var(--gray-200)', marginBottom: 20 }}>
-        {TABS.map(({ id, label, Icon }) => (
-          <button key={id} onClick={() => setTab(id)} style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            padding: '9px 20px', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600,
-            background: 'transparent', color: tab === id ? '#0B2545' : '#9AA3AE',
-            borderBottom: tab === id ? '2px solid #F2641E' : '2px solid transparent',
-          }}>
-            <Icon size={14} strokeWidth={1.75} /> {label}
-          </button>
-        ))}
+      <div style={{ display: 'flex', borderBottom: '1px solid var(--gray-200)', marginBottom: 20, gap: 0 }}>
+        {TABS.map(({ id, label, Icon }) => {
+          const isAd = id === 'adchannels';
+          const connectedCount = isAd ? adStatus.length : 0;
+          return (
+            <button key={id} onClick={() => setTab(id)} style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '9px 20px', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600,
+              background: 'transparent', color: tab === id ? '#0B2545' : '#9AA3AE',
+              borderBottom: tab === id ? '2px solid #F2641E' : '2px solid transparent',
+              position: 'relative',
+            }}>
+              <Icon size={14} strokeWidth={1.75} /> {label}
+              {isAd && (
+                <span style={{
+                  marginLeft: 2, fontSize: 10, fontWeight: 800, padding: '1px 6px', borderRadius: 10,
+                  background: connectedCount > 0 ? '#16A34A' : '#F2641E',
+                  color: '#fff', lineHeight: 1.4,
+                }}>
+                  {connectedCount > 0 ? `${connectedCount} activo${connectedCount > 1 ? 's' : ''}` : 'Conectar'}
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
 
       {/* ── CAMPAIGNS ── */}
       {tab === 'campaigns' && (
         <>
+          {/* Ad platforms quick-connect banner */}
+          <div style={{ display: 'flex', gap: 10, marginBottom: 18, flexWrap: 'wrap' }}>
+            {AD_PLATFORMS.map(p => {
+              const integration = getIntegration(p.id);
+              return (
+                <div key={p.id} style={{
+                  display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px',
+                  borderRadius: 10, border: `1.5px solid ${integration ? p.color + '50' : '#E3E6EA'}`,
+                  background: integration ? p.bg : '#FAFAFA', flex: '1 1 180px', minWidth: 180,
+                }}>
+                  <span style={{ fontSize: 20 }}>{p.logo}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 700, fontSize: 12, color: '#0B2545' }}>{p.name}</div>
+                    <div style={{ fontSize: 10, color: integration ? '#16A34A' : '#9AA3AE', fontWeight: 600 }}>
+                      {integration ? `● Conectado · ${integration.providerEmail || ''}` : '○ No conectado'}
+                    </div>
+                  </div>
+                  {integration ? (
+                    <button onClick={() => { setTab('adchannels'); setTimeout(() => setShowAdCampaignForm(true), 100); }}
+                      style={{ fontSize: 10, fontWeight: 700, padding: '4px 10px', borderRadius: 8, border: `1px solid ${p.color}`, background: p.color, color: '#fff', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                      + Campaña
+                    </button>
+                  ) : (
+                    <button onClick={() => handleConnect(p.id)}
+                      style={{ fontSize: 10, fontWeight: 700, padding: '4px 10px', borderRadius: 8, border: `1.5px solid ${p.color}`, background: '#fff', color: p.color, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                      Conectar
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
           {showNewCampaign && (
             <form onSubmit={handleCreateCampaign} className="card" style={{ marginBottom: 20, border: '1px solid #F2641E30' }}>
               <div style={{ fontWeight: 700, fontSize: 15, color: '#0B2545', marginBottom: 16 }}>Nueva Campaña</div>
