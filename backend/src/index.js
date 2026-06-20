@@ -36,6 +36,9 @@ const templatesRoutes  = require('./routes/templates');
 const { router: oauthRoutes } = require('./routes/oauth');
 const calendarRoutes   = require('./routes/userCalendar');
 const gmailRoutes      = require('./routes/gmail');
+const marketingRoutes  = require('./routes/marketing');
+const copilotRoutes    = require('./routes/copilot');
+const postVentaRoutes  = require('./routes/postventa');
 
 const app = express();
 const server = http.createServer(app);
@@ -46,10 +49,8 @@ const io = new Server(server, {
   }
 });
 
-// Conectar base de datos
 connectDB();
 
-// Middlewares de seguridad
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors({
   origin: process.env.FRONTEND_URL || 'http://localhost:3000',
@@ -57,35 +58,17 @@ app.use(cors({
 }));
 app.use(morgan('dev'));
 
-// Rate limiting para rutas públicas (webhooks, auth)
-const webhookLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1 minuto
-  max: 60,             // 60 requests/min por IP
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { success: false, message: 'Demasiadas solicitudes, intenta en un momento' }
-});
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutos
-  max: 20,                   // 20 intentos de login
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { success: false, message: 'Demasiados intentos, espera 15 minutos' }
-});
+const webhookLimiter = rateLimit({ windowMs: 60000, max: 60, standardHeaders: true, legacyHeaders: false });
+const authLimiter = rateLimit({ windowMs: 15 * 60000, max: 20, standardHeaders: true, legacyHeaders: false });
 app.use('/api/webhooks', webhookLimiter);
 app.use('/api/n8n',      webhookLimiter);
 app.use('/api/auth/login', authLimiter);
 
-// Body parsers - webhook de Meta necesita raw body
 app.use('/api/webhooks', express.raw({ type: 'application/json' }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Pasar io a todas las rutas via req
-app.use((req, res, next) => {
-  req.io = io;
-  next();
-});
+app.use((req, res, next) => { req.io = io; next(); });
 
 // ============================================
 // RUTAS API
@@ -111,37 +94,24 @@ app.use('/api/templates',    templatesRoutes);
 app.use('/api/oauth',        oauthRoutes);
 app.use('/api/calendar',     calendarRoutes);
 app.use('/api/gmail',        gmailRoutes);
+app.use('/api/marketing',    marketingRoutes);
+app.use('/api/copilot',      copilotRoutes);
+app.use('/api/postventa',    postVentaRoutes);
 
-// Health check
-app.get('/api/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-    service: 'ACON CRM API v1.0'
-  });
-});
+app.get('/api/health', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString(), service: 'ACON CRM API v2.0' }));
 
-// Manejo de errores global
 app.use((err, req, res, next) => {
   console.error(err.stack);
-  res.status(err.status || 500).json({
-    success: false,
-    message: err.message || 'Error interno del servidor',
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
-  });
+  res.status(err.status || 500).json({ success: false, message: err.message || 'Error interno del servidor' });
 });
 
-// WebSocket handlers
 setupSocketHandlers(io);
-
-// Cron jobs (seguimientos automáticos, alertas, etc.)
 startCronJobs(io);
 
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
   console.log(`\n🚀 ACON CRM Backend corriendo en puerto ${PORT}`);
-  console.log(`📡 WebSocket activo`);
-  console.log(`🌍 Ambiente: ${process.env.NODE_ENV || 'development'}\n`);
+  console.log(`📡 WebSocket activo | 🌍 ${process.env.NODE_ENV || 'development'}\n`);
 });
 
 module.exports = { app, io };

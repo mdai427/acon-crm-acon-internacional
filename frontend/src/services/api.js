@@ -126,3 +126,29 @@ export const deleteTemplate = (id) => api.delete(`/templates/${id}`);
 
 // Import
 export const importLeads = (data) => api.post('/leads/import', data);
+
+// Marketing
+export const getCampaigns = () => api.get('/marketing/campaigns');
+export const createCampaign = (data) => api.post('/marketing/campaigns', data);
+export const updateCampaign = (id, data) => api.put(`/marketing/campaigns/${id}`, data);
+export const deleteCampaign = (id) => api.delete(`/marketing/campaigns/${id}`);
+export const launchCampaign = (id) => api.post(`/marketing/campaigns/${id}/launch`);
+export const getAutomations = () => api.get('/marketing/automations');
+export const createAutomation = (data) => api.post('/marketing/automations', data);
+export const updateAutomation = (id, data) => api.put(`/marketing/automations/${id}`, data);
+export const deleteAutomation = (id) => api.delete(`/marketing/automations/${id}`);
+export const getMarketingAnalytics = () => api.get('/marketing/analytics');
+export const previewSegment = (data) => api.post('/marketing/segments/preview', data);
+
+// Copilot IA
+export const chatWithCopilot = (messages, context) => api.post('/copilot/chat', { messages, context });
+export const getCopilotSuggestions = () => api.get('/copilot/suggestions');
+
+// Post-Venta
+export const getPostVenta = () => api.get('/postventa');
+export const getPostVentaSummary = () => api.get('/postventa/summary');
+export const createPostVenta = (data) => api.post('/postventa', data);
+export const updatePostVenta = (id, data) => api.put(`/postventa/${id}`, data);
+export const submitNPS = (id, data) => api.post(`/postventa/${id}/nps`, data);
+export const syncPostVenta = () => api.post('/postventa/auto-sync');
+export const getRenewals = () => api.get('/postventa/renewals');

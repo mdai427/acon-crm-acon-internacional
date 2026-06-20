@@ -17,30 +17,36 @@ import QuoterPage from './pages/QuoterPage';
 import FollowUpsPage from './pages/FollowUpsPage';
 import TemplatesPage from './pages/TemplatesPage';
 import ImportPage from './pages/ImportPage';
+import MarketingPage from './pages/MarketingPage';
+import PostVentaPage from './pages/PostVentaPage';
+import CopilotDrawer from './components/CopilotDrawer';
 import { useIdleLogout } from './hooks/useIdleLogout';
 import {
   LayoutDashboard, Users, Kanban, MessageSquare,
   BarChart3, Settings, Plug, Package, UserPlus,
-  Calculator, Zap, LogOut, Bell, FileText, Upload
+  Calculator, Zap, LogOut, Bell, FileText, Upload,
+  Megaphone, HeartHandshake, TrendingUp
 } from 'lucide-react';
 
 const NAV = [
-  { id: 'dashboard',    label: 'Dashboard',      Icon: LayoutDashboard, section: 'main' },
-  { id: 'leads',        label: 'Leads',           Icon: Users,           section: 'main' },
-  { id: 'pipeline',     label: 'Pipeline',        Icon: Kanban,          section: 'main' },
-  { id: 'operations',  label: 'Operaciones',     Icon: Package,         section: 'main' },
-  { id: 'quoter',      label: 'Cotizador',       Icon: Calculator,      section: 'main' },
-  { id: 'whatsapp',    label: 'WhatsApp',        Icon: MessageSquare,   section: 'main' },
-  { id: 'import',      label: 'Importar Leads',  Icon: Upload,          section: 'main' },
-  { id: 'reports',     label: 'Reportes',        Icon: BarChart3,       section: 'analytics' },
-  { id: 'followups',   label: 'Automatizaciones', Icon: Zap,            section: 'analytics' },
-  { id: 'templates',   label: 'Plantillas',      Icon: FileText,        section: 'analytics' },
-  { id: 'users',       label: 'Usuarios',        Icon: UserPlus,        section: 'config' },
-  { id: 'config',      label: 'Configuración',   Icon: Settings,        section: 'config' },
-  { id: 'integrations',label: 'Estado APIs',     Icon: Plug,            section: 'config' },
+  { id: 'dashboard',    label: 'Dashboard',        Icon: LayoutDashboard, section: 'ventas' },
+  { id: 'leads',        label: 'Leads',             Icon: Users,           section: 'ventas' },
+  { id: 'pipeline',     label: 'Pipeline',          Icon: Kanban,          section: 'ventas' },
+  { id: 'operations',   label: 'Operaciones',       Icon: Package,         section: 'ventas' },
+  { id: 'quoter',       label: 'Cotizador',         Icon: Calculator,      section: 'ventas' },
+  { id: 'whatsapp',     label: 'WhatsApp',          Icon: MessageSquare,   section: 'ventas' },
+  { id: 'import',       label: 'Importar Leads',    Icon: Upload,          section: 'ventas' },
+  { id: 'marketing',    label: 'Campañas',          Icon: Megaphone,       section: 'marketing' },
+  { id: 'followups',    label: 'Automatizaciones',  Icon: Zap,             section: 'marketing' },
+  { id: 'templates',    label: 'Plantillas',        Icon: FileText,        section: 'marketing' },
+  { id: 'postventa',    label: 'Post-Venta',        Icon: HeartHandshake,  section: 'marketing' },
+  { id: 'reports',      label: 'Reportes',          Icon: BarChart3,       section: 'analytics' },
+  { id: 'users',        label: 'Usuarios',          Icon: UserPlus,        section: 'config' },
+  { id: 'config',       label: 'Configuración',     Icon: Settings,        section: 'config' },
+  { id: 'integrations', label: 'Integraciones',     Icon: Plug,            section: 'config' },
 ];
 
-const SECTIONS = { main: 'Principal', analytics: 'Análisis', config: 'Configuración' };
+const SECTIONS = { ventas: 'Ventas', marketing: 'Marketing', analytics: 'Análisis', config: 'Configuración' };
 
 function CRMApp() {
   const { user, logout } = useAuth();
@@ -49,17 +55,10 @@ function CRMApp() {
   const [selectedLeadId, setSelectedLeadId] = useState(null);
   const [showIdleWarning, setShowIdleWarning] = useState(false);
 
-  const { countdown, stayActive } = useIdleLogout(() => {
-    logout();
-  }, true);
+  const { countdown, stayActive } = useIdleLogout(() => { logout(); }, true);
 
-  // Show warning when countdown starts
   React.useEffect(() => {
-    if (countdown !== null) {
-      setShowIdleWarning(true);
-    } else {
-      setShowIdleWarning(false);
-    }
+    setShowIdleWarning(countdown !== null);
   }, [countdown]);
 
   const handleSelectLead = (id) => { setSelectedLeadId(id); setPage('lead_detail'); };
@@ -86,8 +85,7 @@ function CRMApp() {
             {new Date().toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
           </div>
           <button className="top-btn" style={{ gap: 6 }}>
-            <Bell size={13} />
-            Notificaciones
+            <Bell size={13} /> Notificaciones
           </button>
           <div className="avatar" title={user?.name} onClick={logout}>
             {user?.name?.slice(0, 2).toUpperCase() || 'AC'}
@@ -130,22 +128,27 @@ function CRMApp() {
 
         {/* MAIN */}
         <div className="main">
-          {page === 'dashboard'   && <Dashboard user={user} onNavigate={navigate} />}
-          {page === 'leads'       && <LeadsPage toast={toast} onSelect={handleSelectLead} />}
-          {page === 'lead_detail' && selectedLeadId && <LeadDetail leadId={selectedLeadId} toast={toast} onBack={handleBackFromLead} />}
-          {page === 'pipeline'    && <PipelinePage toast={toast} onSelect={handleSelectLead} />}
-          {page === 'operations'  && <OperationsPage toast={toast} />}
-          {page === 'whatsapp'    && <WhatsAppPage toast={toast} />}
-          {page === 'reports'     && <ReportsPage toast={toast} />}
-          {page === 'config'      && <ConfigPage toast={toast} />}
-          {page === 'quoter'      && <QuoterPage toast={toast} />}
-          {page === 'followups'   && <FollowUpsPage toast={toast} />}
-          {page === 'users'       && <UsersPage toast={toast} />}
-          {page === 'integrations'&& <IntegrationsPage toast={toast} />}
-          {page === 'templates'   && <TemplatesPage toast={toast} />}
-          {page === 'import'      && <ImportPage toast={toast} onNavigate={navigate} />}
+          {page === 'dashboard'    && <Dashboard user={user} onNavigate={navigate} />}
+          {page === 'leads'        && <LeadsPage toast={toast} onSelect={handleSelectLead} />}
+          {page === 'lead_detail'  && selectedLeadId && <LeadDetail leadId={selectedLeadId} toast={toast} onBack={handleBackFromLead} />}
+          {page === 'pipeline'     && <PipelinePage toast={toast} onSelect={handleSelectLead} />}
+          {page === 'operations'   && <OperationsPage toast={toast} />}
+          {page === 'whatsapp'     && <WhatsAppPage toast={toast} />}
+          {page === 'reports'      && <ReportsPage toast={toast} />}
+          {page === 'config'       && <ConfigPage toast={toast} />}
+          {page === 'quoter'       && <QuoterPage toast={toast} />}
+          {page === 'followups'    && <FollowUpsPage toast={toast} />}
+          {page === 'users'        && <UsersPage toast={toast} />}
+          {page === 'integrations' && <IntegrationsPage toast={toast} />}
+          {page === 'templates'    && <TemplatesPage toast={toast} />}
+          {page === 'import'       && <ImportPage toast={toast} onNavigate={navigate} />}
+          {page === 'marketing'    && <MarketingPage toast={toast} />}
+          {page === 'postventa'    && <PostVentaPage toast={toast} />}
         </div>
       </div>
+
+      {/* Copilot IA — always visible when logged in */}
+      <CopilotDrawer toast={toast} />
 
       <Toast toasts={toasts} setToasts={setToasts} />
 
