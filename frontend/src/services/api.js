@@ -162,3 +162,13 @@ export const updatePostVenta = (id, data) => api.put(`/postventa/${id}`, data);
 export const submitNPS = (id, data) => api.post(`/postventa/${id}/nps`, data);
 export const syncPostVenta = () => api.post('/postventa/auto-sync');
 export const getRenewals = () => api.get('/postventa/renewals');
+
+// Ad Platforms (Meta, LinkedIn, Google Ads)
+export const getAdPlatformStatus = () => api.get('/ads/status');
+export const getMetaAdsUrl = () => api.get('/ads/meta/url');
+export const getLinkedInAdsUrl = () => api.get('/ads/linkedin/url');
+export const getGoogleAdsUrl = () => api.get('/ads/google/url');
+export const disconnectAdPlatform = (provider) => api.delete(`/ads/disconnect/${provider}`);
+export const getMetaAdAccounts = () => api.get('/ads/meta/accounts');
+export const getLinkedInAdAccounts = () => api.get('/ads/linkedin/accounts');
+export const createAdCampaign = (data) => api.post('/ads/campaign', data);

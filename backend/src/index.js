@@ -39,6 +39,7 @@ const gmailRoutes      = require('./routes/gmail');
 const marketingRoutes  = require('./routes/marketing');
 const copilotRoutes    = require('./routes/copilot');
 const postVentaRoutes  = require('./routes/postventa');
+const adsRoutes        = require('./routes/ads');
 
 const app = express();
 const server = http.createServer(app);
@@ -97,6 +98,7 @@ app.use('/api/gmail',        gmailRoutes);
 app.use('/api/marketing',    marketingRoutes);
 app.use('/api/copilot',      copilotRoutes);
 app.use('/api/postventa',    postVentaRoutes);
+app.use('/api/ads',          adsRoutes);
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString(), service: 'ACON CRM API v2.0' }));
 
