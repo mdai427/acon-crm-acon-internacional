@@ -4,6 +4,8 @@ const mongoose = require('mongoose');
 const { auth } = require('../middleware/auth');
 const Lead = require('../models/Lead');
 const Activity = require('../models/Activity');
+const { cacheMiddleware } = require('../middleware/cacheMiddleware');
+const { TTL, invalidateMarketing } = require('../services/cache');
 
 // ── Schemas ──────────────────────────────────────────────────────
 const campaignSchema = new mongoose.Schema({
@@ -52,9 +54,11 @@ const Automation = mongoose.models.Automation || mongoose.model('Automation', au
 router.use(auth);
 
 // ── Campaigns ─────────────────────────────────────────────────────
-router.get('/campaigns', async (req, res) => {
+router.get('/campaigns',
+  cacheMiddleware(TTL.LIVE, () => 'marketing:campaigns'),
+  async (req, res) => {
   try {
-    const campaigns = await Campaign.find().populate('createdBy', 'name').sort({ createdAt: -1 });
+    const campaigns = await Campaign.find().populate('createdBy', 'name').sort({ createdAt: -1 }).lean();
     res.json({ success: true, data: campaigns });
   } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
@@ -62,6 +66,7 @@ router.get('/campaigns', async (req, res) => {
 router.post('/campaigns', async (req, res) => {
   try {
     const campaign = await Campaign.create({ ...req.body, createdBy: req.user._id });
+    invalidateMarketing();
     res.json({ success: true, data: campaign });
   } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
@@ -69,6 +74,7 @@ router.post('/campaigns', async (req, res) => {
 router.put('/campaigns/:id', async (req, res) => {
   try {
     const campaign = await Campaign.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    invalidateMarketing();
     res.json({ success: true, data: campaign });
   } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
@@ -76,6 +82,7 @@ router.put('/campaigns/:id', async (req, res) => {
 router.delete('/campaigns/:id', async (req, res) => {
   try {
     await Campaign.findByIdAndDelete(req.params.id);
+    invalidateMarketing();
     res.json({ success: true });
   } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
@@ -116,9 +123,11 @@ router.post('/campaigns/:id/launch', async (req, res) => {
 });
 
 // ── Automations ───────────────────────────────────────────────────
-router.get('/automations', async (req, res) => {
+router.get('/automations',
+  cacheMiddleware(TTL.LIVE, () => 'marketing:automations'),
+  async (req, res) => {
   try {
-    const automations = await Automation.find().populate('createdBy', 'name').sort({ createdAt: -1 });
+    const automations = await Automation.find().populate('createdBy', 'name').sort({ createdAt: -1 }).lean();
     res.json({ success: true, data: automations });
   } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
@@ -126,6 +135,7 @@ router.get('/automations', async (req, res) => {
 router.post('/automations', async (req, res) => {
   try {
     const automation = await Automation.create({ ...req.body, createdBy: req.user._id });
+    invalidateMarketing();
     res.json({ success: true, data: automation });
   } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
@@ -133,6 +143,7 @@ router.post('/automations', async (req, res) => {
 router.put('/automations/:id', async (req, res) => {
   try {
     const automation = await Automation.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    invalidateMarketing();
     res.json({ success: true, data: automation });
   } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
@@ -140,6 +151,7 @@ router.put('/automations/:id', async (req, res) => {
 router.delete('/automations/:id', async (req, res) => {
   try {
     await Automation.findByIdAndDelete(req.params.id);
+    invalidateMarketing();
     res.json({ success: true });
   } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
@@ -161,7 +173,10 @@ router.post('/segments/preview', async (req, res) => {
 });
 
 // ── Analytics ──────────────────────────────────────────────────────
-router.get('/analytics', async (req, res) => {
+// Cache 5 min: agrega múltiples collections
+router.get('/analytics',
+  cacheMiddleware(TTL.COMPUTED, () => 'marketing:analytics'),
+  async (req, res) => {
   try {
     const [campaigns, automations] = await Promise.all([
       Campaign.find().select('name status sentCount openCount replyCount createdAt'),

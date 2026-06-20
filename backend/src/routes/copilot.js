@@ -4,6 +4,8 @@ const jwt = require('jsonwebtoken');
 const OpenAI = require('openai');
 const Lead = require('../models/Lead');
 const Activity = require('../models/Activity');
+const { cacheMiddleware } = require('../middleware/cacheMiddleware');
+const { TTL } = require('../services/cache');
 
 const auth = (req, res, next) => {
   const token = req.headers.authorization?.split(' ')[1];
@@ -80,7 +82,10 @@ router.post('/chat', auth, async (req, res) => {
 });
 
 // GET /api/copilot/suggestions - get context-aware suggestions
-router.get('/suggestions', auth, async (req, res) => {
+// Suggestions: cache 2 min por usuario (evita re-llamar a OpenAI en cada render)
+router.get('/suggestions', auth,
+  cacheMiddleware(TTL.LIVE, req => `copilot:suggestions:${req.user.id}`),
+  async (req, res) => {
   try {
     const filter = { isActive: true };
     if (req.user.role === 'executive') filter.assignedTo = req.user._id;

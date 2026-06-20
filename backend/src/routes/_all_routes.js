@@ -231,10 +231,15 @@ activitiesRouter.put('/:id/complete', async (req, res) => {
 // routes/pipeline.js
 // ============================================
 const pipelineRouter = express.Router();
+const { cacheMiddleware: _cacheMw } = require('../middleware/cacheMiddleware');
+const { TTL: _TTL, invalidateLead: _invLead } = require('../services/cache');
 
 pipelineRouter.use(auth);
 
-pipelineRouter.get('/kanban', async (req, res) => {
+// Kanban: cache 30 seg por usuario (dato "vivo", se refresca con WS events)
+pipelineRouter.get('/kanban',
+  _cacheMw(_TTL.HOT, req => `kanban:${req.user.id}:${req.user.role}`),
+  async (req, res) => {
   try {
     const filter = { isActive: true };
     if (req.user.role === 'executive') filter.assignedTo = req.user._id;
@@ -297,6 +302,7 @@ pipelineRouter.put('/move', async (req, res) => {
       content: `Etapa: ${prevStage} → ${newStage}`
     });
 
+    _invLead(String(req.user._id), lead.assignedTo ? String(lead.assignedTo) : null);
     req.io?.emit('pipeline_updated', { leadId, stage: newStage });
     res.json({ success: true });
   } catch (error) {

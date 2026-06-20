@@ -102,6 +102,27 @@ app.use('/api/ads',          adsRoutes);
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString(), service: 'ACON CRM API v2.0' }));
 
+// ── Cache admin endpoints (solo admin) ──────────────────────────
+const { stats: cacheStats, flush: cacheFlush } = require('./services/cache');
+const jwt = require('jsonwebtoken');
+app.get('/api/cache/stats', (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    const user = jwt.verify(token, process.env.JWT_SECRET);
+    if (user.role !== 'admin') return res.status(403).json({ success: false });
+    res.json({ success: true, data: cacheStats() });
+  } catch { res.status(401).json({ success: false }); }
+});
+app.post('/api/cache/flush', (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    const user = jwt.verify(token, process.env.JWT_SECRET);
+    if (user.role !== 'admin') return res.status(403).json({ success: false });
+    cacheFlush();
+    res.json({ success: true, message: 'Cache vaciado' });
+  } catch { res.status(401).json({ success: false }); }
+});
+
 app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(err.status || 500).json({ success: false, message: err.message || 'Error interno del servidor' });

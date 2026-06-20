@@ -5,11 +5,16 @@ const Activity = require('../models/Activity');
 const User = require('../models/User');
 const { auth, adminOnly } = require('../middleware/auth');
 const { analyzePipeline } = require('../services/aiAgent');
+const { cacheMiddleware } = require('../middleware/cacheMiddleware');
+const { TTL } = require('../services/cache');
 
 router.use(auth);
 
 // GET /api/reports/dashboard — KPIs principales
-router.get('/dashboard', async (req, res) => {
+// Cache: 5 min por usuario (personalizado por rol/ejecutivo)
+router.get('/dashboard',
+  cacheMiddleware(TTL.COMPUTED, req => `dashboard:${req.user.id}:${req.user.role}`),
+  async (req, res) => {
   try {
     const filter = { isActive: true };
     if (req.user.role === 'executive') filter.assignedTo = req.user._id;
@@ -59,7 +64,10 @@ router.get('/dashboard', async (req, res) => {
 });
 
 // GET /api/reports/conversion — tasa de conversión por etapa (funnel)
-router.get('/conversion', adminOnly, async (req, res) => {
+// Cache: 5 min (solo admin, dato global)
+router.get('/conversion', adminOnly,
+  cacheMiddleware(TTL.COMPUTED, () => 'reports:conversion'),
+  async (req, res) => {
   try {
     const filter = { isActive: true };
     const stages = ['new','contacted','qualified','proposal','negotiation','closed_won','closed_lost'];
@@ -139,7 +147,10 @@ router.get('/conversion', adminOnly, async (req, res) => {
 
 // GET /api/reports/team — solo admin
 // Optimizado: 2 aggregations en lugar de N*3 queries (N=# ejecutivos)
-router.get('/team', adminOnly, async (req, res) => {
+// Cache: 5 min (aggregation costosa — ahora 3 queries en lugar de N*3)
+router.get('/team', adminOnly,
+  cacheMiddleware(TTL.COMPUTED, () => 'reports:team'),
+  async (req, res) => {
   try {
     const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 

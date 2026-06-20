@@ -4,6 +4,7 @@ const Lead = require('../models/Lead');
 const Activity = require('../models/Activity');
 const { auth, adminOnly } = require('../middleware/auth');
 const { scoreLeadWithAI } = require('../services/aiAgent');
+const { invalidateLead } = require('../services/cache');
 
 // Todos los endpoints requieren autenticación
 router.use(auth);
@@ -154,7 +155,7 @@ router.post('/', async (req, res) => {
 
     // Notificar via socket al ejecutivo asignado
     req.io?.to(`user_${leadData.assignedTo}`).emit('new_lead', lead);
-
+    invalidateLead(String(req.user._id), leadData.assignedTo ? String(leadData.assignedTo) : null);
     res.status(201).json({ success: true, data: lead });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -186,6 +187,7 @@ router.put('/:id', async (req, res) => {
       .populate('assignedTo', 'name email avatar');
 
     req.io?.emit('lead_updated', updated);
+    invalidateLead(String(req.user._id), updated.assignedTo ? String(updated.assignedTo._id || updated.assignedTo) : null);
     res.json({ success: true, data: updated });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -196,6 +198,7 @@ router.put('/:id', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   try {
     await Lead.findByIdAndUpdate(req.params.id, { isActive: false });
+    invalidateLead(String(req.user._id));
     res.json({ success: true, message: 'Lead archivado' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
