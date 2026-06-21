@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 
 // Animated background lines (SVG-based, pure CSS)
+// (cursor blink removed per design)
 function FuturisticBG() {
   return (
     <div className="login-bg" aria-hidden>
@@ -32,14 +33,6 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError]       = useState('');
   const [loading, setLoading]   = useState(false);
-  const [tick, setTick]         = useState(0);
-
-  // Blinking cursor effect for the sub-text
-  useEffect(() => {
-    const t = setInterval(() => setTick(n => n + 1), 500);
-    return () => clearInterval(t);
-  }, []);
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
@@ -71,7 +64,7 @@ export default function LoginPage() {
               <span className="llo-white"> Internacional</span>
             </div>
             <div className="login-logo-sub">
-              WORLDWIDE LOGISTICS CRM<span className="login-cursor">{tick % 2 === 0 ? '|' : ' '}</span>
+              WORLDWIDE LOGISTICS CRM
             </div>
           </div>
         </div>
