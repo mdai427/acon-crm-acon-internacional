@@ -42,6 +42,7 @@ export const moveLead = (data) => api.put('/pipeline/move', data);
 // Activities
 export const getActivities = (leadId) => api.get(`/activities/lead/${leadId}`);
 export const createActivity = (data) => api.post('/activities', data);
+export const completeActivity = (id) => api.put(`/activities/${id}/complete`);
 
 // WhatsApp
 export const getConversation = (leadId) => api.get(`/whatsapp/conversations/${leadId}`);
@@ -176,3 +177,12 @@ export const createAdCampaign = (data) => api.post('/ads/campaign', data);
 // Background Jobs
 export const getJob = (id) => api.get(`/jobs/${id}`);
 export const getRecentJobs = () => api.get('/jobs');
+
+// AI Stage Tasks & Suggestions
+export const getStageSuggestions = (leadId, stage) => api.get(`/leads/${leadId}/stage-suggestions${stage ? `?stage=${stage}` : ''}`);
+export const createStageTasks = (leadId, stage) => api.post(`/leads/${leadId}/create-stage-tasks`, { stage });
+
+// Playbooks (Option C)
+export const getPlaybooks = () => api.get('/playbooks');
+export const updatePlaybook = (stage, data) => api.put(`/playbooks/${stage}`, data);
+export const seedPlaybooks = () => api.post('/playbooks/seed');

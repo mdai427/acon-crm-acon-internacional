@@ -5,7 +5,9 @@ import {
   getGmailMessages, sendGmailMessage, getCalendarEvents, createCalendarEvent
 } from '../services/api';
 import { ScoreBadge, StageBadge, SourceBadge } from '../components/Badges';
-import { Mail, Calendar, FileText, MessageSquare, RefreshCw, Plus, Send, Video, Clock, MapPin } from 'lucide-react';
+import { Mail, Calendar, FileText, MessageSquare, RefreshCw, Plus, Send, Video, Clock, MapPin, CheckSquare, Square } from 'lucide-react';
+import AISuggestionsPanel from '../components/AISuggestionsPanel';
+import { completeActivity } from '../services/api';
 
 const STAGES = ['new','contacted','qualified','proposal','negotiation','closed_won','closed_lost'];
 const STAGE_LABELS = { new:'Nuevo', contacted:'Contactado', qualified:'Calificado', proposal:'Propuesta', negotiation:'Negociación', closed_won:'Ganado', closed_lost:'Perdido' };
@@ -16,6 +18,62 @@ const TABS = [
   { id: 'emails',    label: 'Correos',     Icon: Mail },
   { id: 'calendar',  label: 'Calendario',  Icon: Calendar },
 ];
+
+// ── Activity card with task checkbox support ──────────────────────
+function ActivityCard({ activity: a, onComplete }) {
+  const isTask = a.type === 'task';
+  const isDone = a.taskData?.completed;
+  const isOverdue = isTask && !isDone && a.taskData?.dueDate && new Date(a.taskData.dueDate) < new Date();
+
+  const TYPE_ICON = {
+    whatsapp: '💬', email: '📧', call: '📞',
+    stage_change: '🔄', note: '📝', task: null, system: '⚙️',
+  };
+
+  return (
+    <div style={{
+      padding: '10px 12px',
+      background: isTask && !isDone ? (isOverdue ? 'rgba(220,38,38,.04)' : 'rgba(242,100,30,.04)') : 'var(--gray-50)',
+      borderRadius: 8,
+      border: `1px solid ${isTask && !isDone ? (isOverdue ? 'rgba(220,38,38,.2)' : 'rgba(242,100,30,.2)') : 'var(--gray-200)'}`,
+      opacity: isDone ? .6 : 1,
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {isTask ? (
+            <button
+              onClick={onComplete}
+              disabled={isDone}
+              style={{ background: 'none', border: 'none', cursor: isDone ? 'default' : 'pointer', padding: 0, display: 'flex', color: isDone ? '#16A34A' : 'var(--gray-400)' }}
+              title={isDone ? 'Completada' : 'Marcar como completada'}
+            >
+              {isDone ? <CheckSquare size={15} /> : <Square size={15} />}
+            </button>
+          ) : (
+            <span style={{ fontSize: 14 }}>{TYPE_ICON[a.type] || '📝'}</span>
+          )}
+          <span style={{ fontSize: 11, color: isTask ? (isOverdue ? '#DC2626' : 'var(--orange)') : 'var(--orange)', fontWeight: 600, textTransform: 'uppercase' }}>
+            {isTask ? (isDone ? 'tarea ✓' : isOverdue ? 'tarea vencida' : 'tarea') : a.type}
+            {a.isAuto && <span style={{ marginLeft: 5, fontSize: 9, background: '#EDE9FE', color: '#7C3AED', padding: '1px 5px', borderRadius: 10, fontWeight: 700 }}>IA</span>}
+          </span>
+        </div>
+        <span style={{ fontSize: 10, color: 'var(--text3)', flexShrink: 0 }}>
+          {new Date(a.createdAt).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+        </span>
+      </div>
+      <div style={{ fontSize: 13, color: isDone ? 'var(--text3)' : 'var(--text2)', textDecoration: isDone ? 'line-through' : 'none', marginLeft: isTask ? 21 : 0 }}>
+        {a.content}
+      </div>
+      {isTask && a.taskData?.dueDate && !isDone && (
+        <div style={{ fontSize: 10, marginTop: 4, marginLeft: 21, color: isOverdue ? '#DC2626' : 'var(--gray-400)', fontWeight: isOverdue ? 600 : 400 }}>
+          {isOverdue ? '⚠️ Vencía: ' : 'Vence: '}
+          {new Date(a.taskData.dueDate).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}
+        </div>
+      )}
+      {a.user && <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 4, marginLeft: isTask ? 21 : 0 }}>— {a.user.name}</div>}
+    </div>
+  );
+}
 
 export default function LeadDetail({ leadId, toast, onBack }) {
   const [lead, setLead] = useState(null);
@@ -319,23 +377,29 @@ export default function LeadDetail({ leadId, toast, onBack }) {
             </div>
           </div>
           <div>
+            {/* AI Suggestions Panel — Option A */}
+            <AISuggestionsPanel
+              leadId={leadId}
+              stage={lead.stage}
+              onTasksCreated={load}
+              toast={toast}
+            />
+
+            {/* Activity Timeline */}
             <div className="card">
               <div style={{ fontWeight: 700, marginBottom: 14 }}>Historial de Actividades</div>
               {activities.length === 0 && (
                 <div style={{ color: 'var(--text3)', fontSize: 13, textAlign: 'center', padding: 20 }}>Sin actividades registradas</div>
               )}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 500, overflowY: 'auto' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 520, overflowY: 'auto' }}>
                 {activities.map(a => (
-                  <div key={a._id} style={{ padding: '10px 12px', background: 'var(--gray-50)', borderRadius: 8, border: '1px solid var(--gray-200)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                      <span style={{ fontSize: 11, color: 'var(--orange)', fontWeight: 600, textTransform: 'uppercase' }}>
-                        {a.type === 'whatsapp' ? '💬' : a.type === 'email' ? '📧' : a.type === 'call' ? '📞' : a.type === 'stage_change' ? '🔄' : '📝'} {a.type}
-                      </span>
-                      <span style={{ fontSize: 10, color: 'var(--text3)' }}>{new Date(a.createdAt).toLocaleDateString('es-MX', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' })}</span>
-                    </div>
-                    <div style={{ fontSize: 13, color: 'var(--text2)' }}>{a.content}</div>
-                    {a.user && <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 4 }}>— {a.user.name}</div>}
-                  </div>
+                  <ActivityCard key={a._id} activity={a} onComplete={async () => {
+                    try {
+                      await completeActivity(a._id);
+                      toast('Tarea completada', 'success');
+                      load();
+                    } catch { toast('Error', 'error'); }
+                  }} />
                 ))}
               </div>
             </div>

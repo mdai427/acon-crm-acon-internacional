@@ -6,6 +6,8 @@ const { auth, adminOnly } = require('../middleware/auth');
 const { scoreLeadWithAI } = require('../services/aiAgent');
 const { invalidateLead } = require('../services/cache');
 const { enqueue } = require('../services/jobQueue');
+const { generateStageTasks, DEFAULT_PLAYBOOKS } = require('../services/aiTasks');
+const Playbook = require('../models/Playbook');
 
 // Todos los endpoints requieren autenticación
 router.use(auth);
@@ -172,20 +174,60 @@ router.put('/:id', async (req, res) => {
     const prevStage = lead.stage;
     const updates = req.body;
 
-    // Si cambia de etapa, registrar actividad
-    if (updates.stage && updates.stage !== prevStage) {
+    // Si cambia de etapa: registrar actividad + generar tareas IA en background
+    const stageChanged = updates.stage && updates.stage !== prevStage;
+    if (stageChanged) {
       await Activity.create({
         lead: lead._id,
         user: req.user._id,
         type: 'stage_change',
         direction: 'internal',
         stageChange: { from: prevStage, to: updates.stage },
-        content: `Etapa cambiada: ${prevStage} → ${updates.stage}`
+        content: `Etapa cambiada: ${prevStage} → ${updates.stage}`,
       });
     }
 
     const updated = await Lead.findByIdAndUpdate(req.params.id, updates, { new: true })
       .populate('assignedTo', 'name email avatar');
+
+    // Option B: auto-create AI tasks on stage change (background, no blocking)
+    if (stageChanged) {
+      setImmediate(async () => {
+        try {
+          const newStage = updates.stage;
+          // Check if playbook exists for this stage
+          const playbook = await Playbook.findOne({ stage: newStage, isActive: true });
+          let tasks;
+          if (playbook && !playbook.useAI && playbook.tasks?.length) {
+            // Option C: use fixed playbook tasks
+            tasks = playbook.tasks.map(t => ({ title: t.title, dueInDays: t.dueInDays }));
+          } else {
+            // Option B: generate with AI (falls back to defaults if no API key)
+            tasks = await generateStageTasks(updated, newStage);
+          }
+          // Create task activities
+          const now = new Date();
+          for (const task of tasks) {
+            const dueDate = new Date(now.getTime() + (task.dueInDays || 2) * 86400000);
+            await Activity.create({
+              lead: lead._id,
+              user: req.user._id,
+              type: 'task',
+              direction: 'internal',
+              content: task.title,
+              isAuto: true,
+              taskData: {
+                completed: false,
+                dueDate,
+                priority: 'medium',
+              },
+            });
+          }
+        } catch (e) {
+          console.error('[AutoTasks] Error generando tareas:', e.message);
+        }
+      });
+    }
 
     req.io?.emit('lead_updated', updated);
     invalidateLead(String(req.user._id), updated.assignedTo ? String(updated.assignedTo._id || updated.assignedTo) : null);
@@ -251,6 +293,63 @@ router.post('/import', async (req, res) => {
     const job = await enqueue('leads_import', { rows, userId: req.user._id }, req.user._id);
     invalidateLead(String(req.user._id));
     res.status(202).json({ success: true, message: `Importando ${rows.length} leads en background`, data: { jobId: job._id, total: rows.length } });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// GET /api/leads/:id/stage-suggestions — Option A: get AI task suggestions for current stage
+router.get('/:id/stage-suggestions', async (req, res) => {
+  try {
+    const lead = await Lead.findById(req.params.id);
+    if (!lead) return res.status(404).json({ success: false, message: 'Lead no encontrado' });
+
+    const stage = req.query.stage || lead.stage;
+    // Check for fixed playbook first
+    const playbook = await Playbook.findOne({ stage, isActive: true });
+    let tasks;
+    if (playbook && !playbook.useAI && playbook.tasks?.length) {
+      tasks = playbook.tasks.map(t => ({ title: t.title, dueInDays: t.dueInDays }));
+    } else {
+      tasks = await generateStageTasks(lead, stage);
+    }
+    res.json({ success: true, data: { tasks, stage, source: (playbook && !playbook.useAI) ? 'playbook' : 'ai' } });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// POST /api/leads/:id/create-stage-tasks — manually trigger task creation for current stage
+router.post('/:id/create-stage-tasks', async (req, res) => {
+  try {
+    const lead = await Lead.findById(req.params.id);
+    if (!lead) return res.status(404).json({ success: false, message: 'Lead no encontrado' });
+
+    const stage = req.body.stage || lead.stage;
+    const playbook = await Playbook.findOne({ stage, isActive: true });
+    let tasks;
+    if (playbook && !playbook.useAI && playbook.tasks?.length) {
+      tasks = playbook.tasks.map(t => ({ title: t.title, dueInDays: t.dueInDays }));
+    } else {
+      tasks = await generateStageTasks(lead, stage);
+    }
+
+    const now = new Date();
+    const created = [];
+    for (const task of tasks) {
+      const dueDate = new Date(now.getTime() + (task.dueInDays || 2) * 86400000);
+      const act = await Activity.create({
+        lead: lead._id,
+        user: req.user._id,
+        type: 'task',
+        direction: 'internal',
+        content: task.title,
+        isAuto: true,
+        taskData: { completed: false, dueDate, priority: 'medium' },
+      });
+      created.push(act);
+    }
+    res.json({ success: true, data: { created: created.length, tasks: created } });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

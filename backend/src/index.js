@@ -41,6 +41,7 @@ const copilotRoutes    = require('./routes/copilot');
 const postVentaRoutes  = require('./routes/postventa');
 const adsRoutes        = require('./routes/ads');
 const jobsRoutes       = require('./routes/jobs');
+const playbooksRoutes  = require('./routes/playbooks');
 
 // Registro de handlers de jobs (debe cargarse antes de que lleguen peticiones)
 require('./services/jobHandlers');
@@ -104,6 +105,7 @@ app.use('/api/copilot',      copilotRoutes);
 app.use('/api/postventa',    postVentaRoutes);
 app.use('/api/ads',          adsRoutes);
 app.use('/api/jobs',         jobsRoutes);
+app.use('/api/playbooks',    playbooksRoutes);
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString(), service: 'ACON CRM API v2.0' }));
 

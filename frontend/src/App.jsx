@@ -19,13 +19,14 @@ import TemplatesPage from './pages/TemplatesPage';
 import ImportPage from './pages/ImportPage';
 import MarketingPage from './pages/MarketingPage';
 import PostVentaPage from './pages/PostVentaPage';
+import PlaybooksPage from './pages/PlaybooksPage';
 import CopilotDrawer from './components/CopilotDrawer';
 import { useIdleLogout } from './hooks/useIdleLogout';
 import {
   LayoutDashboard, Users, Kanban, MessageSquare,
   BarChart3, Settings, Plug, Package, UserPlus,
   Calculator, Zap, LogOut, Bell, FileText, Upload,
-  Megaphone, HeartHandshake, Menu, X, ChevronRight
+  Megaphone, HeartHandshake, Menu, X, ChevronRight, Sparkles
 } from 'lucide-react';
 
 const NAV = [
@@ -38,6 +39,7 @@ const NAV = [
   { id: 'import',       label: 'Importar',          Icon: Upload,          section: 'ventas',    mobile: false },
   { id: 'marketing',    label: 'Campañas',          Icon: Megaphone,       section: 'marketing', mobile: false },
   { id: 'followups',    label: 'Automatiz.',        Icon: Zap,             section: 'marketing', mobile: false },
+  { id: 'playbooks',    label: 'Playbooks IA',      Icon: Sparkles,        section: 'marketing', mobile: false },
   { id: 'templates',    label: 'Plantillas',        Icon: FileText,        section: 'marketing', mobile: false },
   { id: 'postventa',    label: 'Post-Venta',        Icon: HeartHandshake,  section: 'marketing', mobile: false },
   { id: 'reports',      label: 'Reportes',          Icon: BarChart3,       section: 'analytics', mobile: true,  mobileOrder: 4 },
@@ -187,6 +189,7 @@ function CRMApp() {
           {page === 'import'       && <ImportPage toast={toast} onNavigate={navigate} />}
           {page === 'marketing'    && <MarketingPage toast={toast} />}
           {page === 'postventa'    && <PostVentaPage toast={toast} />}
+          {page === 'playbooks'    && <PlaybooksPage toast={toast} />}
         </div>
       </div>
 
