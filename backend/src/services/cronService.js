@@ -222,6 +222,44 @@ const startCronJobs = (io) => {
     }
   }, null, true, 'America/Mexico_City');
 
+  // ============================================
+  // JOB 6: Reasignación de leads no atendidos en 24h — cada día 10am
+  // ============================================
+  new CronJob('0 10 * * *', async () => {
+    console.log('⏰ Cron: Verificando leads no atendidos en 24h...');
+    try {
+      const { reassignUnattendedLead } = require('./leadAssignment');
+      const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+      // Leads activos asignados hace más de 24h sin ninguna actividad del ejecutivo
+      const leads = await Lead.find({
+        isActive: true,
+        stage: { $nin: ['closed_won', 'closed_lost'] },
+        assignedAt: { $lt: cutoff },
+      }).populate('assignedTo', 'name email');
+
+      let reassigned = 0;
+      for (const lead of leads) {
+        // Verificar si el ejecutivo ha tenido alguna actividad manual en este lead
+        const hasActivity = await Activity.findOne({
+          lead: lead._id,
+          isAuto: false,
+          createdAt: { $gte: lead.assignedAt },
+        });
+
+        if (!hasActivity) {
+          const ok = await reassignUnattendedLead(lead, io);
+          if (ok) reassigned++;
+          await new Promise(r => setTimeout(r, 200));
+        }
+      }
+
+      console.log(`✅ Leads reasignados por inactividad 24h: ${reassigned}`);
+    } catch (error) {
+      console.error('Cron reassignment error:', error);
+    }
+  }, null, true, 'America/Mexico_City');
+
   console.log('✅ Cron jobs iniciados (zona: Mexico City)');
 };
 

@@ -53,6 +53,7 @@ const leadSchema = new mongoose.Schema({
   // ---- Agente IA ----
   aiNotes:         { type: String }, // analisis del agente
   aiQualification: { type: String }, // razon del score
+  aiResearch:      { type: mongoose.Schema.Types.Mixed }, // investigación de empresa
   autoReplySent:   { type: Boolean, default: false },
   
   // ---- Metadata ----

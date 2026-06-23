@@ -20,13 +20,14 @@ import ImportPage from './pages/ImportPage';
 import MarketingPage from './pages/MarketingPage';
 import PostVentaPage from './pages/PostVentaPage';
 import PlaybooksPage from './pages/PlaybooksPage';
+import CommissionsPage from './pages/CommissionsPage';
 import CopilotDrawer from './components/CopilotDrawer';
 import { useIdleLogout } from './hooks/useIdleLogout';
 import {
   LayoutDashboard, Users, Kanban, MessageSquare,
   BarChart3, Settings, Plug, Package, UserPlus,
   Calculator, Zap, LogOut, Bell, FileText, Upload,
-  Megaphone, HeartHandshake, Menu, X, ChevronRight, Sparkles
+  Megaphone, HeartHandshake, Menu, X, ChevronRight, Sparkles, DollarSign
 } from 'lucide-react';
 
 const NAV = [
@@ -34,6 +35,7 @@ const NAV = [
   { id: 'leads',        label: 'Leads',             Icon: Users,           section: 'ventas',    mobile: true,  mobileOrder: 1 },
   { id: 'pipeline',     label: 'Pipeline',          Icon: Kanban,          section: 'ventas',    mobile: true,  mobileOrder: 2 },
   { id: 'operations',   label: 'Operaciones',       Icon: Package,         section: 'ventas',    mobile: false },
+  { id: 'commissions',  label: 'Comisiones',        Icon: DollarSign,      section: 'ventas',    mobile: false },
   { id: 'quoter',       label: 'Cotizador',         Icon: Calculator,      section: 'ventas',    mobile: false },
   { id: 'whatsapp',     label: 'WhatsApp',          Icon: MessageSquare,   section: 'ventas',    mobile: true,  mobileOrder: 3 },
   { id: 'import',       label: 'Importar',          Icon: Upload,          section: 'ventas',    mobile: false },
@@ -190,6 +192,7 @@ function CRMApp() {
           {page === 'marketing'    && <MarketingPage toast={toast} />}
           {page === 'postventa'    && <PostVentaPage toast={toast} />}
           {page === 'playbooks'    && <PlaybooksPage toast={toast} />}
+          {page === 'commissions'  && <CommissionsPage toast={toast} />}
         </div>
       </div>
 

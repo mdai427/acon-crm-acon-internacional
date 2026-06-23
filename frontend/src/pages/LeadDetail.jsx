@@ -5,7 +5,8 @@ import {
   getGmailMessages, sendGmailMessage, getCalendarEvents, createCalendarEvent
 } from '../services/api';
 import { ScoreBadge, StageBadge, SourceBadge } from '../components/Badges';
-import { Mail, Calendar, FileText, MessageSquare, RefreshCw, Plus, Send, Video, Clock, MapPin, CheckSquare, Square } from 'lucide-react';
+import { Mail, Calendar, FileText, MessageSquare, RefreshCw, Plus, Send, Video, Clock, MapPin, CheckSquare, Square, Building2, Zap } from 'lucide-react';
+import { triggerLeadResearch } from '../services/api';
 import AISuggestionsPanel from '../components/AISuggestionsPanel';
 import { completeActivity } from '../services/api';
 
@@ -14,6 +15,7 @@ const STAGE_LABELS = { new:'Nuevo', contacted:'Contactado', qualified:'Calificad
 
 const TABS = [
   { id: 'info',      label: 'Información', Icon: FileText },
+  { id: 'research',  label: 'Empresa IA',  Icon: Building2 },
   { id: 'activity',  label: 'Actividades', Icon: MessageSquare },
   { id: 'emails',    label: 'Correos',     Icon: Mail },
   { id: 'calendar',  label: 'Calendario',  Icon: Calendar },
@@ -85,6 +87,7 @@ export default function LeadDetail({ leadId, toast, onBack }) {
   const [form, setForm] = useState({});
   const [draftLoading, setDraftLoading] = useState(false);
   const [draft, setDraft] = useState(null);
+  const [researchLoading, setResearchLoading] = useState(false);
 
   // Emails
   const [emails, setEmails] = useState([]);
@@ -178,6 +181,17 @@ export default function LeadDetail({ leadId, toast, onBack }) {
     } catch { toast('OpenAI no configurado', 'error'); }
   };
 
+  const handleResearch = async () => {
+    setResearchLoading(true);
+    setTab('research');
+    try {
+      await triggerLeadResearch(leadId);
+      toast('Investigación completada', 'success');
+      load();
+    } catch { toast('Error al investigar empresa', 'error'); }
+    finally { setResearchLoading(false); }
+  };
+
   const handleDraftEmail = async () => {
     setDraftLoading(true);
     try {
@@ -262,6 +276,9 @@ export default function LeadDetail({ leadId, toast, onBack }) {
           <ScoreBadge score={lead.score || 0} />
           <StageBadge stage={lead.stage} />
           <button className="btn btn-ghost btn-sm" onClick={handleRescore}>🤖 Re-Score IA</button>
+          <button className="btn btn-ghost btn-sm" onClick={handleResearch} disabled={researchLoading}>
+            {researchLoading ? '⏳ Investigando...' : '🔍 Investigar Empresa'}
+          </button>
           <button className="btn btn-ghost btn-sm" onClick={handleDraftEmail} disabled={draftLoading}>
             {draftLoading ? '...' : '✉️ Borrador IA'}
           </button>
@@ -405,6 +422,11 @@ export default function LeadDetail({ leadId, toast, onBack }) {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── TAB: EMPRESA IA ── */}
+      {tab === 'research' && (
+        <ResearchPanel lead={lead} loading={researchLoading} onResearch={handleResearch} />
       )}
 
       {/* ── TAB: ACTIVITY ── */}
@@ -648,6 +670,167 @@ export default function LeadDetail({ leadId, toast, onBack }) {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── ResearchPanel ─────────────────────────────────────────────────────────────
+function ResearchPanel({ lead, loading, onResearch }) {
+  const r = lead?.aiResearch;
+
+  const POTENTIAL_COLOR = { Alto: '#16a34a', Medio: '#d97706', Bajo: '#dc2626' };
+
+  if (loading) {
+    return (
+      <div style={{ textAlign: 'center', padding: 60 }}>
+        <div style={{ fontSize: 32, marginBottom: 12 }}>🔍</div>
+        <div style={{ fontWeight: 700, color: '#0B2545', marginBottom: 6 }}>Investigando empresa con IA...</div>
+        <div style={{ fontSize: 13, color: '#6b7280' }}>Analizando información de {lead.company}</div>
+        <div style={{ marginTop: 20 }}>
+          <div className="spinner" style={{ margin: '0 auto' }} />
+        </div>
+      </div>
+    );
+  }
+
+  if (!r) {
+    return (
+      <div style={{ textAlign: 'center', padding: 60 }}>
+        <Building2 size={48} color="#d1d5db" style={{ marginBottom: 16 }} />
+        <div style={{ fontWeight: 700, color: '#374151', marginBottom: 6 }}>Sin investigación disponible</div>
+        <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 24 }}>
+          La investigación se genera automáticamente al crear el lead.<br/>
+          También puedes generarla manualmente ahora.
+        </div>
+        <button className="btn btn-primary" onClick={onResearch}>
+          🔍 Investigar {lead.company}
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+      {/* Header de empresa */}
+      <div style={{ background: '#0B2545', borderRadius: 12, padding: '20px 24px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div>
+          <div style={{ fontSize: 11, color: '#93c5fd', fontWeight: 600, letterSpacing: 1, marginBottom: 4 }}>ANÁLISIS EMPRESARIAL IA</div>
+          <div style={{ fontSize: 20, fontWeight: 800 }}>{lead.company}</div>
+          <div style={{ fontSize: 13, color: '#cbd5e1', marginTop: 4 }}>{r.giro}</div>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <div style={{ fontSize: 11, color: '#93c5fd', fontWeight: 600, marginBottom: 4 }}>SCORE EMPRESA</div>
+          <div style={{ fontSize: 36, fontWeight: 900, color: r.scoreEmpresa >= 70 ? '#4ade80' : r.scoreEmpresa >= 40 ? '#fbbf24' : '#f87171' }}>
+            {r.scoreEmpresa}
+          </div>
+          <div style={{ fontSize: 10, color: '#94a3b8' }}>/100</div>
+        </div>
+      </div>
+
+      {/* KPI chips */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+        <div className="card" style={{ textAlign: 'center', padding: 16 }}>
+          <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 6, fontWeight: 600 }}>TAMAÑO</div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: '#0B2545' }}>{r.tamano || '—'}</div>
+        </div>
+        <div className="card" style={{ textAlign: 'center', padding: 16 }}>
+          <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 6, fontWeight: 600 }}>EMBARQUES EST.</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: '#0B2545' }}>{r.embarquesEstimados || '—'}</div>
+        </div>
+        <div className="card" style={{ textAlign: 'center', padding: 16 }}>
+          <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 6, fontWeight: 600 }}>POTENCIAL LOGÍSTICO</div>
+          <div style={{ fontSize: 15, fontWeight: 800, color: POTENTIAL_COLOR[r.potencialLogistico] || '#374151' }}>
+            {r.potencialLogistico || '—'}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+        {/* Tipo de mercancía */}
+        {r.tipoMercancia?.length > 0 && (
+          <div className="card">
+            <div style={{ fontWeight: 700, fontSize: 13, color: '#0B2545', marginBottom: 10 }}>📦 Tipo de Mercancía</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {r.tipoMercancia.map((m, i) => (
+                <span key={i} style={{ background: '#f0f9ff', color: '#0369a1', fontSize: 12, padding: '3px 10px', borderRadius: 20, fontWeight: 500 }}>{m}</span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Países de operación */}
+        {r.paisesOperacion?.length > 0 && (
+          <div className="card">
+            <div style={{ fontWeight: 700, fontSize: 13, color: '#0B2545', marginBottom: 10 }}>🌍 Países de Operación</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {r.paisesOperacion.map((p, i) => (
+                <span key={i} style={{ background: '#f0fdf4', color: '#15803d', fontSize: 12, padding: '3px 10px', borderRadius: 20, fontWeight: 500 }}>{p}</span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Rutas principales */}
+        {r.rutasPrincipales?.length > 0 && (
+          <div className="card">
+            <div style={{ fontWeight: 700, fontSize: 13, color: '#0B2545', marginBottom: 10 }}>🛳️ Rutas Principales</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {r.rutasPrincipales.map((rt, i) => (
+                <div key={i} style={{ fontSize: 13, color: '#374151', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ color: '#F2641E', fontWeight: 700 }}>→</span> {rt}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Oportunidades */}
+        {r.oportunidades?.length > 0 && (
+          <div className="card">
+            <div style={{ fontWeight: 700, fontSize: 13, color: '#16a34a', marginBottom: 10 }}>✅ Oportunidades</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {r.oportunidades.map((o, i) => (
+                <div key={i} style={{ fontSize: 13, color: '#374151', display: 'flex', gap: 8 }}>
+                  <span style={{ color: '#16a34a', flexShrink: 0 }}>•</span> {o}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Riesgos */}
+      {r.riesgos?.length > 0 && (
+        <div className="card" style={{ border: '1px solid #fecaca' }}>
+          <div style={{ fontWeight: 700, fontSize: 13, color: '#dc2626', marginBottom: 10 }}>⚠️ Riesgos</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {r.riesgos.map((rg, i) => (
+              <div key={i} style={{ fontSize: 13, color: '#374151', display: 'flex', gap: 8 }}>
+                <span style={{ color: '#dc2626', flexShrink: 0 }}>•</span> {rg}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Recomendación */}
+      {r.recomendacion && (
+        <div style={{ background: 'rgba(242,100,30,0.06)', border: '1px solid rgba(242,100,30,0.25)', borderRadius: 12, padding: 18 }}>
+          <div style={{ fontWeight: 700, fontSize: 13, color: '#F2641E', marginBottom: 8 }}>
+            🤖 Recomendación para el Ejecutivo
+          </div>
+          <div style={{ fontSize: 14, color: '#374151', lineHeight: 1.6 }}>{r.recomendacion}</div>
+        </div>
+      )}
+
+      {/* Footer con fuente y botón re-investigar */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0' }}>
+        <div style={{ fontSize: 11, color: '#9ca3af' }}>📊 {r.fuentesDatos}</div>
+        <button className="btn btn-ghost btn-sm" onClick={onResearch} style={{ fontSize: 12 }}>
+          🔄 Re-investigar
+        </button>
+      </div>
     </div>
   );
 }

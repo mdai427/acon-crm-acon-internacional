@@ -186,3 +186,14 @@ export const createStageTasks = (leadId, stage) => api.post(`/leads/${leadId}/cr
 export const getPlaybooks = () => api.get('/playbooks');
 export const updatePlaybook = (stage, data) => api.put(`/playbooks/${stage}`, data);
 export const seedPlaybooks = () => api.post('/playbooks/seed');
+
+// Commissions
+export const getCommissions = (params) => api.get('/commissions', { params });
+export const getCommissionsSummary = (params) => api.get('/commissions/summary', { params });
+export const getCommissionsConfig = () => api.get('/commissions/config');
+export const createCommission = (data) => api.post('/commissions', data);
+export const updateCommission = (id, data) => api.put(`/commissions/${id}`, data);
+export const deleteCommission = (id) => api.delete(`/commissions/${id}`);
+
+// Lead AI Research
+export const triggerLeadResearch = (leadId) => api.post(`/leads/${leadId}/research`);

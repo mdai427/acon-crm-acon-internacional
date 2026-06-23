@@ -135,9 +135,19 @@ router.get('/:id', async (req, res) => {
 // POST /api/leads
 router.post('/', async (req, res) => {
   try {
+    const { autoAssignLead } = require('../services/leadAssignment');
+    const { researchCompany } = require('../services/companyResearch');
+
+    // Auto-asignar si no se especifica ejecutivo
+    let assignedTo = req.body.assignedTo || req.user._id;
+    if (!req.body.assignedTo) {
+      const bestExec = await autoAssignLead({ services: req.body.services });
+      if (bestExec) assignedTo = bestExec._id;
+    }
+
     const leadData = {
       ...req.body,
-      assignedTo: req.body.assignedTo || req.user._id,
+      assignedTo,
       assignedAt: new Date()
     };
 
@@ -145,6 +155,11 @@ router.post('/', async (req, res) => {
 
     // Score automático con IA (async, no bloquea)
     scoreLeadWithAI(lead._id).catch(console.error);
+
+    // Investigación de empresa con IA (async, no bloquea)
+    researchCompany(lead).then(async (research) => {
+      await Lead.findByIdAndUpdate(lead._id, { aiResearch: research });
+    }).catch(console.error);
 
     // Actividad inicial
     await Activity.create({
@@ -156,10 +171,39 @@ router.post('/', async (req, res) => {
       isAuto: false
     });
 
+    // Si fue auto-asignado, registrar en timeline
+    if (!req.body.assignedTo && String(assignedTo) !== String(req.user._id)) {
+      await Activity.create({
+        lead: lead._id,
+        user: assignedTo,
+        type: 'note',
+        direction: 'internal',
+        isAuto: true,
+        subject: '🤖 Lead asignado automáticamente',
+        content: `Lead asignado automáticamente al ejecutivo con menor carga de trabajo.`,
+      });
+    }
+
     // Notificar via socket al ejecutivo asignado
-    req.io?.to(`user_${leadData.assignedTo}`).emit('new_lead', lead);
-    invalidateLead(String(req.user._id), leadData.assignedTo ? String(leadData.assignedTo) : null);
+    req.io?.to(`user_${assignedTo}`).emit('new_lead', lead);
+    invalidateLead(String(req.user._id), assignedTo ? String(assignedTo) : null);
     res.status(201).json({ success: true, data: lead });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// POST /api/leads/:id/research — investigación manual de empresa
+router.post('/:id/research', async (req, res) => {
+  try {
+    const { researchCompany } = require('../services/companyResearch');
+    const lead = await Lead.findById(req.params.id);
+    if (!lead) return res.status(404).json({ success: false, message: 'Lead no encontrado' });
+
+    const research = await researchCompany(lead);
+    await Lead.findByIdAndUpdate(lead._id, { aiResearch: research });
+
+    res.json({ success: true, data: research });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
