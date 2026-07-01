@@ -37,7 +37,7 @@ const NAV = [
   { id: 'operations',   label: 'Operaciones',       Icon: Package,         section: 'ventas',    mobile: false },
   { id: 'commissions',  label: 'Comisiones',        Icon: DollarSign,      section: 'ventas',    mobile: false },
   { id: 'quoter',       label: 'Cotizador',         Icon: Calculator,      section: 'ventas',    mobile: false },
-  { id: 'whatsapp',     label: 'WhatsApp',          Icon: MessageSquare,   section: 'ventas',    mobile: true,  mobileOrder: 3 },
+  { id: 'whatsapp',     label: 'Conversaciones',    Icon: MessageSquare,   section: 'ventas',    mobile: true,  mobileOrder: 3 },
   { id: 'import',       label: 'Importar',          Icon: Upload,          section: 'ventas',    mobile: false },
   { id: 'marketing',    label: 'Campañas',          Icon: Megaphone,       section: 'marketing', mobile: false },
   { id: 'followups',    label: 'Automatiz.',        Icon: Zap,             section: 'marketing', mobile: false },
