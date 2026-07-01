@@ -165,6 +165,12 @@ export default function FollowUpsPage({ toast }) {
   };
 
   const handleExecute = async (ruleId) => {
+    const rule = rules.find(r => r._id === ruleId);
+    const affectedCount = pending.length;
+    const msg = affectedCount > 0
+      ? `¿Ejecutar la regla "${rule?.name}"?\n\nEl sistema procesará todos los leads que cumplan los criterios (${affectedCount} leads en el sistema pendientes de reglas activas).`
+      : `¿Ejecutar la regla "${rule?.name}" ahora?`;
+    if (!window.confirm(msg)) return;
     setExecuting(ruleId);
     try {
       const r = await executeFollowUpRule(ruleId);

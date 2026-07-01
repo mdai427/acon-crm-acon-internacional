@@ -143,7 +143,7 @@ function StageBar({ stageKey, count, value, maxCount }) {
 }
 
 // ── Main ───────────────────────────────────────────────────────────────────────
-export default function Dashboard({ user, onNavigate }) {
+export default function Dashboard({ user, onNavigate, toast }) {
   const [data, setData]       = useState(null);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod]   = useState('month');
@@ -156,6 +156,7 @@ export default function Dashboard({ user, onNavigate }) {
       setData(res.data.data);
     } catch (e) {
       console.error(e);
+      if (toast) toast('Error al cargar el dashboard', 'error');
     } finally {
       setLoading(false);
     }

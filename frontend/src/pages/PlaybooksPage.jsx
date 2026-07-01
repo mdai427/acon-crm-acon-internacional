@@ -219,6 +219,7 @@ export default function PlaybooksPage({ toast }) {
   useEffect(() => { load(); }, []);
 
   const handleSeed = async () => {
+    if (!window.confirm('¿Cargar las plantillas ACON? Esto sobreescribirá los playbooks que hayas personalizado.')) return;
     setSeeding(true);
     try {
       await seedPlaybooks();

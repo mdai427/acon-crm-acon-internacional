@@ -1,6 +1,6 @@
-import React, { useState, useRef } from 'react';
-import { Upload, FileSpreadsheet, CheckCircle, AlertCircle, Download } from 'lucide-react';
-import { importLeads } from '../services/api';
+import React, { useState, useRef, useEffect } from 'react';
+import { Upload, FileSpreadsheet, CheckCircle, AlertCircle, Download, Clock } from 'lucide-react';
+import { importLeads, getJob } from '../services/api';
 
 const REQUIRED_COLS = ['company', 'contact'];
 const COL_MAP = {
@@ -55,7 +55,32 @@ export default function ImportPage({ toast, onNavigate }) {
   const [importing, setImporting] = useState(false);
   const [result, setResult] = useState(null);
   const [errors, setErrors] = useState([]);
+  const [jobId, setJobId] = useState(null);
+  const [jobStatus, setJobStatus] = useState(null);
   const fileRef = useRef();
+  const pollRef = useRef(null);
+
+  useEffect(() => {
+    if (!jobId) return;
+    pollRef.current = setInterval(async () => {
+      try {
+        const r = await getJob(jobId);
+        const job = r.data.data;
+        setJobStatus(job);
+        if (job.status === 'done' || job.status === 'failed') {
+          clearInterval(pollRef.current);
+          setImporting(false);
+          if (job.status === 'done') {
+            setResult(job.result || {});
+            toast(`${job.result?.created || 0} leads importados`, 'success');
+          } else {
+            toast('Error en la importación', 'error');
+          }
+        }
+      } catch { clearInterval(pollRef.current); setImporting(false); }
+    }, 2000);
+    return () => clearInterval(pollRef.current);
+  }, [jobId]);
 
   const handleFile = async (f) => {
     if (!f) return;
@@ -100,11 +125,18 @@ export default function ImportPage({ toast, onNavigate }) {
       }
 
       const res = await importLeads({ leads: rows });
-      setResult(res.data);
-      toast(`${res.data.data?.created || 0} leads importados`, 'success');
+      const jid = res.data.data?.jobId;
+      if (jid) {
+        setJobId(jid);
+        setJobStatus({ status: 'pending', total: rows.length });
+        toast(`Importando ${rows.length} leads en segundo plano…`, 'info');
+      } else {
+        setResult(res.data.data || {});
+        toast(`${res.data.data?.created || 0} leads importados`, 'success');
+        setImporting(false);
+      }
     } catch (e) {
       toast(e.response?.data?.message || 'Error al importar', 'error');
-    } finally {
       setImporting(false);
     }
   };
@@ -195,6 +227,18 @@ export default function ImportPage({ toast, onNavigate }) {
         </div>
       )}
 
+      {/* Job polling status */}
+      {jobStatus && jobStatus.status !== 'done' && jobStatus.status !== 'failed' && (
+        <div className="card" style={{ marginBottom: 20, background: 'rgba(59,130,246,.06)', border: '1px solid rgba(59,130,246,.2)' }}>
+          <div style={{ color: '#2563eb', fontWeight: 600, display: 'flex', gap: 8, alignItems: 'center' }}>
+            <Clock size={16} /> Importando en segundo plano…
+          </div>
+          <div style={{ fontSize: 13, marginTop: 8, color: 'var(--text2)' }}>
+            Procesando <strong>{jobStatus.total || 0}</strong> filas. Esto puede tardar unos segundos.
+          </div>
+        </div>
+      )}
+
       {/* Result */}
       {result && (
         <div className="card" style={{ marginBottom: 20, background: 'rgba(34,197,94,.06)', border: '1px solid rgba(34,197,94,.2)' }}>
@@ -202,9 +246,19 @@ export default function ImportPage({ toast, onNavigate }) {
             <CheckCircle size={16} /> Importación completada
           </div>
           <div style={{ fontSize: 13, marginTop: 8 }}>
-            <strong>{result.data?.created || 0}</strong> leads creados ·&nbsp;
-            <strong>{result.data?.skipped || 0}</strong> omitidos
+            <strong>{result.created || 0}</strong> leads creados ·&nbsp;
+            <strong>{result.skipped || 0}</strong> omitidos
+            {result.errors?.length > 0 && (
+              <span style={{ color: 'var(--red)', marginLeft: 8 }}>· <strong>{result.errors.length}</strong> errores</span>
+            )}
           </div>
+          {result.errors?.length > 0 && (
+            <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 3 }}>
+              {result.errors.map((e, i) => (
+                <div key={i} style={{ fontSize: 12, color: 'var(--red)' }}>• {e}</div>
+              ))}
+            </div>
+          )}
           <button className="btn btn-primary" style={{ marginTop: 12 }} onClick={() => onNavigate('leads')}>
             Ver leads importados
           </button>

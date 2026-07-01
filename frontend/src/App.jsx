@@ -55,7 +55,7 @@ const NAV = [
 const SECTIONS = { ventas: 'Ventas', marketing: 'Marketing', analytics: 'Análisis', config: 'Configuración' };
 
 // ── Global Search ───────────────────────────────────────────────────────────────
-function GlobalSearch({ onSelectLead }) {
+function GlobalSearch({ onSelectLead, onSelectOperation, onSelectQuote }) {
   const [q, setQ]           = useState('');
   const [results, setResults] = useState(null);
   const [open, setOpen]     = useState(false);
@@ -122,11 +122,11 @@ function GlobalSearch({ onSelectLead }) {
             <div className="gs-group">
               <div className="gs-group-label"><Package size={11} /> Operaciones</div>
               {results.operations.map(o => (
-                <div key={o._id} className="gs-item gs-item-static">
+                <button key={o._id} className="gs-item" onClick={() => { onSelectOperation(o._id); setOpen(false); setQ(''); }}>
                   <Package size={13} style={{ color: '#22c55e', flexShrink: 0 }} />
                   <span className="gs-item-main">{o.bookingNumber || o.clientName}</span>
                   <span className="gs-item-sub">{o.status}</span>
-                </div>
+                </button>
               ))}
             </div>
           )}
@@ -134,11 +134,11 @@ function GlobalSearch({ onSelectLead }) {
             <div className="gs-group">
               <div className="gs-group-label"><FileText size={11} /> Cotizaciones</div>
               {results.quotes.map(q2 => (
-                <div key={q2._id} className="gs-item gs-item-static">
+                <button key={q2._id} className="gs-item" onClick={() => { onSelectQuote(q2._id); setOpen(false); setQ(''); }}>
                   <FileText size={13} style={{ color: '#f97316', flexShrink: 0 }} />
                   <span className="gs-item-main">{q2.folio} · {q2.clientName}</span>
                   <span className="gs-item-sub">{q2.status}</span>
-                </div>
+                </button>
               ))}
             </div>
           )}
@@ -281,6 +281,8 @@ function CRMApp() {
   const handleSelectLead = (id) => { setSelectedLeadId(id); setPage('lead_detail'); setSidebarOpen(false); };
   const handleBackFromLead = () => { setSelectedLeadId(null); setPage('leads'); };
   const navigate = (p) => { setSelectedLeadId(null); setPage(p); setSidebarOpen(false); };
+  const handleSelectOperation = (_id) => { navigate('operations'); toast('Abriendo operaciones…', 'info'); };
+  const handleSelectQuote = (_id) => { navigate('quoter'); toast('Abriendo cotizador…', 'info'); };
 
   const navBySections = NAV.reduce((acc, n) => {
     acc[n.section] = acc[n.section] || [];
@@ -310,7 +312,7 @@ function CRMApp() {
           </div>
 
           {/* Global Search */}
-          <GlobalSearch onSelectLead={handleSelectLead} />
+          <GlobalSearch onSelectLead={handleSelectLead} onSelectOperation={handleSelectOperation} onSelectQuote={handleSelectQuote} />
 
           <div className="topbar-date">
             {new Date().toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric', month: 'short' })}
@@ -372,7 +374,7 @@ function CRMApp() {
 
         {/* MAIN */}
         <div className="main">
-          {page === 'dashboard'    && <Dashboard user={user} onNavigate={navigate} />}
+          {page === 'dashboard'    && <Dashboard user={user} onNavigate={navigate} toast={toast} />}
           {page === 'leads'        && <LeadsPage toast={toast} onSelect={handleSelectLead} />}
           {page === 'lead_detail'  && selectedLeadId && <LeadDetail leadId={selectedLeadId} toast={toast} onBack={handleBackFromLead} />}
           {page === 'pipeline'     && <PipelinePage toast={toast} onSelect={handleSelectLead} />}

@@ -96,7 +96,8 @@ export default function LeadDetail({ leadId, toast, onBack }) {
   const [replyText, setReplyText] = useState('');
   const [replySubject, setReplySubject] = useState('');
   const [showCompose, setShowCompose] = useState(false);
-  const [composeForm, setComposeForm] = useState({ to: '', subject: '', body: '' });
+  const [composeForm, setComposeForm] = useState({ to: '', subject: '', body: '', threadId: null });
+  const [gmailMaxResults, setGmailMaxResults] = useState(20);
 
   // Calendar
   const [events, setEvents] = useState([]);
@@ -117,13 +118,13 @@ export default function LeadDetail({ leadId, toast, onBack }) {
 
   useEffect(() => { load(); }, [leadId]);
 
-  const loadEmails = useCallback(async () => {
+  const loadEmails = useCallback(async (maxResults) => {
     if (!lead) return;
     const contactEmail = lead.contact?.email || lead.email;
     if (!contactEmail) { toast('Este lead no tiene email de contacto', 'error'); return; }
     setEmailsLoading(true);
     try {
-      const r = await getGmailMessages(contactEmail);
+      const r = await getGmailMessages(contactEmail, maxResults || gmailMaxResults);
       setEmails(r.data.data || []);
     } catch (err) {
       if (err.response?.data?.code === 'NOT_CONNECTED') {
@@ -218,10 +219,11 @@ export default function LeadDetail({ leadId, toast, onBack }) {
         to: composeForm.to || (lead.contact?.email || lead.email),
         subject: composeForm.subject,
         body: composeForm.body,
+        threadId: composeForm.threadId || undefined,
       });
       toast('Correo enviado via Gmail', 'success');
       setShowCompose(false);
-      setComposeForm({ to: '', subject: '', body: '' });
+      setComposeForm({ to: '', subject: '', body: '', threadId: null });
       loadEmails();
     } catch (err) {
       toast(err.response?.data?.message || 'Error al enviar', 'error');
@@ -530,6 +532,19 @@ export default function LeadDetail({ leadId, toast, onBack }) {
                     <div style={{ fontSize: 10, color: '#C4C9D1', marginTop: 4 }}>{new Date(email.date).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</div>
                   </div>
                 ))}
+                {emails.length >= gmailMaxResults && (
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    style={{ width: '100%', marginTop: 4 }}
+                    onClick={() => {
+                      const next = gmailMaxResults + 20;
+                      setGmailMaxResults(next);
+                      loadEmails(next);
+                    }}
+                  >
+                    Cargar más correos
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -544,10 +559,10 @@ export default function LeadDetail({ leadId, toast, onBack }) {
               </div>
               <button
                 className="btn btn-primary btn-sm"
-                onClick={() => { setShowCompose(true); setComposeForm({ to: contactEmail, subject: `Re: ${selectedEmail.subject}`, body: '' }); setSelectedEmail(null); }}
+                onClick={() => { setShowCompose(true); setComposeForm({ to: contactEmail, subject: `Re: ${selectedEmail.subject}`, body: '', threadId: selectedEmail.threadId }); setSelectedEmail(null); }}
                 style={{ display: 'flex', alignItems: 'center', gap: 5 }}
               >
-                <Send size={12} /> Responder
+                <Send size={12} /> Responder en hilo
               </button>
             </div>
           )}

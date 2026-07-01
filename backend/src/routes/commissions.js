@@ -116,6 +116,24 @@ router.put('/rules/:userId', adminOnly, async (req, res) => {
   try {
     const User = require('../models/User');
     const { commissionRules } = req.body;
+
+    // Validate all percentages are in range [0, 100]
+    if (commissionRules && typeof commissionRules === 'object') {
+      for (const [leadType, services] of Object.entries(commissionRules)) {
+        if (typeof services === 'object') {
+          for (const [service, pct] of Object.entries(services)) {
+            const val = Number(pct);
+            if (isNaN(val) || val < 0 || val > 100) {
+              return res.status(400).json({
+                success: false,
+                message: `Porcentaje inválido (${pct}) para ${leadType}/${service}. Debe estar entre 0 y 100.`
+              });
+            }
+          }
+        }
+      }
+    }
+
     const user = await User.findByIdAndUpdate(
       req.params.userId,
       { commissionRules },

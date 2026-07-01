@@ -8,6 +8,7 @@ import {
   getMarketingAnalytics, previewSegment,
   getAdPlatformStatus, getMetaAdsUrl, getLinkedInAdsUrl, getGoogleAdsUrl,
   disconnectAdPlatform, getMetaAdAccounts, getLinkedInAdAccounts, createAdCampaign,
+  getJob,
 } from '../services/api';
 import {
   Megaphone, Zap, BarChart3, Plus, Play, Pause, Trash2, Mail,
@@ -222,8 +223,29 @@ export default function MarketingPage({ toast }) {
   };
 
   const handleLaunch = async (id) => {
-    try { const r = await launchCampaign(id); toast(r.data.data.message, 'success'); load(); }
-    catch { toast('Error al lanzar campaña', 'error'); }
+    try {
+      const r = await launchCampaign(id);
+      const jobId = r.data.data?.jobId;
+      toast(r.data.data?.message || 'Campaña lanzada', 'success');
+      load();
+      if (jobId) {
+        const poll = setInterval(async () => {
+          try {
+            const jr = await getJob(jobId);
+            const job = jr.data.data;
+            if (job.status === 'done') {
+              clearInterval(poll);
+              toast(`Campaña completada: ${job.result?.sent || 0} enviados, ${job.result?.failed || 0} errores`, 'success');
+              load();
+            } else if (job.status === 'failed') {
+              clearInterval(poll);
+              toast('La campaña falló al ejecutarse', 'error');
+              load();
+            }
+          } catch { clearInterval(poll); }
+        }, 3000);
+      }
+    } catch { toast('Error al lanzar campaña', 'error'); }
   };
 
   const handleDeleteCampaign = async (id) => {
