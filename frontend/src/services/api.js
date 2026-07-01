@@ -69,7 +69,7 @@ export const connectGoogle = () => api.get('/oauth/google/url');
 export const disconnectOAuth = (provider) => api.delete(`/oauth/disconnect/${provider}`);
 
 // Reports
-export const getDashboard = () => api.get('/reports/dashboard');
+export const getDashboard = (period = 'month') => api.get('/reports/dashboard', { params: { period } });
 export const getTeamReport = () => api.get('/reports/team');
 export const getConversionReport = () => api.get('/reports/conversion');
 export const rescoreAllLeads = () => api.post('/leads/rescore-all');
@@ -200,3 +200,9 @@ export const getResolvedRules = (userId) => api.get(`/commissions/rules-resolved
 
 // Lead AI Research
 export const triggerLeadResearch = (leadId) => api.post(`/leads/${leadId}/research`);
+
+// Global Search
+export const globalSearch = (q) => api.get('/search', { params: { q } });
+
+// Notifications
+export const getNotifications = () => api.get('/notifications');

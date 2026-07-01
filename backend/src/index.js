@@ -107,6 +107,8 @@ app.use('/api/ads',          adsRoutes);
 app.use('/api/jobs',         jobsRoutes);
 app.use('/api/playbooks',    playbooksRoutes);
 app.use('/api/commissions',  require('./routes/commissions'));
+app.use('/api/search',       require('./routes/search'));
+app.use('/api/notifications', require('./routes/notifications'));
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString(), service: 'ACON CRM API v2.0' }));
 

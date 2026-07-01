@@ -1,246 +1,463 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  BarChart, Bar,
+  AreaChart, Area, BarChart, Bar,
   XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
-  RadialBarChart, RadialBar, Legend,
-  PieChart, Pie, Cell
+  PieChart, Pie, Cell, Legend
 } from 'recharts';
-import { getDashboard } from '../services/api';
 import {
-  Users, TrendingUp, CheckCircle2, DollarSign,
-  Package, Plus, BarChart3, Inbox
+  TrendingUp, DollarSign, Users, Target, Zap,
+  Clock, Activity, AlertTriangle, CheckCircle2, Package,
+  BarChart3, Plus, ArrowRight,
+  Inbox, Award, FileText,
+  ChevronUp, ChevronDown, Layers, Star, Flame, Calendar, RefreshCw
 } from 'lucide-react';
+import { getDashboard } from '../services/api';
 
-const COLORS = ['#F2641E','#2563EB','#16A34A','#7C3AED','#CA8A04','#DC2626','#0891B2'];
-
-const PIPELINE_STAGES = [
-  { id: 'new',         label: 'Nuevos',      color: '#2563EB' },
-  { id: 'contacted',   label: 'Contactados', color: '#7C3AED' },
-  { id: 'qualified',   label: 'Calificados', color: '#CA8A04' },
-  { id: 'proposal',    label: 'Propuesta',   color: '#F2641E' },
-  { id: 'negotiation', label: 'Negociación', color: '#EA580C' },
-  { id: 'closed_won',  label: 'Ganados',     color: '#16A34A' },
-  { id: 'closed_lost', label: 'Perdidos',    color: '#DC2626' },
+// ── Constants ──────────────────────────────────────────────────────────────────
+const STAGE_LABELS = {
+  new: 'Nuevo', contacted: 'Contactado', qualified: 'Calificado',
+  proposal: 'Propuesta', negotiation: 'Negociación',
+  closed_won: 'Ganado', closed_lost: 'Perdido'
+};
+const STAGE_COLORS = {
+  new: '#6366f1', contacted: '#3b82f6', qualified: '#eab308',
+  proposal: '#f97316', negotiation: '#8b5cf6',
+  closed_won: '#22c55e', closed_lost: '#ef4444'
+};
+const SOURCE_LABELS = {
+  linkedin: 'LinkedIn', facebook: 'Facebook', instagram: 'Instagram',
+  whatsapp: 'WhatsApp', email: 'Email', web: 'Web',
+  referral: 'Referido', cold_call: 'Prospección', event: 'Evento'
+};
+const SOURCE_COLORS = ['#f97316','#3b82f6','#22c55e','#8b5cf6','#eab308','#06b6d4','#ec4899','#14b8a6','#f43f5e'];
+const PERIODS = [
+  { key: 'today', label: 'Hoy' },
+  { key: 'week',  label: 'Semana' },
+  { key: 'month', label: 'Mes' },
+  { key: 'quarter', label: 'Trimestre' },
+  { key: 'year', label: 'Año' },
 ];
 
-const FunnelTooltip = ({ active, payload }) => {
-  if (!active || !payload?.length) return null;
-  return (
-    <div style={{
-      background: '#fff', border: '1px solid #E3E6EA', borderRadius: 10,
-      padding: '10px 14px', boxShadow: '0 8px 24px rgba(0,0,0,.1)', fontSize: 12,
-    }}>
-      <div style={{ fontWeight: 700, color: '#0B2545', marginBottom: 4 }}>{payload[0].payload.label}</div>
-      <div style={{ color: payload[0].color, fontWeight: 600 }}>
-        {payload[0].value} leads · ${(payload[0].payload.value / 1000).toFixed(0)}K
-      </div>
-    </div>
-  );
+// ── Formatters ─────────────────────────────────────────────────────────────────
+const fmt$ = (v) => {
+  if (!v && v !== 0) return '$0';
+  if (v >= 1000000) return `$${(v / 1000000).toFixed(1)}M`;
+  if (v >= 1000)    return `$${(v / 1000).toFixed(0)}K`;
+  return `$${Math.round(v).toLocaleString()}`;
 };
+const fmtN = (v) => (v || 0).toLocaleString();
 
-// Empty state for charts
-function ChartEmpty({ message = 'Sin datos aún' }) {
+// ── Skeleton ───────────────────────────────────────────────────────────────────
+function Skeleton({ w = '100%', h = 20, r = 6, mb = 0 }) {
+  return <div className="skeleton-box" style={{ width: w, height: h, borderRadius: r, marginBottom: mb }} />;
+}
+
+// ── KPI Card ───────────────────────────────────────────────────────────────────
+function KpiCard({ icon: Icon, label, value, sub, trend, color = '#f97316', loading, suffix = '', alert }) {
+  const up = trend > 0;
+  const neutral = !trend && trend !== 0;
   return (
-    <div style={{
-      height: 180, display: 'flex', flexDirection: 'column',
-      alignItems: 'center', justifyContent: 'center',
-      gap: 10, color: 'var(--gray-400)',
-    }}>
-      <Inbox size={36} strokeWidth={1.25} style={{ opacity: .4 }} />
-      <span style={{ fontSize: 12 }}>{message}</span>
+    <div className="kpi-card" style={{ '--kpi-color': color, borderTop: `3px solid ${color}` }}>
+      {loading ? (
+        <><Skeleton h={12} w="55%" mb={10} /><Skeleton h={28} w="70%" mb={8} /><Skeleton h={10} w="45%" /></>
+      ) : (
+        <>
+          <div className="kpi-card-header">
+            <span className="kpi-label">{label}</span>
+            <div className="kpi-icon" style={{ background: color + '1a', color }}>
+              <Icon size={14} strokeWidth={2} />
+            </div>
+          </div>
+          <div className="kpi-value">
+            {value}{suffix}
+            {alert && <span className="kpi-alert" />}
+          </div>
+          <div className="kpi-footer">
+            {sub && <span className="kpi-sub">{sub}</span>}
+            {!neutral && trend !== undefined && (
+              <span className={`kpi-trend ${up ? 'kpi-trend-up' : 'kpi-trend-dn'}`}>
+                {up ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
+                {Math.abs(trend)}%
+              </span>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }
 
+// ── Chart Card ─────────────────────────────────────────────────────────────────
+function ChartCard({ title, sub, children, loading, action, style = {} }) {
+  return (
+    <div className="chart-card" style={style}>
+      <div className="chart-card-hd">
+        <div>
+          <div className="chart-title">{title}</div>
+          {sub && <div className="chart-sub">{sub}</div>}
+        </div>
+        {action}
+      </div>
+      <div className="chart-card-bd">
+        {loading ? <Skeleton h={180} r={8} /> : children}
+      </div>
+    </div>
+  );
+}
+
+// ── Custom Tooltip ─────────────────────────────────────────────────────────────
+function CTip({ active, payload, label, currency }) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="chart-tip">
+      <div className="chart-tip-label">{label}</div>
+      {payload.map((p, i) => (
+        <div key={i} className="chart-tip-row">
+          <span style={{ color: p.color }}>●</span>
+          <span>{p.name}: <strong>{currency ? fmt$(p.value) : fmtN(p.value)}</strong></span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Stage Bar ──────────────────────────────────────────────────────────────────
+function StageBar({ stageKey, count, value, maxCount }) {
+  const pct = maxCount > 0 ? (count / maxCount) * 100 : 0;
+  const color = STAGE_COLORS[stageKey] || '#6b7280';
+  return (
+    <div className="stage-bar-row">
+      <div className="stage-bar-label">
+        <span className="stage-dot" style={{ background: color }} />
+        <span>{STAGE_LABELS[stageKey] || stageKey}</span>
+      </div>
+      <div className="stage-bar-track">
+        <div className="stage-bar-fill" style={{ width: `${pct}%`, background: color }} />
+      </div>
+      <div className="stage-bar-meta">
+        <span className="stage-count-badge">{count}</span>
+        {value > 0 && <span className="stage-value-badge">{fmt$(value)}</span>}
+      </div>
+    </div>
+  );
+}
+
+// ── Main ───────────────────────────────────────────────────────────────────────
 export default function Dashboard({ user, onNavigate }) {
-  const [data, setData]     = useState(null);
+  const [data, setData]       = useState(null);
   const [loading, setLoading] = useState(true);
+  const [period, setPeriod]   = useState('month');
+  const [tick, setTick]       = useState(0);
 
-  useEffect(() => {
-    getDashboard()
-      .then(r => setData(r.data.data))
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await getDashboard(period);
+      setData(res.data.data);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  }, [period, tick]);
 
-  const stats    = data?.summary  || { totalLeads: 0, activeDeals: 0, closedWon: 0, pipelineValue: 0 };
-  const pipeline = data?.byStage  || [];
-  const sourceData = data?.bySource || [];
+  useEffect(() => { load(); }, [load]);
 
-  if (loading) return <div className="loading"><div className="spinner" />Cargando dashboard...</div>;
+  const kpis   = data?.kpis   || {};
+  const charts = data?.charts || {};
+  const recent = data?.recentLeads || [];
+  const top    = data?.topLeads    || [];
 
-  const maxCount = Math.max(...PIPELINE_STAGES.map(s => pipeline.find(p => p._id === s.id)?.count || 0), 1);
-  const hasData  = pipeline.some(p => p.count > 0);
+  const stageRows = useMemo(() => {
+    const ord = ['new','contacted','qualified','proposal','negotiation','closed_won','closed_lost'];
+    return ord.map(s => {
+      const d = (charts.pipelineByStage || []).find(x => x.stage === s) || { count: 0, value: 0 };
+      return { key: s, count: d.count, value: d.value };
+    });
+  }, [charts.pipelineByStage]);
 
-  // Build funnel data for bar chart (count + value per stage)
-  const funnelData = PIPELINE_STAGES.map(s => {
-    const found = pipeline.find(p => p._id === s.id) || {};
-    return {
-      label: s.label,
-      count: found.count || 0,
-      value: found.totalValue || 0,
-      color: s.color,
-    };
-  });
+  const maxCount = useMemo(() => Math.max(...stageRows.map(r => r.count), 1), [stageRows]);
+
+  const sourceData = useMemo(() =>
+    (charts.salesBySource || []).filter(s => s.count > 0).map((s, i) => ({
+      name: SOURCE_LABELS[s.source] || s.source || 'Otro',
+      value: s.count,
+      color: SOURCE_COLORS[i % SOURCE_COLORS.length]
+    })),
+  [charts.salesBySource]);
+
+  const funnelRows = useMemo(() => {
+    const f = charts.conversionFunnel || [];
+    const max = f[0]?.count || f.reduce((m, x) => Math.max(m, x.count), 1);
+    return f.filter(x => x.count > 0 && x.stage !== 'closed_lost').map(x => ({
+      label: STAGE_LABELS[x.stage] || x.stage,
+      count: x.count,
+      pct: max > 0 ? Math.round((x.count / max) * 100) : 0,
+      color: STAGE_COLORS[x.stage] || '#6b7280'
+    }));
+  }, [charts.conversionFunnel]);
+
+  const greeting = () => {
+    const h = new Date().getHours();
+    if (h < 12) return 'Buenos días';
+    if (h < 18) return 'Buenas tardes';
+    return 'Buenas noches';
+  };
+
+  const pLabel = PERIODS.find(p => p.key === period)?.label || 'Mes';
 
   return (
-    <div className="page">
-      {/* Header */}
-      <div className="page-header">
+    <div className="page-wrap dash-enterprise">
+
+      {/* ── Header ────────────────────────────────────────────────────────────── */}
+      <div className="dash-header">
         <div>
-          <div className="page-title">Dashboard</div>
-          <div className="page-sub">
-            Bienvenido, {user?.name} · {new Date().toLocaleDateString('es-MX', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+          <div className="dash-greeting">
+            {greeting()}, <strong>{user?.name?.split(' ')[0] || 'Equipo'}</strong>
           </div>
+          <div className="dash-subtitle">Dashboard Comercial · ACON Internacional</div>
         </div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <button className="btn btn-ghost btn-sm" onClick={() => onNavigate('leads')}>
-            <Plus size={14} /> Nuevo Lead
+        <div className="dash-header-actions">
+          <button className="btn btn-ghost btn-sm" onClick={() => setTick(t => t + 1)}>
+            <RefreshCw size={13} className={loading ? 'spin' : ''} /> Actualizar
           </button>
-          <button className="btn btn-navy btn-sm" onClick={() => onNavigate('operations')}>
-            <Package size={14} /> Nueva Operación
+          <button className="btn btn-sm btn-ghost" onClick={() => onNavigate('reports')}>
+            <BarChart3 size={13} /> Reportes
           </button>
-          <button className="btn btn-primary btn-sm" onClick={() => onNavigate('reports')}>
-            <BarChart3 size={14} /> Reportes
+          <button className="btn btn-sm btn-navy" onClick={() => onNavigate('operations')}>
+            <Package size={13} /> Nueva Op.
+          </button>
+          <button className="btn btn-sm btn-primary" onClick={() => onNavigate('leads')}>
+            <Plus size={13} /> Nuevo Lead
           </button>
         </div>
       </div>
 
-      {/* KPIs */}
-      <div className="stats-grid" style={{ marginBottom: 20 }}>
-        {[
-          { label: 'Total Leads',    value: stats.totalLeads    || 0, sub: 'Pipeline activo',    Icon: Users,        color: '#F2641E' },
-          { label: 'Deals Activos',  value: stats.activeDeals   || 0, sub: 'En proceso',          Icon: TrendingUp,   color: '#2563EB' },
-          { label: 'Ganados',        value: stats.closedWon     || 0, sub: 'Cerrados con éxito',  Icon: CheckCircle2, color: '#16A34A' },
-          { label: 'Valor Pipeline', value: `$${((stats.pipelineValue || 0) / 1000).toFixed(0)}K`, sub: 'USD estimado', Icon: DollarSign, color: '#0B2545' },
-        ].map(({ label, value, sub, Icon, color }) => (
-          <div key={label} className="stat-card">
-            <div className="stat-icon" style={{ background: `${color}14`, color }}>
-              <Icon size={18} strokeWidth={1.75} />
-            </div>
-            <div className="stat-label">{label}</div>
-            <div className="stat-value">{value}</div>
-            <div className="stat-delta">{sub}</div>
-          </div>
-        ))}
+      {/* ── Period Filter ──────────────────────────────────────────────────────── */}
+      <div className="period-bar">
+        <div className="period-tabs">
+          {PERIODS.map(p => (
+            <button key={p.key} className={`period-tab ${period === p.key ? 'active' : ''}`} onClick={() => setPeriod(p.key)}>
+              {p.label}
+            </button>
+          ))}
+        </div>
+        <span className="period-date">
+          <Calendar size={12} /> {new Date().toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' })}
+        </span>
       </div>
 
-      {/* Charts row */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+      {/* ── KPI: Ventas ───────────────────────────────────────────────────────── */}
+      <div className="kpi-section-hd"><DollarSign size={13} /> Ventas · {pLabel}</div>
+      <div className="kpi-grid g4">
+        <KpiCard icon={DollarSign} label="Valor Vendido" loading={loading}
+          value={fmt$(kpis.salesAmount?.current)}
+          sub={`Ant: ${fmt$(kpis.salesAmount?.previous)}`}
+          trend={kpis.salesAmount?.trend} color="#22c55e" />
+        <KpiCard icon={Award} label="Negocios Cerrados" loading={loading}
+          value={fmtN(kpis.salesCount?.current)}
+          sub={`Ant: ${fmtN(kpis.salesCount?.previous)}`}
+          trend={kpis.salesCount?.trend} color="#3b82f6" />
+        <KpiCard icon={Target} label="Ticket Promedio" loading={loading}
+          value={fmt$(kpis.avgTicket?.current)}
+          sub={`Ant: ${fmt$(kpis.avgTicket?.previous)}`}
+          trend={kpis.avgTicket?.trend} color="#8b5cf6" />
+        <KpiCard icon={Layers} label="Pipeline Total" loading={loading}
+          value={fmt$(kpis.pipelineValue?.current)}
+          sub={`${fmtN(kpis.activeOpportunities?.current)} oportunidades`}
+          color="#f97316" />
+      </div>
 
-        {/* Pipeline por etapa — barras horizontales */}
-        <div className="card">
-          <div style={{ fontWeight: 700, marginBottom: 16, color: 'var(--navy-900)', fontSize: 14 }}>
-            Pipeline por Etapa
-          </div>
-          {PIPELINE_STAGES.map(s => {
-            const count = pipeline.find(p => p._id === s.id)?.count || 0;
-            return (
-              <div key={s.id} style={{ marginBottom: 10 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
-                  <span style={{ color: 'var(--gray-500)' }}>{s.label}</span>
-                  <span style={{ fontWeight: 700, color: s.color }}>{count}</span>
-                </div>
-                <div style={{ height: 6, background: 'var(--gray-100)', borderRadius: 3 }}>
-                  <div style={{
-                    height: '100%',
-                    width: `${(count / maxCount) * 100}%`,
-                    background: s.color,
-                    borderRadius: 3,
-                    transition: 'width .6s ease',
-                    minWidth: count > 0 ? 6 : 0,
-                  }} />
-                </div>
-              </div>
-            );
-          })}
-        </div>
+      {/* ── KPI: Leads ────────────────────────────────────────────────────────── */}
+      <div className="kpi-section-hd"><Users size={13} /> Leads · {pLabel}</div>
+      <div className="kpi-grid g4">
+        <KpiCard icon={Users} label="Leads Nuevos" loading={loading}
+          value={fmtN(kpis.newLeads?.current)}
+          trend={kpis.newLeads?.trend} color="#6366f1" />
+        <KpiCard icon={Activity} label="Leads Contactados" loading={loading}
+          value={fmtN(kpis.contactedLeads?.current)} color="#0891b2" />
+        <KpiCard icon={Inbox} label="Sin Seguimiento" loading={loading}
+          value={fmtN(kpis.noFollowUpLeads?.current)}
+          alert={kpis.noFollowUpLeads?.current > 5} color="#eab308" />
+        <KpiCard icon={AlertTriangle} label="Seguimientos Vencidos" loading={loading}
+          value={fmtN(kpis.overdueFollowUps?.current)}
+          alert={kpis.overdueFollowUps?.current > 0} color="#ef4444" />
+      </div>
 
-        {/* Valor por etapa — Bar chart */}
-        <div className="card">
-          <div style={{ fontWeight: 700, color: 'var(--navy-900)', fontSize: 14, marginBottom: 4 }}>
-            Leads por Etapa
-          </div>
-          <div style={{ fontSize: 11, color: 'var(--gray-400)', marginBottom: 14 }}>
-            Cantidad de prospectos en cada fase
-          </div>
+      {/* ── KPI: Conversión ───────────────────────────────────────────────────── */}
+      <div className="kpi-section-hd"><Zap size={13} /> Conversión & Actividades</div>
+      <div className="kpi-grid g4">
+        <KpiCard icon={TrendingUp} label="Lead → Cliente" loading={loading}
+          value={fmtN(kpis.leadToClientRate?.current)} suffix="%" color="#22c55e" />
+        <KpiCard icon={FileText} label="Cotización → Venta" loading={loading}
+          value={fmtN(kpis.quoteToSaleRate?.current)} suffix="%" color="#3b82f6" />
+        <KpiCard icon={Clock} label="Tiempo de Cierre" loading={loading}
+          value={fmtN(kpis.avgCloseTime?.current)} suffix=" días" color="#8b5cf6" />
+        <KpiCard icon={CheckCircle2} label="Actividades Hoy" loading={loading}
+          value={fmtN(kpis.activitiesToday?.current)}
+          sub={`${fmtN(kpis.pendingTasks?.current)} tareas pendientes`}
+          color="#f97316" />
+      </div>
 
-          {hasData ? (
+      {/* ── Charts Row 1 ──────────────────────────────────────────────────────── */}
+      <div className="chart-row c60-40">
+        <ChartCard title="Ventas por Mes" sub="Últimos 12 meses · USD" loading={loading}
+          action={<button className="btn btn-ghost btn-xs" onClick={() => onNavigate('reports')}>Ver más <ArrowRight size={11} /></button>}
+        >
+          <ResponsiveContainer width="100%" height={210}>
+            <AreaChart data={charts.salesByMonth || []} margin={{ top: 5, right: 5, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id="sg" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%"  stopColor="#f97316" stopOpacity={0.25} />
+                  <stop offset="95%" stopColor="#f97316" stopOpacity={0.02} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f0f2f5" vertical={false} />
+              <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} tickFormatter={fmt$} axisLine={false} tickLine={false} width={52} />
+              <Tooltip content={<CTip currency />} />
+              <Area type="monotone" dataKey="total" name="Ventas" stroke="#f97316" fill="url(#sg)" strokeWidth={2.5} dot={false} activeDot={{ r: 4, fill: '#f97316' }} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </ChartCard>
+
+        <ChartCard title="Pipeline por Etapa" sub="Leads activos por fase">
+          <div className="stage-bar-list">
+            {loading
+              ? Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} h={28} r={6} mb={10} />)
+              : stageRows.filter(r => r.key !== 'closed_lost').map(r => (
+                  <StageBar key={r.key} stageKey={r.key} count={r.count} value={r.value} maxCount={maxCount} />
+                ))
+            }
+          </div>
+        </ChartCard>
+      </div>
+
+      {/* ── Charts Row 2 ──────────────────────────────────────────────────────── */}
+      <div className="chart-row c3col">
+        <ChartCard title="Ventas por Vendedor" sub={pLabel} loading={loading}>
+          {charts.salesByVendor?.length > 0 ? (
             <ResponsiveContainer width="100%" height={190}>
-              <BarChart
-                data={funnelData}
-                margin={{ top: 4, right: 4, left: -24, bottom: 0 }}
-                barCategoryGap="30%"
-              >
-                <CartesianGrid strokeDasharray="3 3" stroke="#F0F1F3" vertical={false} />
-                <XAxis
-                  dataKey="label"
-                  tick={{ fill: '#9AA3AE', fontSize: 9 }}
-                  axisLine={false} tickLine={false}
-                  interval={0}
-                  angle={-30}
-                  textAnchor="end"
-                  height={42}
-                />
-                <YAxis
-                  tick={{ fill: '#9AA3AE', fontSize: 11 }}
-                  axisLine={false} tickLine={false}
-                  allowDecimals={false}
-                />
-                <Tooltip content={<FunnelTooltip />} cursor={{ fill: 'rgba(242,100,30,.06)' }} />
-                <Bar dataKey="count" radius={[4, 4, 0, 0]}>
-                  {funnelData.map((entry, i) => (
-                    <Cell key={i} fill={entry.color} />
-                  ))}
-                </Bar>
+              <BarChart data={charts.salesByVendor} layout="vertical" margin={{ left: 0, right: 8, top: 4, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f2f5" horizontal={false} />
+                <XAxis type="number" tickFormatter={fmt$} tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+                <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: '#374151' }} width={75} axisLine={false} tickLine={false} />
+                <Tooltip content={<CTip currency />} />
+                <Bar dataKey="total" name="Ventas" radius={[0, 4, 4, 0]} fill="#3b82f6" maxBarSize={18} />
               </BarChart>
             </ResponsiveContainer>
-          ) : (
-            <ChartEmpty message="Agrega tu primer lead para ver la distribución" />
-          )}
-        </div>
-      </div>
+          ) : <EmptyMini label="Sin datos de ventas" />}
+        </ChartCard>
 
-      {/* Fuentes */}
-      {sourceData.length > 0 ? (
-        <div className="card">
-          <div style={{ fontWeight: 700, marginBottom: 16, color: 'var(--navy-900)', fontSize: 14 }}>
-            Leads por Fuente
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 40, flexWrap: 'wrap' }}>
-            <ResponsiveContainer width={170} height={170}>
+        <ChartCard title="Leads por Fuente" sub="Distribución" loading={loading}>
+          {sourceData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={190}>
               <PieChart>
-                <Pie
-                  data={sourceData} dataKey="count" nameKey="_id"
-                  cx="50%" cy="50%" outerRadius={78} innerRadius={48} paddingAngle={2}
-                >
-                  {sourceData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                <Pie data={sourceData} cx="50%" cy="42%" innerRadius={52} outerRadius={75} paddingAngle={3} dataKey="value">
+                  {sourceData.map((e, i) => <Cell key={i} fill={e.color} strokeWidth={0} />)}
                 </Pie>
-                <Tooltip />
+                <Tooltip formatter={(v, n) => [v + ' leads', n]} />
+                <Legend formatter={v => <span style={{ fontSize: 11, color: '#374151' }}>{v}</span>} iconSize={7} />
               </PieChart>
             </ResponsiveContainer>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
-              {sourceData.map((s, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13 }}>
-                  <div style={{ width: 10, height: 10, borderRadius: 2, background: COLORS[i % COLORS.length], flexShrink: 0 }} />
-                  <span style={{ color: 'var(--gray-500)', flex: 1, textTransform: 'capitalize' }}>{s._id || 'Otro'}</span>
-                  <span style={{ fontWeight: 700, color: 'var(--gray-900)' }}>{s.count}</span>
+          ) : <EmptyMini label="Sin datos de fuentes" />}
+        </ChartCard>
+
+        <ChartCard title="Embudo de Conversión" sub="Lead → Cliente" loading={loading}>
+          {funnelRows.length > 0 ? (
+            <div style={{ padding: '4px 0' }}>
+              {funnelRows.map(f => (
+                <div key={f.label} style={{ marginBottom: 9 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
+                    <span style={{ fontSize: 11, color: '#374151', fontWeight: 500 }}>{f.label}</span>
+                    <span style={{ fontSize: 11, color: '#6b7280' }}>{f.count} · {f.pct}%</span>
+                  </div>
+                  <div style={{ height: 6, background: '#f0f2f5', borderRadius: 4, overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${f.pct}%`, background: f.color, borderRadius: 4, transition: 'width 0.6s ease' }} />
+                  </div>
                 </div>
               ))}
             </div>
-          </div>
-        </div>
-      ) : (
-        <div className="card">
-          <div className="empty-state">
-            <BarChart3 size={40} />
-            <p>Aún no hay datos para mostrar. Comienza agregando leads al sistema.</p>
-            <button className="btn btn-primary btn-sm" onClick={() => onNavigate('leads')}>
-              <Plus size={13} /> Agregar primer lead
-            </button>
-          </div>
-        </div>
-      )}
+          ) : <EmptyMini label="Sin datos de conversión" />}
+        </ChartCard>
+      </div>
+
+      {/* ── Bottom Row ────────────────────────────────────────────────────────── */}
+      <div className="chart-row c60-40">
+        <ChartCard title="Leads Recientes" sub="Últimas oportunidades"
+          action={<button className="btn btn-ghost btn-xs" onClick={() => onNavigate('leads')}>Ver todos <ArrowRight size={11} /></button>}
+          loading={loading}
+        >
+          {recent.length > 0 ? recent.map(lead => (
+            <div key={lead._id} className="recent-row">
+              <div className="recent-avatar" style={{ background: (STAGE_COLORS[lead.stage] || '#6366f1') + '20', color: STAGE_COLORS[lead.stage] || '#6366f1' }}>
+                {(lead.company || '?').charAt(0).toUpperCase()}
+              </div>
+              <div className="recent-info">
+                <div className="recent-company">{lead.company}</div>
+                <div className="recent-contact">{lead.contact}</div>
+              </div>
+              <div className="recent-right">
+                <span className="badge" style={{ background: (STAGE_COLORS[lead.stage] || '#6366f1') + '18', color: STAGE_COLORS[lead.stage] || '#6366f1', border: `1px solid ${STAGE_COLORS[lead.stage] || '#6366f1'}30` }}>
+                  {STAGE_LABELS[lead.stage] || lead.stage}
+                </span>
+                {lead.value > 0 && <div className="recent-value">{fmt$(lead.value)}</div>}
+              </div>
+            </div>
+          )) : <EmptyMini icon={Users} label="No hay leads registrados" />}
+        </ChartCard>
+
+        <ChartCard title="Top Oportunidades" sub="Mayor probabilidad de cierre"
+          action={<button className="btn btn-ghost btn-xs" onClick={() => onNavigate('pipeline')}>Pipeline <ArrowRight size={11} /></button>}
+          loading={loading}
+        >
+          {top.length > 0 ? top.map((lead, i) => (
+            <div key={lead._id} className="top-row">
+              <div className="top-rank">
+                {i === 0 ? <Flame size={13} style={{ color: '#f97316' }} />
+                 : i === 1 ? <Star size={13} style={{ color: '#eab308' }} />
+                 : <span style={{ color: '#9ca3af', fontSize: 11, fontWeight: 700 }}>#{i + 1}</span>}
+              </div>
+              <div className="top-info">
+                <div className="top-company">{lead.company}</div>
+                <div className="top-stage">{STAGE_LABELS[lead.stage] || lead.stage}</div>
+              </div>
+              <div className="top-score" style={{
+                background: lead.score >= 70 ? '#22c55e18' : lead.score >= 40 ? '#eab30818' : '#ef444418',
+                color: lead.score >= 70 ? '#16a34a' : lead.score >= 40 ? '#ca8a04' : '#dc2626'
+              }}>{lead.score || 0}</div>
+              {lead.value > 0 && <div className="top-value">{fmt$(lead.value)}</div>}
+            </div>
+          )) : <EmptyMini icon={Target} label="Sin oportunidades calificadas" />}
+        </ChartCard>
+      </div>
+
+      {/* ── Quick Actions ─────────────────────────────────────────────────────── */}
+      <div className="quick-bar">
+        {[
+          { label: 'Leads',       icon: Users,    page: 'leads',      color: '#6366f1' },
+          { label: 'Pipeline',    icon: Layers,   page: 'pipeline',   color: '#f97316' },
+          { label: 'Cotizador',   icon: FileText, page: 'quoter',     color: '#3b82f6' },
+          { label: 'Operaciones', icon: Package,  page: 'operations', color: '#22c55e' },
+          { label: 'Reportes',    icon: BarChart3,page: 'reports',    color: '#8b5cf6' },
+          { label: 'Campañas',    icon: Zap,      page: 'marketing',  color: '#ec4899' },
+        ].map(({ label, icon: Icon, page, color }) => (
+          <button key={page} className="quick-btn" onClick={() => onNavigate(page)}>
+            <div className="quick-ico" style={{ background: color + '18', color }}><Icon size={17} /></div>
+            <span className="quick-lbl">{label}</span>
+          </button>
+        ))}
+      </div>
+
+    </div>
+  );
+}
+
+function EmptyMini({ icon: Icon = BarChart3, label }) {
+  return (
+    <div style={{ textAlign: 'center', padding: '28px 0', color: '#9ca3af' }}>
+      <Icon size={24} style={{ marginBottom: 6, opacity: 0.35 }} />
+      <div style={{ fontSize: 12 }}>{label}</div>
     </div>
   );
 }

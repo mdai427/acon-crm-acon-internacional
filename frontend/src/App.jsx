@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import './index.css';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Toast, useToast } from './components/Toast';
@@ -23,11 +23,13 @@ import PlaybooksPage from './pages/PlaybooksPage';
 import CommissionsPage from './pages/CommissionsPage';
 import CopilotDrawer from './components/CopilotDrawer';
 import { useIdleLogout } from './hooks/useIdleLogout';
+import { globalSearch, getNotifications } from './services/api';
 import {
   LayoutDashboard, Users, Kanban, MessageSquare,
   BarChart3, Settings, Plug, Package, UserPlus,
   Calculator, Zap, LogOut, Bell, FileText, Upload,
-  Megaphone, HeartHandshake, Menu, X, ChevronRight, Sparkles, DollarSign
+  Megaphone, HeartHandshake, Menu, X, ChevronRight, Sparkles, DollarSign,
+  Search, AlertTriangle, Clock, Building2
 } from 'lucide-react';
 
 const NAV = [
@@ -51,6 +53,200 @@ const NAV = [
 ];
 
 const SECTIONS = { ventas: 'Ventas', marketing: 'Marketing', analytics: 'Análisis', config: 'Configuración' };
+
+// ── Global Search ───────────────────────────────────────────────────────────────
+function GlobalSearch({ onSelectLead }) {
+  const [q, setQ]           = useState('');
+  const [results, setResults] = useState(null);
+  const [open, setOpen]     = useState(false);
+  const [loading, setLoading] = useState(false);
+  const ref = useRef(null);
+  const timer = useRef(null);
+
+  const search = useCallback(async (val) => {
+    if (val.length < 2) { setResults(null); return; }
+    setLoading(true);
+    try {
+      const res = await globalSearch(val);
+      setResults(res.data.data);
+    } catch { setResults(null); }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => search(q), 300);
+    return () => clearTimeout(timer.current);
+  }, [q, search]);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const hasResults = results && (results.leads?.length || results.operations?.length || results.quotes?.length);
+
+  return (
+    <div className="global-search" ref={ref}>
+      <div className="gs-input-wrap">
+        <Search size={13} className="gs-icon" />
+        <input
+          className="gs-input"
+          placeholder="Buscar leads, operaciones..."
+          value={q}
+          onChange={e => { setQ(e.target.value); setOpen(true); }}
+          onFocus={() => setOpen(true)}
+        />
+        {q && <button className="gs-clear" onClick={() => { setQ(''); setResults(null); }}><X size={11} /></button>}
+      </div>
+      {open && q.length >= 2 && (
+        <div className="gs-dropdown">
+          {loading && <div className="gs-loading">Buscando...</div>}
+          {!loading && !hasResults && <div className="gs-empty">Sin resultados para "{q}"</div>}
+          {!loading && results?.leads?.length > 0 && (
+            <div className="gs-group">
+              <div className="gs-group-label"><Users size={11} /> Leads</div>
+              {results.leads.map(l => (
+                <button key={l._id} className="gs-item" onClick={() => { onSelectLead(l._id); setOpen(false); setQ(''); }}>
+                  <Building2 size={13} style={{ color: '#6366f1', flexShrink: 0 }} />
+                  <span className="gs-item-main">{l.company}</span>
+                  <span className="gs-item-sub">{l.contact}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {!loading && results?.operations?.length > 0 && (
+            <div className="gs-group">
+              <div className="gs-group-label"><Package size={11} /> Operaciones</div>
+              {results.operations.map(o => (
+                <div key={o._id} className="gs-item gs-item-static">
+                  <Package size={13} style={{ color: '#22c55e', flexShrink: 0 }} />
+                  <span className="gs-item-main">{o.bookingNumber || o.clientName}</span>
+                  <span className="gs-item-sub">{o.status}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {!loading && results?.quotes?.length > 0 && (
+            <div className="gs-group">
+              <div className="gs-group-label"><FileText size={11} /> Cotizaciones</div>
+              {results.quotes.map(q2 => (
+                <div key={q2._id} className="gs-item gs-item-static">
+                  <FileText size={13} style={{ color: '#f97316', flexShrink: 0 }} />
+                  <span className="gs-item-main">{q2.folio} · {q2.clientName}</span>
+                  <span className="gs-item-sub">{q2.status}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Notification Center ─────────────────────────────────────────────────────────
+function NotificationCenter() {
+  const [open, setOpen]     = useState(false);
+  const [data, setData]     = useState(null);
+  const [loading, setLoading] = useState(false);
+  const ref = useRef(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await getNotifications();
+      setData(res.data.data);
+    } catch { setData(null); }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    load();
+    const interval = setInterval(load, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [load]);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const total = data?.total || 0;
+
+  return (
+    <div className="notif-center" ref={ref}>
+      <button className="top-btn top-btn-notif notif-trigger" onClick={() => { setOpen(o => !o); if (!open) load(); }}>
+        <Bell size={13} />
+        <span className="top-btn-label">Notif.</span>
+        {total > 0 && <span className="notif-badge">{total > 99 ? '99+' : total}</span>}
+      </button>
+      {open && (
+        <div className="notif-dropdown">
+          <div className="notif-hd">
+            <span className="notif-hd-title">Notificaciones</span>
+            {total > 0 && <span className="notif-hd-count">{total} nuevas</span>}
+          </div>
+          {loading && <div className="notif-loading">Cargando...</div>}
+          {!loading && total === 0 && (
+            <div className="notif-empty">
+              <Bell size={24} style={{ opacity: 0.3 }} />
+              <div>Todo al día</div>
+            </div>
+          )}
+          {!loading && data?.overdueFollowUps?.length > 0 && (
+            <div className="notif-group">
+              <div className="notif-group-label"><Clock size={11} /> Seguimientos vencidos</div>
+              {data.overdueFollowUps.slice(0, 5).map(l => (
+                <div key={l._id} className="notif-item notif-red">
+                  <AlertTriangle size={12} />
+                  <div>
+                    <div className="notif-item-title">{l.company}</div>
+                    <div className="notif-item-sub">Seguimiento vencido</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {!loading && data?.noContactLeads?.length > 0 && (
+            <div className="notif-group">
+              <div className="notif-group-label"><Users size={11} /> Sin contacto 7+ días</div>
+              {data.noContactLeads.slice(0, 5).map(l => (
+                <div key={l._id} className="notif-item notif-yellow">
+                  <Clock size={12} />
+                  <div>
+                    <div className="notif-item-title">{l.company}</div>
+                    <div className="notif-item-sub">{l.contact}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {!loading && data?.overdueQuotes?.length > 0 && (
+            <div className="notif-group">
+              <div className="notif-group-label"><FileText size={11} /> Cotizaciones vencidas</div>
+              {data.overdueQuotes.slice(0, 3).map(q => (
+                <div key={q._id} className="notif-item notif-orange">
+                  <FileText size={12} />
+                  <div>
+                    <div className="notif-item-title">{q.folio} · {q.clientName}</div>
+                    <div className="notif-item-sub">Cotización vencida</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // Mobile bottom nav — 5 most important items
 const MOBILE_NAV = NAV.filter(n => n.mobile).sort((a, b) => a.mobileOrder - b.mobileOrder);
@@ -113,14 +309,15 @@ function CRMApp() {
             <span className="logo-sub">· Worldwide</span>
           </div>
 
+          {/* Global Search */}
+          <GlobalSearch onSelectLead={handleSelectLead} />
+
           <div className="topbar-date">
             {new Date().toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric', month: 'short' })}
           </div>
 
-          <button className="top-btn top-btn-notif">
-            <Bell size={13} />
-            <span className="top-btn-label">Notif.</span>
-          </button>
+          {/* Notification Center */}
+          <NotificationCenter />
 
           <div className="avatar" title={user?.name} onClick={logout}>
             {user?.name?.slice(0, 2).toUpperCase() || 'AC'}
