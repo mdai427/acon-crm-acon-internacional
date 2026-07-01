@@ -16,6 +16,31 @@ const ROLE_BADGE = {
   viewer:    { label: 'Viewer',     bg: '#DCFCE7', color: '#16A34A' },
 };
 
+const SERVICE_LIST = [
+  { key: 'maritimo_import',    label: 'Marítimo Import.' },
+  { key: 'maritimo_export',    label: 'Marítimo Export.' },
+  { key: 'aereo_import',       label: 'Aéreo Import.' },
+  { key: 'aereo_export',       label: 'Aéreo Export.' },
+  { key: 'terrestre_usa',      label: 'Terrestre USA' },
+  { key: 'terrestre_nacional', label: 'Terrestre Nal.' },
+  { key: 'despacho_aduanal',   label: 'Desp. Aduanal' },
+  { key: 'almacenaje',         label: 'Almacenaje' },
+  { key: 'seguro_carga',       label: 'Seguro de Carga' },
+  { key: 'otro',               label: 'Otro' },
+];
+
+const LEAD_TYPES = [
+  { key: 'campaign', label: 'Campaña',       color: '#7c3aed', desc: 'Leads de publicidad pagada' },
+  { key: 'direct',   label: 'Directo',       color: '#0369a1', desc: 'Prospectado por el ejecutivo' },
+  { key: 'referral', label: 'Recomendación', color: '#15803d', desc: 'Referido por cliente' },
+];
+
+const EMPTY_RULES = {
+  campaign: Object.fromEntries(SERVICE_LIST.map(s => [s.key, ''])),
+  direct:   Object.fromEntries(SERVICE_LIST.map(s => [s.key, ''])),
+  referral: Object.fromEntries(SERVICE_LIST.map(s => [s.key, ''])),
+};
+
 const EMPTY_FORM = { name: '', email: '', password: '', role: 'executive', phone: '' };
 
 function RoleBadge({ role }) {
@@ -54,7 +79,14 @@ export default function UsersPage({ toast }) {
   const [editForm, setEditForm] = useState({});
   const [newPassword, setNewPassword] = useState('');
   const [saving, setSaving] = useState(false);
-  const [commissionsUser, setCommissionsUser] = useState(null); // user to configure commissions
+  const [commissionsUser, setCommissionsUser] = useState(null);
+  const [defaults, setDefaults] = useState({});
+  // commission rules para nuevo usuario
+  const [newRules, setNewRules] = useState(EMPTY_RULES);
+  const [newRulesTab, setNewRulesTab] = useState('campaign');
+  // commission rules para editar usuario
+  const [editRules, setEditRules] = useState(EMPTY_RULES);
+  const [editRulesTab, setEditRulesTab] = useState('campaign');
 
   const load = () => {
     setLoading(true);
@@ -64,7 +96,10 @@ export default function UsersPage({ toast }) {
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    getCommissionsConfig().then(r => setDefaults(r.data.data || {})).catch(() => {});
+  }, []);
 
   // Close menu on outside click
   useEffect(() => {
@@ -73,15 +108,29 @@ export default function UsersPage({ toast }) {
     return () => document.removeEventListener('click', close);
   }, []);
 
+  const parseRules = (rules) => {
+    const out = { campaign: {}, direct: {}, referral: {} };
+    for (const lt of ['campaign', 'direct', 'referral']) {
+      for (const s of SERVICE_LIST) {
+        const v = rules[lt]?.[s.key];
+        out[lt][s.key] = v !== '' && v != null ? parseFloat(v) : null;
+      }
+    }
+    return out;
+  };
+
   const handleCreate = async () => {
     if (!form.name || !form.email || !form.password) return toast('Nombre, email y contraseña son requeridos', 'error');
     if (form.password.length < 6) return toast('La contraseña debe tener al menos 6 caracteres', 'error');
     setSaving(true);
     try {
-      await createUser(form);
+      const payload = { ...form };
+      if (form.role === 'executive') payload.commissionRules = parseRules(newRules);
+      const res = await createUser(payload);
       toast(`Usuario ${form.name} creado`, 'success');
       setShowCreate(false);
       setForm(EMPTY_FORM);
+      setNewRules(EMPTY_RULES);
       load();
     } catch (e) {
       toast(e.response?.data?.message || 'Error al crear usuario', 'error');
@@ -91,7 +140,9 @@ export default function UsersPage({ toast }) {
   const handleEdit = async () => {
     setSaving(true);
     try {
-      await updateUser(editUser._id, editForm);
+      const payload = { ...editForm };
+      if (editForm.role === 'executive') payload.commissionRules = parseRules(editRules);
+      await updateUser(editUser._id, payload);
       toast('Usuario actualizado', 'success');
       setEditUser(null);
       load();
@@ -128,6 +179,17 @@ export default function UsersPage({ toast }) {
     setEditUser(u);
     setEditForm({ name: u.name, role: u.role, phone: u.phone || '' });
     setMenuOpen(null);
+    // Cargar reglas existentes
+    const existing = u.commissionRules || {};
+    const loaded = { campaign: {}, direct: {}, referral: {} };
+    for (const lt of ['campaign', 'direct', 'referral']) {
+      for (const s of SERVICE_LIST) {
+        const v = existing?.[lt]?.[s.key];
+        loaded[lt][s.key] = v != null ? String(v) : '';
+      }
+    }
+    setEditRules(loaded);
+    setEditRulesTab('campaign');
   };
 
   const f = (key, val) => setForm(prev => ({ ...prev, [key]: val }));
@@ -259,7 +321,7 @@ export default function UsersPage({ toast }) {
       {/* ── Modal: Crear usuario ── */}
       {showCreate && (
         <div className="modal-overlay" onClick={() => setShowCreate(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
+          <div className="modal" style={{ maxWidth: form.role === 'executive' ? 620 : 540 }} onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <div className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <UserPlus size={18} style={{ color: 'var(--orange-500)' }} /> Nuevo Usuario
@@ -308,6 +370,22 @@ export default function UsersPage({ toast }) {
               </div>
             </div>
 
+            {/* Comisiones — solo si es ejecutivo */}
+            {form.role === 'executive' && (
+              <div className="form-group">
+                <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <DollarSign size={13} color="#16a34a" /> Comisiones por tipo de lead y servicio
+                </label>
+                <CommissionRulesInline
+                  rules={newRules}
+                  onChange={setNewRules}
+                  defaults={defaults}
+                  activeTab={newRulesTab}
+                  onTabChange={setNewRulesTab}
+                />
+              </div>
+            )}
+
             <div className="modal-actions">
               <button className="btn btn-ghost" onClick={() => setShowCreate(false)}>Cancelar</button>
               <button className="btn btn-primary" onClick={handleCreate} disabled={saving}>
@@ -321,7 +399,7 @@ export default function UsersPage({ toast }) {
       {/* ── Modal: Editar usuario ── */}
       {editUser && (
         <div className="modal-overlay" onClick={() => setEditUser(null)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
+          <div className="modal" style={{ maxWidth: editForm.role === 'executive' ? 620 : 540 }} onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <div className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <Avatar name={editUser.name} size={28} />
@@ -357,6 +435,22 @@ export default function UsersPage({ toast }) {
                 ))}
               </div>
             </div>
+
+            {/* Comisiones — solo si es ejecutivo */}
+            {editForm.role === 'executive' && (
+              <div className="form-group">
+                <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <DollarSign size={13} color="#16a34a" /> Comisiones por tipo de lead y servicio
+                </label>
+                <CommissionRulesInline
+                  rules={editRules}
+                  onChange={setEditRules}
+                  defaults={defaults}
+                  activeTab={editRulesTab}
+                  onTabChange={setEditRulesTab}
+                />
+              </div>
+            )}
 
             <div className="modal-actions">
               <button className="btn btn-ghost" onClick={() => setEditUser(null)}>Cancelar</button>
@@ -414,6 +508,68 @@ export default function UsersPage({ toast }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Componente inline de reglas de comisión ───────────────────────────────────
+function CommissionRulesInline({ rules, onChange, defaults, activeTab, onTabChange }) {
+  const lt = LEAD_TYPES.find(t => t.key === activeTab);
+
+  const setRate = (svc, val) => {
+    onChange({ ...rules, [activeTab]: { ...rules[activeTab], [svc]: val } });
+  };
+
+  return (
+    <div style={{ border: '1px solid #e5e7eb', borderRadius: 10, overflow: 'hidden', marginTop: 6 }}>
+      {/* Tabs */}
+      <div style={{ display: 'flex', background: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
+        {LEAD_TYPES.map(t => (
+          <button key={t.key} type="button" onClick={() => onTabChange(t.key)} style={{
+            flex: 1, padding: '9px 4px', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700,
+            background: activeTab === t.key ? '#fff' : 'transparent',
+            color: activeTab === t.key ? t.color : '#9ca3af',
+            borderBottom: activeTab === t.key ? `2px solid ${t.color}` : '2px solid transparent',
+            transition: 'all 0.15s',
+          }}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+      {/* Desc */}
+      <div style={{ padding: '6px 12px', background: '#fafafa', fontSize: 11, color: '#6b7280', borderBottom: '1px solid #f3f4f6' }}>
+        {lt.desc} — Deja vacío para usar el % global del sistema
+      </div>
+      {/* Grid 2 columnas */}
+      <div style={{ padding: '10px 12px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 16px' }}>
+        {SERVICE_LIST.map(s => {
+          const val = rules[activeTab]?.[s.key] ?? '';
+          const def = defaults[s.key];
+          const hasVal = val !== '' && val != null;
+          return (
+            <div key={s.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+              <span style={{ fontSize: 12, color: '#374151', flex: 1 }}>{s.label}</span>
+              <div style={{ position: 'relative', width: 80 }}>
+                <input
+                  type="number" min="0" max="100" step="0.5"
+                  placeholder={def != null ? `${def}%` : '0%'}
+                  value={val}
+                  onChange={e => setRate(s.key, e.target.value)}
+                  style={{
+                    width: '100%', padding: '5px 22px 5px 8px', borderRadius: 6, fontSize: 12,
+                    border: `1px solid ${hasVal ? lt.color : '#d1d5db'}`,
+                    background: hasVal ? lt.color + '12' : '#fff',
+                    color: hasVal ? lt.color : '#374151',
+                    fontWeight: hasVal ? 700 : 400, outline: 'none', textAlign: 'center',
+                    boxSizing: 'border-box',
+                  }}
+                />
+                <span style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', fontSize: 11, color: hasVal ? lt.color : '#9ca3af', pointerEvents: 'none' }}>%</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
