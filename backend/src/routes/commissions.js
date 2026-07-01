@@ -80,24 +80,78 @@ router.get('/summary', async (req, res) => {
   }
 });
 
-// ── GET /api/commissions/config — configuración de % por servicio ──
+// Defaults globales del sistema (fallback cuando el ejecutivo no tiene regla propia)
+const DEFAULT_RATES = {
+  maritimo_import:    5,
+  maritimo_export:    5,
+  aereo_import:       6,
+  aereo_export:       6,
+  terrestre_usa:      4,
+  terrestre_nacional: 4,
+  despacho_aduanal:   8,
+  almacenaje:         6,
+  seguro_carga:       10,
+  otro:               5,
+};
+
+// ── GET /api/commissions/config — defaults globales por servicio ──
 router.get('/config', async (req, res) => {
-  // Por ahora retorna config default; en producción guardar en Config model
-  res.json({
-    success: true,
-    data: {
-      maritimo_import:    5,
-      maritimo_export:    5,
-      aereo_import:       6,
-      aereo_export:       6,
-      terrestre_usa:      4,
-      terrestre_nacional: 4,
-      despacho_aduanal:   8,
-      almacenaje:         6,
-      seguro_carga:       10,
-      otro:               5,
+  res.json({ success: true, data: DEFAULT_RATES });
+});
+
+// ── GET /api/commissions/rules/:userId — reglas del ejecutivo ──
+router.get('/rules/:userId', async (req, res) => {
+  try {
+    const User = require('../models/User');
+    const user = await User.findById(req.params.userId).select('name email commissionRules');
+    if (!user) return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
+    res.json({ success: true, data: { user, defaults: DEFAULT_RATES } });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// ── PUT /api/commissions/rules/:userId — guardar reglas del ejecutivo (admin) ──
+router.put('/rules/:userId', adminOnly, async (req, res) => {
+  try {
+    const User = require('../models/User');
+    const { commissionRules } = req.body;
+    const user = await User.findByIdAndUpdate(
+      req.params.userId,
+      { commissionRules },
+      { new: true }
+    ).select('name email commissionRules');
+    if (!user) return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
+    res.json({ success: true, data: user });
+  } catch (err) {
+    res.status(400).json({ success: false, message: err.message });
+  }
+});
+
+// ── GET /api/commissions/rules-resolved/:userId — reglas efectivas (propias + defaults) ──
+// Devuelve para cada leadType+serviceType el % que aplica: el del ejecutivo si existe, o el default
+router.get('/rules-resolved/:userId', async (req, res) => {
+  try {
+    const User = require('../models/User');
+    const user = await User.findById(req.params.userId).select('commissionRules');
+    if (!user) return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
+
+    const leadTypes = ['campaign', 'direct', 'referral'];
+    const services  = Object.keys(DEFAULT_RATES);
+    const resolved  = {};
+
+    for (const lt of leadTypes) {
+      resolved[lt] = {};
+      for (const svc of services) {
+        const custom = user.commissionRules?.[lt]?.[svc];
+        resolved[lt][svc] = custom != null ? custom : DEFAULT_RATES[svc];
+      }
     }
-  });
+
+    res.json({ success: true, data: resolved });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
 });
 
 // ── POST /api/commissions — crear comisión ────────────────────

@@ -26,6 +26,47 @@ const userSchema = new mongoose.Schema({
     email:       { type: Boolean, default: true },
     inactivity:  { type: Number, default: 3 }, // dias
   },
+
+  // Reglas de comisión personalizadas por tipo de lead y servicio
+  // leadType: 'campaign' = lead de campaña pagada, 'direct' = prospectado por el ejecutivo, 'referral' = recomendación
+  commissionRules: {
+    campaign: {
+      maritimo_import:    { type: Number, default: null },
+      maritimo_export:    { type: Number, default: null },
+      aereo_import:       { type: Number, default: null },
+      aereo_export:       { type: Number, default: null },
+      terrestre_usa:      { type: Number, default: null },
+      terrestre_nacional: { type: Number, default: null },
+      despacho_aduanal:   { type: Number, default: null },
+      almacenaje:         { type: Number, default: null },
+      seguro_carga:       { type: Number, default: null },
+      otro:               { type: Number, default: null },
+    },
+    direct: {
+      maritimo_import:    { type: Number, default: null },
+      maritimo_export:    { type: Number, default: null },
+      aereo_import:       { type: Number, default: null },
+      aereo_export:       { type: Number, default: null },
+      terrestre_usa:      { type: Number, default: null },
+      terrestre_nacional: { type: Number, default: null },
+      despacho_aduanal:   { type: Number, default: null },
+      almacenaje:         { type: Number, default: null },
+      seguro_carga:       { type: Number, default: null },
+      otro:               { type: Number, default: null },
+    },
+    referral: {
+      maritimo_import:    { type: Number, default: null },
+      maritimo_export:    { type: Number, default: null },
+      aereo_import:       { type: Number, default: null },
+      aereo_export:       { type: Number, default: null },
+      terrestre_usa:      { type: Number, default: null },
+      terrestre_nacional: { type: Number, default: null },
+      despacho_aduanal:   { type: Number, default: null },
+      almacenaje:         { type: Number, default: null },
+      seguro_carga:       { type: Number, default: null },
+      otro:               { type: Number, default: null },
+    },
+  },
   lastLogin: { type: Date },
 }, { timestamps: true });
 

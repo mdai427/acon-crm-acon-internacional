@@ -10,6 +10,13 @@ const commissionSchema = new mongoose.Schema({
   // Operación relacionada (si aplica)
   operation: { type: mongoose.Schema.Types.ObjectId, ref: 'Operation' },
 
+  // Origen del lead (define qué tabla de comisiones aplica)
+  leadType: {
+    type: String,
+    enum: ['campaign', 'direct', 'referral'],
+    default: 'direct',
+  },
+
   // Tipo de servicio
   serviceType: {
     type: String,

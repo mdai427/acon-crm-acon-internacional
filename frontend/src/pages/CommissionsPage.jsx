@@ -6,8 +6,10 @@ import {
 } from 'lucide-react';
 import {
   getCommissions, getCommissionsSummary, getCommissionsConfig,
-  createCommission, updateCommission, deleteCommission
+  createCommission, updateCommission, deleteCommission,
+  getResolvedRules, getUsers
 } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const SERVICE_LABELS = {
@@ -59,21 +61,49 @@ function StatusBadge({ status }) {
   );
 }
 
+const LEAD_TYPE_CONFIG = {
+  campaign: { label: 'Lead de Campaña',     desc: 'Generado por publicidad o marketing pagado', color: '#7c3aed', bg: '#ede9fe' },
+  direct:   { label: 'Lead Directo',        desc: 'Prospectado directamente por el ejecutivo',  color: '#0369a1', bg: '#e0f2fe' },
+  referral: { label: 'Lead por Recomendación', desc: 'Referido por cliente o contacto',         color: '#15803d', bg: '#dcfce7' },
+};
+
 // ── CreateModal ───────────────────────────────────────────────────────────────
-function CreateModal({ config, onClose, onSaved }) {
+function CreateModal({ config, users, isAdmin, currentUserId, onClose, onSaved }) {
   const [form, setForm] = useState({
-    clientName: '', serviceType: 'maritimo_import',
+    clientName: '', serviceType: 'maritimo_import', leadType: 'direct',
     dealValue: '', costValue: '0', commissionPct: '',
     notes: '', dealDate: new Date().toISOString().slice(0, 10),
+    userId: currentUserId,
   });
+  const [resolvedRates, setResolvedRates] = useState(null);
   const [saving, setSaving] = useState(false);
+
+  // Cargar reglas resueltas cuando cambia el ejecutivo
+  useEffect(() => {
+    if (!form.userId) return;
+    getResolvedRules(form.userId).then(r => setResolvedRates(r.data.data)).catch(() => {});
+  }, [form.userId]);
+
+  const autoRate = resolvedRates?.[form.leadType]?.[form.serviceType]
+    ?? config?.[form.serviceType]
+    ?? '';
 
   const set = (k, v) => setForm(f => {
     const next = { ...f, [k]: v };
-    // Auto-fill pct from config
-    if (k === 'serviceType' && config) next.commissionPct = config[v] || '';
+    // Al cambiar servicio o tipo de lead, auto-rellenar %
+    if (k === 'serviceType' || k === 'leadType' || k === 'userId') {
+      // Se actualiza en el siguiente render via autoRate
+      next.commissionPct = '';
+    }
     return next;
   });
+
+  // Sincronizar commissionPct cuando autoRate cambia y el campo está vacío
+  useEffect(() => {
+    if (autoRate !== '' && form.commissionPct === '') {
+      setForm(f => ({ ...f, commissionPct: String(autoRate) }));
+    }
+  }, [autoRate]);
 
   const profit = (parseFloat(form.dealValue) || 0) - (parseFloat(form.costValue) || 0);
   const commission = profit * ((parseFloat(form.commissionPct) || 0) / 100);
@@ -83,10 +113,15 @@ function CreateModal({ config, onClose, onSaved }) {
     setSaving(true);
     try {
       await createCommission({
-        ...form,
-        dealValue: parseFloat(form.dealValue),
-        costValue: parseFloat(form.costValue) || 0,
+        clientName:    form.clientName,
+        serviceType:   form.serviceType,
+        leadType:      form.leadType,
+        dealValue:     parseFloat(form.dealValue),
+        costValue:     parseFloat(form.costValue) || 0,
         commissionPct: parseFloat(form.commissionPct),
+        notes:         form.notes,
+        dealDate:      form.dealDate,
+        user:          form.userId,
       });
       onSaved();
     } catch (e) {
@@ -96,14 +131,43 @@ function CreateModal({ config, onClose, onSaved }) {
     }
   };
 
+  const ltCfg = LEAD_TYPE_CONFIG[form.leadType];
+
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ background: '#fff', borderRadius: 12, width: 520, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
+      <div style={{ background: '#fff', borderRadius: 12, width: 560, maxHeight: '92vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
         <div style={{ padding: '20px 24px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#0B2545' }}>Nueva Comisión</h3>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280' }}><X size={20} /></button>
         </div>
         <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+          {/* Tipo de lead — 3 botones */}
+          <div>
+            <label style={labelStyle}>Tipo de Lead *</label>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginTop: 6 }}>
+              {Object.entries(LEAD_TYPE_CONFIG).map(([k, v]) => (
+                <button key={k} onClick={() => set('leadType', k)} style={{
+                  padding: '10px 8px', borderRadius: 8, border: `2px solid ${form.leadType === k ? v.color : '#e5e7eb'}`,
+                  background: form.leadType === k ? v.bg : '#fff', cursor: 'pointer', textAlign: 'center',
+                  transition: 'all 0.15s',
+                }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: form.leadType === k ? v.color : '#374151' }}>{v.label}</div>
+                  <div style={{ fontSize: 10, color: '#9ca3af', marginTop: 2, lineHeight: 1.3 }}>{v.desc}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {isAdmin && (
+            <div>
+              <label style={labelStyle}>Ejecutivo</label>
+              <select style={inputStyle} value={form.userId} onChange={e => set('userId', e.target.value)}>
+                {users.map(u => <option key={u._id} value={u._id}>{u.name}</option>)}
+              </select>
+            </div>
+          )}
+
           <div>
             <label style={labelStyle}>Cliente *</label>
             <input style={inputStyle} value={form.clientName} onChange={e => set('clientName', e.target.value)} placeholder="Nombre del cliente" />
@@ -131,7 +195,12 @@ function CreateModal({ config, onClose, onSaved }) {
             </div>
             <div>
               <label style={labelStyle}>% Comisión *</label>
-              <input type="number" style={inputStyle} value={form.commissionPct} onChange={e => set('commissionPct', e.target.value)} placeholder="5" step="0.5" />
+              <div style={{ position: 'relative' }}>
+                <input type="number" style={inputStyle} value={form.commissionPct} onChange={e => setForm(f => ({ ...f, commissionPct: e.target.value }))} placeholder={autoRate || '5'} step="0.5" />
+                {autoRate !== '' && form.commissionPct === String(autoRate) && (
+                  <span style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', fontSize: 10, color: ltCfg.color, fontWeight: 700 }}>AUTO</span>
+                )}
+              </div>
             </div>
           </div>
           {form.dealValue && form.commissionPct && (
@@ -160,10 +229,14 @@ function CreateModal({ config, onClose, onSaved }) {
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function CommissionsPage() {
+  const { user: me } = useAuth();
+  const isAdmin = me?.role === 'admin';
+
   const [commissions, setCommissions] = useState([]);
   const [totals, setTotals] = useState({});
   const [summary, setSummary] = useState([]);
   const [config, setConfig] = useState(null);
+  const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState('list'); // 'list' | 'summary'
   const [showCreate, setShowCreate] = useState(false);
@@ -178,15 +251,17 @@ export default function CommissionsPage() {
       if (filters.status) params.status = filters.status;
       if (filters.userId) params.userId = filters.userId;
 
-      const [listRes, summaryRes, cfgRes] = await Promise.all([
+      const [listRes, summaryRes, cfgRes, usersRes] = await Promise.all([
         getCommissions(params),
         getCommissionsSummary({ period: filters.period }),
         config ? Promise.resolve({ data: { data: config } }) : getCommissionsConfig(),
+        isAdmin ? getUsers() : Promise.resolve({ data: { data: [] } }),
       ]);
       setCommissions(listRes.data.data || []);
       setTotals(listRes.data.totals || {});
       setSummary(summaryRes.data.data || []);
       if (!config) setConfig(cfgRes.data.data);
+      if (isAdmin) setUsers(usersRes.data.data || []);
     } catch (e) {
       console.error(e);
     } finally {
@@ -326,7 +401,14 @@ export default function CommissionsPage() {
       </div>
 
       {showCreate && (
-        <CreateModal config={config} onClose={() => setShowCreate(false)} onSaved={() => { setShowCreate(false); load(); }} />
+        <CreateModal
+          config={config}
+          users={users}
+          isAdmin={isAdmin}
+          currentUserId={me?._id}
+          onClose={() => setShowCreate(false)}
+          onSaved={() => { setShowCreate(false); load(); }}
+        />
       )}
 
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>

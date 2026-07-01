@@ -194,6 +194,9 @@ export const getCommissionsConfig = () => api.get('/commissions/config');
 export const createCommission = (data) => api.post('/commissions', data);
 export const updateCommission = (id, data) => api.put(`/commissions/${id}`, data);
 export const deleteCommission = (id) => api.delete(`/commissions/${id}`);
+export const getCommissionRules = (userId) => api.get(`/commissions/rules/${userId}`);
+export const saveCommissionRules = (userId, commissionRules) => api.put(`/commissions/rules/${userId}`, { commissionRules });
+export const getResolvedRules = (userId) => api.get(`/commissions/rules-resolved/${userId}`);
 
 // Lead AI Research
 export const triggerLeadResearch = (leadId) => api.post(`/leads/${leadId}/research`);
