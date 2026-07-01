@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { getQuotes, createQuote, updateQuoteStatus, deleteQuote, getLeads } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import QuotePreviewModal from '../components/QuotePreviewModal';
 import {
   Calculator, Plus, FileDown, Trash2, Send, Check, X,
-  Anchor, Plane, Truck, Warehouse, BadgeCheck, ChevronDown, Search
+  Anchor, Plane, Truck, Warehouse, BadgeCheck, Search,
+  Eye, Copy, ChevronDown, ChevronUp, PlusCircle, MinusCircle
 } from 'lucide-react';
 
-// ── Constants ──────────────────────────────────────────────────────────────
+// ── Constants ──────────────────────────────────────────────────────────────────
 const SERVICE_TYPES = [
   { id: 'maritimo_fcl',        label: 'Marítimo FCL',          Icon: Anchor,     color: '#2563EB' },
   { id: 'maritimo_lcl',        label: 'Marítimo LCL',          Icon: Anchor,     color: '#2563EB' },
@@ -19,7 +21,8 @@ const SERVICE_TYPES = [
   { id: 'aduanal_exportacion', label: 'Aduanal Exportación',   Icon: BadgeCheck, color: '#16A34A' },
 ];
 
-// Conceptos predefinidos por tipo de servicio
+const IS_MARITIME = (svc) => svc === 'maritimo_fcl' || svc === 'maritimo_lcl';
+
 const DEFAULT_ITEMS = {
   maritimo_fcl: [
     { concept: 'Flete marítimo FCL', unit: 'Contenedor', qty: 1, unitPrice: 0, currency: 'USD' },
@@ -76,6 +79,7 @@ const DEFAULT_ITEMS = {
 };
 
 const INCOTERMS = ['EXW','FCA','FAS','FOB','CFR','CIF','CPT','CIP','DAP','DPU','DDP'];
+
 const STATUS_MAP = {
   draft:    { label: 'Borrador',  bg: '#F4F5F7', color: '#5A6472' },
   sent:     { label: 'Enviada',   bg: '#DBEAFE', color: '#2563EB' },
@@ -89,256 +93,42 @@ const FREQUENT_PORTS = [
   'Shanghai, CN','Ningbo, CN','Guangzhou, CN','Long Beach, US','Los Ángeles, US',
   'Ciudad de México, MX','Guadalajara, MX','Monterrey, MX',
   'Aeropuerto MEX','Aeropuerto GDL','Aeropuerto LAX',
+  'Vitória, BR','Santos, BR','Rio de Janeiro, BR','Navegantes, BR',
 ];
 
+const EMPTY_ROUTE = { origen: '', pol: '', pod: '', transitDays: '', price20: '', price40: '', price40HC: '', currency: 'USD' };
+
 const EMPTY_FORM = {
-  serviceType: 'maritimo_fcl', clientName: '', clientEmail: '', clientPhone: '',
-  contactName: '', origin: '', destination: '', incoterm: 'EXW', carrier: '',
+  serviceType: 'maritimo_fcl',
+  clientName: '', clientEmail: '', clientPhone: '',
+  contactName: '', clientAddress: '',
+  salesRep: '', paymentTerms: 'Due on receipt service',
+  origin: '', destination: '',
+  incoterm: 'FOB', carrier: '',
   containerType: '', weight: '', volume: '', units: '', commodity: '',
-  items: DEFAULT_ITEMS['maritimo_fcl'], currency: 'USD', exchangeRate: 17,
-  validity: 15, notes: '', terms: 'Precios sujetos a disponibilidad de espacio. Vigencia de la cotización: 15 días naturales. Tarifas no incluyen impuestos de importación (IGI, IVA) a menos que se indique.',
+  items: DEFAULT_ITEMS['maritimo_fcl'],
+  routes: [{ ...EMPTY_ROUTE }],
+  additionalCharges: { docFee: 120, releaseFee: 55, cartaGarantia: 'Aplicable', freeDays: 21 },
+  currency: 'USD', exchangeRate: 17,
+  validity: 15,
+  notes: '',
+  terms: 'Asegure su carga (COBERTURA TOTAL – TODO RIESGO). NO nos haremos responsables de ningún daño, retraso o pérdida monetaria de ningún tipo si decide no contratar el seguro. El equipo y el espacio están sujetos a disponibilidad. Pueden aplicarse costos de reposición. Las tarifas están sujetas a cambios sin previo aviso. No seremos responsables por caso fortuito o fuerza mayor: demoras climáticas, tormentas, inundaciones, guerra, incendios, entre otros.',
   lead: '',
 };
 
-// ── PDF Generator ───────────────────────────────────────────────────────────
-async function generatePDF(quote, user) {
-  const { jsPDF } = await import('jspdf');
-  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-  const W = 210, margin = 15;
-  let y = 0;
-
-  const navy = [11, 37, 69];
-  const orange = [242, 100, 30];
-  const gray = [90, 100, 114];
-  const lightGray = [244, 245, 247];
-
-  // ── Header ──
-  doc.setFillColor(...navy);
-  doc.rect(0, 0, W, 38, 'F');
-
-  doc.setTextColor(255, 255, 255);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(18);
-  doc.text('ACON', margin, 16);
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(11);
-  doc.text('Internacional · Worldwide Logística', margin + 22, 16);
-
-  doc.setFontSize(9);
-  doc.setTextColor(200, 210, 225);
-  doc.text('sarahi.noriega@aconinternacional.com', margin, 24);
-  doc.text('www.aconinternacional.com', margin, 29);
-
-  // Folio + estado
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(13);
-  doc.setTextColor(242, 100, 30);
-  doc.text(quote.folio || 'COTIZACIÓN', W - margin, 16, { align: 'right' });
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
-  doc.setTextColor(200, 210, 225);
-  doc.text(`Fecha: ${new Date().toLocaleDateString('es-MX')}`, W - margin, 22, { align: 'right' });
-  doc.text(`Vigencia: ${quote.validity || 15} días`, W - margin, 27, { align: 'right' });
-  doc.text(`Válida hasta: ${quote.validUntil ? new Date(quote.validUntil).toLocaleDateString('es-MX') : '—'}`, W - margin, 32, { align: 'right' });
-
-  y = 48;
-
-  // ── Datos del cliente + servicio ──
-  doc.setFillColor(...lightGray);
-  doc.rect(margin, y, W - 2 * margin, 28, 'F');
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9);
-  doc.setTextColor(...gray);
-  doc.text('CLIENTE', margin + 4, y + 6);
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(10);
-  doc.setTextColor(26, 31, 46);
-  doc.text(quote.clientName || '—', margin + 4, y + 12);
-  doc.setFontSize(8.5);
-  doc.setTextColor(...gray);
-  doc.text(quote.contactName ? `Attn: ${quote.contactName}` : '', margin + 4, y + 18);
-  doc.text(quote.clientEmail || '', margin + 4, y + 23);
-
-  // Servicio
-  const svc = SERVICE_TYPES.find(s => s.id === quote.serviceType);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9);
-  doc.setTextColor(...gray);
-  doc.text('SERVICIO', W / 2, y + 6);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10);
-  doc.setTextColor(...navy);
-  doc.text(svc?.label || quote.serviceType, W / 2, y + 12);
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8.5);
-  doc.setTextColor(...gray);
-  if (quote.origin)      doc.text(`Origen: ${quote.origin}`, W / 2, y + 18);
-  if (quote.destination) doc.text(`Destino: ${quote.destination}`, W / 2, y + 23);
-
-  // Incoterm + carrier
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9);
-  doc.setTextColor(...gray);
-  doc.text('INCOTERM / NAVIERA', W - margin - 50, y + 6);
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(10);
-  doc.setTextColor(26, 31, 46);
-  doc.text(quote.incoterm || '—', W - margin - 50, y + 12);
-  doc.setFontSize(8.5);
-  doc.setTextColor(...gray);
-  if (quote.carrier) doc.text(quote.carrier, W - margin - 50, y + 18);
-  if (quote.containerType) doc.text(quote.containerType, W - margin - 50, y + 23);
-
-  y += 36;
-
-  // ── Detalles de carga ──
-  const cargoItems = [
-    quote.commodity && `Mercancía: ${quote.commodity}`,
-    quote.weight && `Peso: ${quote.weight} kg`,
-    quote.volume && `Volumen: ${quote.volume} CBM`,
-    quote.units && `Unidades: ${quote.units}`,
-  ].filter(Boolean);
-
-  if (cargoItems.length) {
-    doc.setFontSize(8.5);
-    doc.setTextColor(...gray);
-    doc.text(cargoItems.join('   ·   '), margin, y);
-    y += 6;
-  }
-
-  y += 2;
-
-  // ── Tabla de partidas ──
-  // Header
-  doc.setFillColor(...navy);
-  doc.rect(margin, y, W - 2 * margin, 7, 'F');
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
-  doc.setTextColor(255, 255, 255);
-  const cols = { concept: margin + 2, unit: 118, qty: 138, price: 158, total: 178 };
-  doc.text('CONCEPTO', cols.concept, y + 5);
-  doc.text('UNIDAD', cols.unit, y + 5);
-  doc.text('CANT.', cols.qty, y + 5, { align: 'center' });
-  doc.text('P. UNIT.', cols.price, y + 5, { align: 'right' });
-  doc.text('TOTAL', cols.total + 10, y + 5, { align: 'right' });
-  y += 8;
-
-  // Filas
-  const items = quote.items || [];
-  let totalUSD = 0, totalMXN = 0;
-
-  items.forEach((item, i) => {
-    const rowTotal = item.qty * item.unitPrice;
-    if (item.currency === 'USD') totalUSD += rowTotal;
-    else totalMXN += rowTotal;
-
-    if (i % 2 === 0) {
-      doc.setFillColor(249, 250, 251);
-      doc.rect(margin, y - 1, W - 2 * margin, 6.5, 'F');
-    }
-
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8.5);
-    doc.setTextColor(26, 31, 46);
-    doc.text(item.concept || '', cols.concept, y + 4);
-    doc.setTextColor(...gray);
-    doc.text(item.unit || '', cols.unit, y + 4);
-    doc.text(String(item.qty || 1), cols.qty, y + 4, { align: 'center' });
-    doc.text(
-      `${item.currency} ${(item.unitPrice || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`,
-      cols.price, y + 4, { align: 'right' }
-    );
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(26, 31, 46);
-    doc.text(
-      `${item.currency} ${rowTotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`,
-      cols.total + 10, y + 4, { align: 'right' }
-    );
-    y += 7;
-  });
-
-  y += 4;
-
-  // ── Totales ──
-  doc.setDrawColor(...navy);
-  doc.setLineWidth(0.3);
-  doc.line(margin, y, W - margin, y);
-  y += 5;
-
-  const addTotal = (label, amount, currency, isMain = false) => {
-    doc.setFont('helvetica', isMain ? 'bold' : 'normal');
-    doc.setFontSize(isMain ? 10 : 8.5);
-    doc.setTextColor(isMain ? navy[0] : gray[0], isMain ? navy[1] : gray[1], isMain ? navy[2] : gray[2]);
-    doc.text(label, W - margin - 60, y);
-    if (isMain) doc.setTextColor(...orange);
-    doc.text(`${currency} ${amount.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`, W - margin, y, { align: 'right' });
-    y += isMain ? 7 : 5.5;
-  };
-
-  if (totalUSD > 0) addTotal('Subtotal USD:', totalUSD, 'USD');
-  if (totalMXN > 0) addTotal('Subtotal MXN:', totalMXN, 'MXN');
-  if (totalUSD > 0 && totalMXN > 0) {
-    const rate = quote.exchangeRate || 17;
-    addTotal(`Equivalente MXN (TC ${rate}):`, totalUSD * rate + totalMXN, 'MXN', true);
-  } else if (totalUSD > 0) {
-    addTotal('TOTAL USD:', totalUSD, 'USD', true);
-  } else {
-    addTotal('TOTAL MXN:', totalMXN, 'MXN', true);
-  }
-
-  y += 6;
-
-  // ── Notas / Términos ──
-  if (quote.notes) {
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8.5);
-    doc.setTextColor(...navy);
-    doc.text('Notas:', margin, y);
-    y += 4;
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(...gray);
-    const noteLines = doc.splitTextToSize(quote.notes, W - 2 * margin);
-    doc.text(noteLines, margin, y);
-    y += noteLines.length * 4 + 4;
-  }
-
-  if (quote.terms) {
-    doc.setFont('helvetica', 'italic');
-    doc.setFontSize(7.5);
-    doc.setTextColor(...gray);
-    const termLines = doc.splitTextToSize(quote.terms, W - 2 * margin);
-    doc.text(termLines, margin, y);
-    y += termLines.length * 3.8 + 4;
-  }
-
-  // ── Footer ──
-  const pageH = doc.internal.pageSize.getHeight();
-  doc.setFillColor(...navy);
-  doc.rect(0, pageH - 16, W, 16, 'F');
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
-  doc.setTextColor(...orange);
-  doc.text('ACON Internacional', margin, pageH - 8);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(180, 190, 210);
-  doc.text('sarahi.noriega@aconinternacional.com  ·  www.aconinternacional.com', margin + 38, pageH - 8);
-  doc.text(`Elaboró: ${user?.name || 'ACON CRM'}`, W - margin, pageH - 8, { align: 'right' });
-
-  doc.save(`${quote.folio || 'cotizacion'}_ACON.pdf`);
-}
-
-// ── Main Component ──────────────────────────────────────────────────────────
+// ── Main Component ──────────────────────────────────────────────────────────────
 export default function QuoterPage({ toast }) {
   const { user } = useAuth();
-  const [quotes, setQuotes] = useState([]);
+  const [quotes, setQuotes]   = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState(EMPTY_FORM);
-  const [leads, setLeads] = useState([]);
-  const [saving, setSaving] = useState(false);
-  const [search, setSearch] = useState('');
+  const [form, setForm]       = useState(EMPTY_FORM);
+  const [leads, setLeads]     = useState([]);
+  const [saving, setSaving]   = useState(false);
+  const [search, setSearch]   = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [previewQuote, setPreviewQuote] = useState(null);
+  const [showRoutes, setShowRoutes] = useState(true);
 
   const load = () => {
     setLoading(true);
@@ -357,7 +147,13 @@ export default function QuoterPage({ toast }) {
   const f = (key, val) => setForm(p => ({ ...p, [key]: val }));
 
   const handleServiceChange = (svc) => {
-    setForm(p => ({ ...p, serviceType: svc, items: (DEFAULT_ITEMS[svc] || []).map(i => ({ ...i })) }));
+    setForm(p => ({
+      ...p,
+      serviceType: svc,
+      items: (DEFAULT_ITEMS[svc] || []).map(i => ({ ...i })),
+      routes: IS_MARITIME(svc) ? (p.routes?.length ? p.routes : [{ ...EMPTY_ROUTE }]) : [],
+    }));
+    setShowRoutes(IS_MARITIME(svc));
   };
 
   const handleLeadSelect = (leadId) => {
@@ -371,14 +167,29 @@ export default function QuoterPage({ toast }) {
     }
   };
 
+  // Items (conceptos)
   const setItem = (i, key, val) => {
     const items = [...form.items];
     items[i] = { ...items[i], [key]: key === 'qty' || key === 'unitPrice' ? Number(val) : val };
     f('items', items);
   };
-
   const addItem = () => f('items', [...form.items, { concept: '', unit: 'Global', qty: 1, unitPrice: 0, currency: 'USD' }]);
   const removeItem = (i) => f('items', form.items.filter((_, idx) => idx !== i));
+
+  // Routes
+  const setRoute = (i, key, val) => {
+    const routes = [...form.routes];
+    routes[i] = { ...routes[i], [key]: val };
+    f('routes', routes);
+  };
+  const addRoute = () => f('routes', [...(form.routes || []), { ...EMPTY_ROUTE }]);
+  const removeRoute = (i) => f('routes', form.routes.filter((_, idx) => idx !== i));
+
+  // Additional charges
+  const setAC = (key, val) => setForm(p => ({
+    ...p,
+    additionalCharges: { ...p.additionalCharges, [key]: val }
+  }));
 
   const totalUSD = form.items.filter(i => i.currency === 'USD').reduce((s, i) => s + (i.qty || 1) * (i.unitPrice || 0), 0);
   const totalMXN = form.items.filter(i => i.currency === 'MXN').reduce((s, i) => s + (i.qty || 1) * (i.unitPrice || 0), 0);
@@ -387,13 +198,33 @@ export default function QuoterPage({ toast }) {
     if (!form.clientName) return toast('El nombre del cliente es requerido', 'error');
     setSaving(true);
     try {
-      const r = await createQuote(form);
+      const payload = {
+        ...form,
+        routes: IS_MARITIME(form.serviceType) ? form.routes : [],
+      };
+      const r = await createQuote(payload);
       toast(`Cotización ${r.data.data.folio} creada`, 'success');
       setShowForm(false);
       setForm(EMPTY_FORM);
       load();
     } catch (e) {
       toast(e.response?.data?.message || 'Error al crear cotización', 'error');
+    } finally { setSaving(false); }
+  };
+
+  const handleCreateAndPreview = async () => {
+    if (!form.clientName) return toast('El nombre del cliente es requerido', 'error');
+    setSaving(true);
+    try {
+      const payload = { ...form, routes: IS_MARITIME(form.serviceType) ? form.routes : [] };
+      const r = await createQuote(payload);
+      toast(`${r.data.data.folio} creada`, 'success');
+      setShowForm(false);
+      setForm(EMPTY_FORM);
+      load();
+      setPreviewQuote(r.data.data);
+    } catch (e) {
+      toast('Error', 'error');
     } finally { setSaving(false); }
   };
 
@@ -414,21 +245,14 @@ export default function QuoterPage({ toast }) {
     } catch { toast('Error al eliminar', 'error'); }
   };
 
-  const handlePDF = async (quote) => {
-    try {
-      await generatePDF(quote, user);
-      toast('PDF generado', 'success');
-    } catch (e) {
-      toast('Error al generar PDF', 'error');
-    }
-  };
+  const isMaritime = IS_MARITIME(form.serviceType);
 
   return (
     <div className="page">
       <div className="page-header">
         <div>
-          <div className="page-title">Cotizador</div>
-          <div className="page-sub">{quotes.length} cotizaciones · genera y descarga en PDF</div>
+          <div className="page-title">Cotizador ACON</div>
+          <div className="page-sub">{quotes.length} cotizaciones · genera documentos con diseño de marca</div>
         </div>
         <button className="btn btn-primary" onClick={() => setShowForm(true)} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <Plus size={15} /> Nueva Cotización
@@ -493,6 +317,9 @@ export default function QuoterPage({ toast }) {
                       <td>
                         {q.totalUSD > 0 && <div style={{ fontWeight: 700, color: 'var(--navy-900)', fontSize: 13 }}>USD {q.totalUSD.toLocaleString('es-MX', { minimumFractionDigits: 0 })}</div>}
                         {q.totalMXN > 0 && <div style={{ fontWeight: q.totalUSD > 0 ? 400 : 700, color: q.totalUSD > 0 ? 'var(--gray-500)' : 'var(--navy-900)', fontSize: q.totalUSD > 0 ? 11 : 13 }}>MXN {q.totalMXN.toLocaleString('es-MX', { minimumFractionDigits: 0 })}</div>}
+                        {q.routes?.length > 0 && !q.totalUSD && (
+                          <div style={{ fontSize: 11, color: '#6366f1', fontWeight: 600 }}>{q.routes.length} rutas FCL</div>
+                        )}
                       </td>
                       <td style={{ fontSize: 12, color: expired ? 'var(--red)' : 'var(--gray-500)' }}>
                         {q.validUntil ? new Date(q.validUntil).toLocaleDateString('es-MX') : '—'}
@@ -505,11 +332,12 @@ export default function QuoterPage({ toast }) {
                       </td>
                       <td>
                         <div style={{ display: 'flex', gap: 4 }}>
-                          <button className="btn btn-ghost btn-sm" title="Descargar PDF" onClick={() => handlePDF(q)} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                            <FileDown size={13} /> PDF
+                          {/* Preview button */}
+                          <button className="btn btn-ghost btn-sm" title="Vista previa / PDF" onClick={() => setPreviewQuote(q)} style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#f97316' }}>
+                            <Eye size={13} /> Vista previa
                           </button>
                           {q.status === 'draft' && (
-                            <button className="btn btn-primary btn-sm" title="Marcar como enviada" onClick={() => handleStatusChange(q._id, 'sent')} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <button className="btn btn-primary btn-sm" onClick={() => handleStatusChange(q._id, 'sent')} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                               <Send size={12} /> Enviada
                             </button>
                           )}
@@ -537,20 +365,29 @@ export default function QuoterPage({ toast }) {
         )}
       </div>
 
-      {/* ── Modal nueva cotización ── */}
+      {/* ── Preview Modal ── */}
+      {previewQuote && (
+        <QuotePreviewModal
+          quote={previewQuote}
+          user={user}
+          onClose={() => setPreviewQuote(null)}
+        />
+      )}
+
+      {/* ── Modal: Nueva cotización ── */}
       {showForm && (
         <div className="modal-overlay" onClick={() => setShowForm(false)}>
-          <div className="modal" style={{ maxWidth: 780, width: '95vw' }} onClick={e => e.stopPropagation()}>
+          <div className="modal" style={{ maxWidth: 860, width: '95vw' }} onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <div className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Calculator size={18} style={{ color: 'var(--orange-500)' }} /> Nueva Cotización
+                <Calculator size={18} style={{ color: 'var(--orange-500)' }} /> Nueva Cotización ACON
               </div>
               <button className="modal-close" onClick={() => setShowForm(false)}><X size={16} /></button>
             </div>
 
-            <div style={{ maxHeight: '75vh', overflowY: 'auto', paddingRight: 4 }}>
+            <div style={{ maxHeight: '78vh', overflowY: 'auto', paddingRight: 4 }}>
 
-              {/* Tipo de servicio */}
+              {/* ── Tipo de servicio ── */}
               <div className="form-group">
                 <label className="form-label">Tipo de Servicio *</label>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
@@ -565,7 +402,7 @@ export default function QuoterPage({ toast }) {
                 </div>
               </div>
 
-              {/* Lead / Cliente */}
+              {/* ── Lead / Cliente ── */}
               <div className="form-row">
                 <div className="form-group">
                   <label className="form-label">Lead relacionado</label>
@@ -587,7 +424,7 @@ export default function QuoterPage({ toast }) {
                 </div>
                 <div className="form-group">
                   <label className="form-label">Email</label>
-                  <input className="form-input" type="email" value={form.clientEmail} onChange={e => f('clientEmail', e.target.value)} placeholder="correo@empresa.com" />
+                  <input className="form-input" type="email" value={form.clientEmail} onChange={e => f('clientEmail', e.target.value)} />
                 </div>
                 <div className="form-group">
                   <label className="form-label">Teléfono / WhatsApp</label>
@@ -595,15 +432,30 @@ export default function QuoterPage({ toast }) {
                 </div>
               </div>
 
-              {/* Ruta */}
-              <div className="form-row" style={{ gridTemplateColumns: '1fr 1fr 1fr 1fr' }}>
+              <div className="form-row" style={{ gridTemplateColumns: '2fr 1fr 1fr' }}>
                 <div className="form-group">
-                  <label className="form-label">Origen</label>
-                  <input className="form-input" list="ports" value={form.origin} onChange={e => f('origin', e.target.value)} placeholder="Puerto/ciudad" />
+                  <label className="form-label">Dirección del cliente</label>
+                  <input className="form-input" value={form.clientAddress} onChange={e => f('clientAddress', e.target.value)} placeholder="Parque Industrial..." />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Destino</label>
-                  <input className="form-input" list="ports" value={form.destination} onChange={e => f('destination', e.target.value)} placeholder="Puerto/ciudad" />
+                  <label className="form-label">Sales Rep</label>
+                  <input className="form-input" value={form.salesRep} onChange={e => f('salesRep', e.target.value)} placeholder={user?.name || 'Nombre del vendedor'} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Payment Terms</label>
+                  <input className="form-input" value={form.paymentTerms} onChange={e => f('paymentTerms', e.target.value)} />
+                </div>
+              </div>
+
+              {/* ── Ruta principal ── */}
+              <div className="form-row" style={{ gridTemplateColumns: '1fr 1fr 1fr 1fr' }}>
+                <div className="form-group">
+                  <label className="form-label">Origen general</label>
+                  <input className="form-input" list="ports" value={form.origin} onChange={e => f('origin', e.target.value)} placeholder="País / ciudad" />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Destino general</label>
+                  <input className="form-input" list="ports" value={form.destination} onChange={e => f('destination', e.target.value)} placeholder="País / ciudad" />
                 </div>
                 <div className="form-group">
                   <label className="form-label">Incoterm</label>
@@ -639,16 +491,102 @@ export default function QuoterPage({ toast }) {
                 </div>
               </div>
 
-              {/* Partidas */}
+              {/* ═══════════════════════════════════════════════════════
+                  ROUTES TABLE — solo para marítimo FCL/LCL
+                  ═══════════════════════════════════════════════════ */}
+              {isMaritime && (
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                    <div className="section-title" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span>Tabla de Rutas y Tarifas (FCL)</span>
+                      <span style={{ fontSize: 11, color: 'var(--gray-400)', fontWeight: 400 }}>· Origen → POL → POD</span>
+                    </div>
+                    <button className="btn btn-ghost btn-sm" onClick={addRoute} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <PlusCircle size={13} /> Agregar ruta
+                    </button>
+                  </div>
+
+                  <div style={{ border: '1px solid var(--gray-200)', borderRadius: 10, overflow: 'hidden' }}>
+                    {/* Table header */}
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: '1fr 1fr 1.2fr 0.8fr 0.8fr 0.9fr 0.9fr 0.7fr 28px',
+                      gap: 6, padding: '8px 10px',
+                      background: 'var(--navy-900)', color: 'white',
+                      fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5,
+                    }}>
+                      <span>Origen</span>
+                      <span>POL</span>
+                      <span>POD</span>
+                      <span>Transit</span>
+                      <span>20'</span>
+                      <span style={{ color: '#F2641E' }}>40'</span>
+                      <span>40'HC</span>
+                      <span>Moneda</span>
+                      <span />
+                    </div>
+
+                    {(form.routes || []).map((route, i) => (
+                      <div key={i} style={{
+                        display: 'grid',
+                        gridTemplateColumns: '1fr 1fr 1.2fr 0.8fr 0.8fr 0.9fr 0.9fr 0.7fr 28px',
+                        gap: 6, padding: '6px 10px',
+                        background: i % 2 === 0 ? 'white' : 'var(--gray-50)',
+                        borderTop: '1px solid var(--gray-100)',
+                        alignItems: 'center',
+                      }}>
+                        <input className="form-input" style={{ fontSize: 11 }} value={route.origen} onChange={e => setRoute(i, 'origen', e.target.value)} placeholder="Vitória..." list="ports" />
+                        <input className="form-input" style={{ fontSize: 11 }} value={route.pol} onChange={e => setRoute(i, 'pol', e.target.value)} placeholder="Vitória..." list="ports" />
+                        <input className="form-input" style={{ fontSize: 11 }} value={route.pod} onChange={e => setRoute(i, 'pod', e.target.value)} placeholder="Manzanillo..." list="ports" />
+                        <input className="form-input" style={{ fontSize: 11 }} value={route.transitDays} onChange={e => setRoute(i, 'transitDays', e.target.value)} placeholder="21-24 días" />
+                        <input className="form-input" style={{ fontSize: 11 }} type="number" value={route.price20} onChange={e => setRoute(i, 'price20', e.target.value)} placeholder="2190" />
+                        <input className="form-input" style={{ fontSize: 11, borderColor: '#F2641E' }} type="number" value={route.price40} onChange={e => setRoute(i, 'price40', e.target.value)} placeholder="3290" />
+                        <input className="form-input" style={{ fontSize: 11 }} type="number" value={route.price40HC} onChange={e => setRoute(i, 'price40HC', e.target.value)} placeholder="3950" />
+                        <select className="form-select" style={{ fontSize: 11 }} value={route.currency} onChange={e => setRoute(i, 'currency', e.target.value)}>
+                          <option value="USD">USD</option>
+                          <option value="MXN">MXN</option>
+                        </select>
+                        <button onClick={() => removeRoute(i)} style={{ background: 'none', border: 'none', color: 'var(--red)', cursor: 'pointer', padding: 4 }}>
+                          <X size={14} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Additional charges for FCL */}
+                  <div style={{ marginTop: 12, padding: '12px 14px', background: 'var(--gray-50)', border: '1px solid var(--gray-200)', borderRadius: 10 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--navy-900)', marginBottom: 10 }}>Cargos Adicionales</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 10 }}>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label">DOC FEE / BL (USD)</label>
+                        <input className="form-input" type="number" value={form.additionalCharges?.docFee || ''} onChange={e => setAC('docFee', Number(e.target.value))} placeholder="120" />
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label">Release FEE / CNTR (USD)</label>
+                        <input className="form-input" type="number" value={form.additionalCharges?.releaseFee || ''} onChange={e => setAC('releaseFee', Number(e.target.value))} placeholder="55" />
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label">Carta Garantía</label>
+                        <input className="form-input" value={form.additionalCharges?.cartaGarantia || ''} onChange={e => setAC('cartaGarantia', e.target.value)} placeholder="Aplicable" />
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label">Días libres de demoras</label>
+                        <input className="form-input" type="number" value={form.additionalCharges?.freeDays || ''} onChange={e => setAC('freeDays', Number(e.target.value))} placeholder="21" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Partidas / Conceptos ── */}
               <div style={{ marginBottom: 14 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                  <div className="section-title" style={{ margin: 0 }}><span>Partidas / Conceptos</span></div>
+                  <div className="section-title" style={{ margin: 0 }}><span>Partidas / Conceptos {isMaritime ? '(opcional, para cargos adicionales detallados)' : ''}</span></div>
                   <button className="btn btn-ghost btn-sm" onClick={addItem} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                     <Plus size={13} /> Agregar línea
                   </button>
                 </div>
 
-                {/* Header tabla */}
                 <div style={{ display: 'grid', gridTemplateColumns: '2.5fr 0.8fr 0.6fr 1fr 0.7fr 28px', gap: 6, padding: '4px 0', fontSize: 11, color: 'var(--gray-400)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.3px' }}>
                   <span>Concepto</span><span>Unidad</span><span>Cant.</span><span>P. Unitario</span><span>Moneda</span><span></span>
                 </div>
@@ -669,24 +607,25 @@ export default function QuoterPage({ toast }) {
                   </div>
                 ))}
 
-                {/* Totales en tiempo real */}
-                <div style={{ marginTop: 10, padding: '10px 14px', background: 'var(--navy-900)', borderRadius: 8, display: 'flex', gap: 24, justifyContent: 'flex-end' }}>
-                  {totalUSD > 0 && (
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: 10, color: 'rgba(255,255,255,.5)', textTransform: 'uppercase', letterSpacing: '.4px' }}>Total USD</div>
-                      <div style={{ fontSize: 16, fontWeight: 700, color: '#fff' }}>{totalUSD.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</div>
-                    </div>
-                  )}
-                  {totalMXN > 0 && (
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: 10, color: 'rgba(255,255,255,.5)', textTransform: 'uppercase', letterSpacing: '.4px' }}>Total MXN</div>
-                      <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--orange-500)' }}>{totalMXN.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</div>
-                    </div>
-                  )}
-                </div>
+                {(totalUSD > 0 || totalMXN > 0) && (
+                  <div style={{ marginTop: 10, padding: '10px 14px', background: 'var(--navy-900)', borderRadius: 8, display: 'flex', gap: 24, justifyContent: 'flex-end' }}>
+                    {totalUSD > 0 && (
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontSize: 10, color: 'rgba(255,255,255,.5)', textTransform: 'uppercase', letterSpacing: '.4px' }}>Total USD</div>
+                        <div style={{ fontSize: 16, fontWeight: 700, color: '#fff' }}>{totalUSD.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</div>
+                      </div>
+                    )}
+                    {totalMXN > 0 && (
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontSize: 10, color: 'rgba(255,255,255,.5)', textTransform: 'uppercase', letterSpacing: '.4px' }}>Total MXN</div>
+                        <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--orange-500)' }}>{totalMXN.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
-              {/* Config */}
+              {/* ── Config ── */}
               <div className="form-row" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
                 <div className="form-group">
                   <label className="form-label">Vigencia (días)</label>
@@ -699,30 +638,21 @@ export default function QuoterPage({ toast }) {
               </div>
 
               <div className="form-group">
-                <label className="form-label">Notas adicionales</label>
-                <textarea className="form-input" rows={2} value={form.notes} onChange={e => f('notes', e.target.value)} placeholder="Observaciones..." />
+                <label className="form-label">Comentarios / Notas</label>
+                <textarea className="form-input" rows={3} value={form.notes} onChange={e => f('notes', e.target.value)} placeholder="Condiciones especiales, observaciones..." />
               </div>
 
               <div className="form-group">
                 <label className="form-label">Términos y condiciones</label>
-                <textarea className="form-input" rows={2} value={form.terms} onChange={e => f('terms', e.target.value)} />
+                <textarea className="form-input" rows={3} value={form.terms} onChange={e => f('terms', e.target.value)} />
               </div>
 
             </div>
 
             <div className="modal-actions">
               <button className="btn btn-ghost" onClick={() => setShowForm(false)}>Cancelar</button>
-              <button className="btn btn-ghost" onClick={async () => {
-                setSaving(true);
-                try {
-                  const r = await createQuote(form);
-                  await generatePDF(r.data.data, user);
-                  toast(`${r.data.data.folio} creada y PDF descargado`, 'success');
-                  setShowForm(false); setForm(EMPTY_FORM); load();
-                } catch (e) { toast('Error', 'error'); }
-                finally { setSaving(false); }
-              }} disabled={saving} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                <FileDown size={14} /> Guardar y descargar PDF
+              <button className="btn btn-ghost" onClick={handleCreateAndPreview} disabled={saving} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <Eye size={14} /> Guardar y previsualizar
               </button>
               <button className="btn btn-primary" onClick={handleCreate} disabled={saving}>
                 {saving ? 'Guardando...' : 'Guardar cotización'}

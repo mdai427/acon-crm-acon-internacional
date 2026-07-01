@@ -35,7 +35,33 @@ const quoteSchema = new mongoose.Schema({
   units:   Number,
   commodity: String, // descripción de la mercancía
 
+  // Cliente adicional
+  clientAddress: String,
+  salesRep:      String,
+  paymentTerms:  { type: String, default: 'Due on receipt service' },
+
   items: [lineItemSchema],
+
+  // Tabla de rutas FCL/LCL (alternativa a items para marítimo)
+  routes: [{
+    origen:      String,
+    pol:         String, // port of loading
+    pod:         String, // port of discharge
+    transitDays: String,
+    price20:     Number,
+    price40:     Number,
+    price40HC:   Number,
+    currency:    { type: String, default: 'USD' },
+    _id: false,
+  }],
+
+  // Cargos adicionales
+  additionalCharges: {
+    docFee:        { type: Number, default: 0 },
+    releaseFee:    { type: Number, default: 0 },
+    cartaGarantia: String,
+    freeDays:      { type: Number, default: 21 },
+  },
 
   // Totales calculados
   totalUSD: { type: Number, default: 0 },
