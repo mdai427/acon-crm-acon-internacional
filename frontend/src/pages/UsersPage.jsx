@@ -79,7 +79,6 @@ export default function UsersPage({ toast }) {
   const [editForm, setEditForm] = useState({});
   const [newPassword, setNewPassword] = useState('');
   const [saving, setSaving] = useState(false);
-  const [commissionsUser, setCommissionsUser] = useState(null);
   const [defaults, setDefaults] = useState({});
   // commission rules para nuevo usuario
   const [newRules, setNewRules] = useState(EMPTY_RULES);
@@ -295,11 +294,6 @@ export default function UsersPage({ toast }) {
                             <button className="ctx-item" onClick={() => { setResetUser(u); setMenuOpen(null); }} style={ctxStyle}>
                               <KeyRound size={13} /> Resetear contraseña
                             </button>
-                            {u.role === 'executive' && (
-                              <button className="ctx-item" onClick={() => { setCommissionsUser(u); setMenuOpen(null); }} style={{ ...ctxStyle, color: '#16a34a' }}>
-                                <DollarSign size={13} /> Comisiones del ejecutivo
-                              </button>
-                            )}
                             {u._id !== me?._id && (
                               <button onClick={() => { handleDeactivate(u); setMenuOpen(null); }}
                                 style={{ ...ctxStyle, color: 'var(--red)' }}>
@@ -462,15 +456,6 @@ export default function UsersPage({ toast }) {
         </div>
       )}
 
-      {/* ── Modal: Configurar comisiones ── */}
-      {commissionsUser && (
-        <CommissionConfigModal
-          user={commissionsUser}
-          onClose={() => setCommissionsUser(null)}
-          toast={toast}
-        />
-      )}
-
       {/* ── Modal: Resetear contraseña ── */}
       {resetUser && (
         <div className="modal-overlay" onClick={() => setResetUser(null)}>
@@ -581,206 +566,3 @@ const ctxStyle = {
   cursor: 'pointer', transition: 'background .15s',
 };
 
-// ── CommissionConfigModal ─────────────────────────────────────────────────────
-const SERVICE_LABELS = {
-  maritimo_import:    'Marítimo Importación',
-  maritimo_export:    'Marítimo Exportación',
-  aereo_import:       'Aéreo Importación',
-  aereo_export:       'Aéreo Exportación',
-  terrestre_usa:      'Terrestre USA',
-  terrestre_nacional: 'Terrestre Nacional',
-  despacho_aduanal:   'Despacho Aduanal',
-  almacenaje:         'Almacenaje',
-  seguro_carga:       'Seguro de Carga',
-  otro:               'Otro',
-};
-
-const LEAD_TYPES = [
-  { key: 'campaign', label: 'Lead de Campaña',        color: '#7c3aed', bg: '#ede9fe', desc: 'Lead generado por publicidad o marketing pagado' },
-  { key: 'direct',   label: 'Lead Directo',           color: '#0369a1', bg: '#e0f2fe', desc: 'Prospectado directamente por el ejecutivo' },
-  { key: 'referral', label: 'Lead por Recomendación', color: '#15803d', bg: '#dcfce7', desc: 'Referido por cliente o contacto' },
-];
-
-function CommissionConfigModal({ user, onClose, toast }) {
-  const [defaults, setDefaults] = useState({});
-  const [rules, setRules] = useState({ campaign: {}, direct: {}, referral: {} });
-  const [activeTab, setActiveTab] = useState('campaign');
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    Promise.all([getCommissionRules(user._id), getCommissionsConfig()])
-      .then(([rulesRes, cfgRes]) => {
-        const existing = rulesRes.data.data.user?.commissionRules || {};
-        setDefaults(cfgRes.data.data || {});
-        // Inicializar con los valores existentes (null = usar default)
-        const init = { campaign: {}, direct: {}, referral: {} };
-        for (const lt of ['campaign', 'direct', 'referral']) {
-          for (const svc of Object.keys(SERVICE_LABELS)) {
-            const v = existing?.[lt]?.[svc];
-            init[lt][svc] = v != null ? String(v) : '';
-          }
-        }
-        setRules(init);
-      })
-      .catch(() => toast('Error al cargar reglas', 'error'))
-      .finally(() => setLoading(false));
-  }, [user._id]);
-
-  const setRate = (lt, svc, val) => {
-    setRules(r => ({ ...r, [lt]: { ...r[lt], [svc]: val } }));
-  };
-
-  const clearAll = (lt) => {
-    setRules(r => {
-      const next = { ...r[lt] };
-      for (const k of Object.keys(next)) next[k] = '';
-      return { ...r, [lt]: next };
-    });
-  };
-
-  const save = async () => {
-    setSaving(true);
-    try {
-      // Convertir strings a números (null si vacío = usar default)
-      const toSave = { campaign: {}, direct: {}, referral: {} };
-      for (const lt of ['campaign', 'direct', 'referral']) {
-        for (const svc of Object.keys(SERVICE_LABELS)) {
-          const v = rules[lt][svc];
-          toSave[lt][svc] = v !== '' && v != null ? parseFloat(v) : null;
-        }
-      }
-      await saveCommissionRules(user._id, toSave);
-      toast(`Reglas de comisión de ${user.name} guardadas`, 'success');
-      onClose();
-    } catch (e) {
-      toast(e.response?.data?.message || 'Error al guardar', 'error');
-    } finally { setSaving(false); }
-  };
-
-  const lt = LEAD_TYPES.find(t => t.key === activeTab);
-
-  return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ background: '#fff', borderRadius: 14, width: 660, maxHeight: '92vh', overflowY: 'auto', boxShadow: '0 24px 64px rgba(0,0,0,0.3)' }}>
-
-        {/* Header */}
-        <div style={{ padding: '20px 24px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <Avatar name={user.name} size={36} />
-            <div>
-              <div style={{ fontWeight: 800, fontSize: 16, color: '#0B2545' }}>Comisiones de {user.name}</div>
-              <div style={{ fontSize: 12, color: '#6b7280' }}>Configura el % por tipo de lead y servicio · Deja vacío para usar el default del sistema</div>
-            </div>
-          </div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af' }}><X size={20} /></button>
-        </div>
-
-        {loading ? (
-          <div style={{ padding: 60, textAlign: 'center', color: '#9ca3af' }}>Cargando...</div>
-        ) : (
-          <>
-            {/* Tabs por tipo de lead */}
-            <div style={{ display: 'flex', borderBottom: '1px solid #e5e7eb', padding: '0 24px' }}>
-              {LEAD_TYPES.map(t => (
-                <button key={t.key} onClick={() => setActiveTab(t.key)} style={{
-                  padding: '12px 16px', border: 'none', background: 'none', cursor: 'pointer',
-                  fontWeight: 700, fontSize: 13,
-                  color: activeTab === t.key ? t.color : '#6b7280',
-                  borderBottom: activeTab === t.key ? `2px solid ${t.color}` : '2px solid transparent',
-                  transition: 'all 0.15s',
-                }}>
-                  {t.label}
-                </button>
-              ))}
-            </div>
-
-            {/* Descripción del tipo */}
-            <div style={{ margin: '16px 24px 0', padding: '10px 14px', background: lt.bg, borderRadius: 8, fontSize: 12, color: lt.color, fontWeight: 500 }}>
-              <Info size={13} style={{ display: 'inline', marginRight: 6 }} />
-              {lt.desc}
-            </div>
-
-            {/* Tabla de servicios */}
-            <div style={{ padding: '16px 24px 8px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                <div style={{ fontSize: 12, color: '#9ca3af' }}>
-                  Ingresa el % de comisión sobre la <strong>utilidad</strong>. Celdas vacías usan el default del sistema.
-                </div>
-                <button onClick={() => clearAll(activeTab)} style={{ fontSize: 11, color: '#6b7280', background: 'none', border: '1px solid #e5e7eb', borderRadius: 6, padding: '4px 10px', cursor: 'pointer' }}>
-                  Limpiar todo (usar defaults)
-                </button>
-              </div>
-
-              <div style={{ border: '1px solid #e5e7eb', borderRadius: 10, overflow: 'hidden' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                  <thead>
-                    <tr style={{ background: '#f9fafb' }}>
-                      <th style={{ padding: '10px 16px', textAlign: 'left', fontWeight: 600, color: '#374151', fontSize: 12 }}>Servicio</th>
-                      <th style={{ padding: '10px 16px', textAlign: 'center', fontWeight: 600, color: '#374151', fontSize: 12 }}>% Default sistema</th>
-                      <th style={{ padding: '10px 16px', textAlign: 'center', fontWeight: 600, color: lt.color, fontSize: 12 }}>% Para este ejecutivo</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {Object.entries(SERVICE_LABELS).map(([svc, label], i) => {
-                      const val = rules[activeTab][svc];
-                      const def = defaults[svc];
-                      const hasCustom = val !== '' && val != null;
-                      return (
-                        <tr key={svc} style={{ borderTop: '1px solid #f3f4f6', background: i % 2 === 0 ? '#fff' : '#fafafa' }}>
-                          <td style={{ padding: '10px 16px', color: '#111827', fontWeight: 500 }}>{label}</td>
-                          <td style={{ padding: '10px 16px', textAlign: 'center' }}>
-                            <span style={{ background: '#f3f4f6', color: '#6b7280', padding: '2px 10px', borderRadius: 20, fontSize: 12, fontWeight: 600 }}>
-                              {def}%
-                            </span>
-                          </td>
-                          <td style={{ padding: '8px 16px', textAlign: 'center' }}>
-                            <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
-                              <input
-                                type="number"
-                                min="0" max="100" step="0.5"
-                                placeholder={`${def} (default)`}
-                                value={val}
-                                onChange={e => setRate(activeTab, svc, e.target.value)}
-                                style={{
-                                  width: 120, padding: '6px 28px 6px 10px', borderRadius: 8, fontSize: 13, textAlign: 'center',
-                                  border: `1px solid ${hasCustom ? lt.color : '#d1d5db'}`,
-                                  background: hasCustom ? lt.bg : '#fff',
-                                  color: hasCustom ? lt.color : '#374151',
-                                  fontWeight: hasCustom ? 700 : 400,
-                                  outline: 'none',
-                                }}
-                              />
-                              {hasCustom && (
-                                <span style={{ position: 'absolute', right: 8, fontSize: 11, color: lt.color, fontWeight: 700 }}>%</span>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* Footer */}
-            <div style={{ padding: '16px 24px', borderTop: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ fontSize: 11, color: '#9ca3af' }}>
-                Los cambios aplican a todas las nuevas comisiones de {user.name}
-              </div>
-              <div style={{ display: 'flex', gap: 10 }}>
-                <button onClick={onClose} style={{ padding: '9px 18px', border: '1px solid #d1d5db', borderRadius: 8, background: '#fff', cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>
-                  Cancelar
-                </button>
-                <button onClick={save} disabled={saving} style={{ padding: '9px 20px', background: '#0B2545', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
-                  {saving ? 'Guardando...' : '💾 Guardar Reglas'}
-                </button>
-              </div>
-            </div>
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
