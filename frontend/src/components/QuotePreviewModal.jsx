@@ -27,38 +27,40 @@ const fmt = (v, curr = 'USD') => {
 
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—';
 
-// ── Print styles injected into the page head ───────────────────────────────────
-const PRINT_CSS = `
-@media print {
-  body * { visibility: hidden !important; }
-  #acon-quote-print, #acon-quote-print * { visibility: visible !important; }
-  #acon-quote-print {
-    position: fixed !important;
-    top: 0 !important; left: 0 !important;
-    width: 100% !important; height: auto !important;
-    z-index: 99999 !important;
-    background: white !important;
-    margin: 0 !important; padding: 0 !important;
-    overflow: visible !important;
-  }
-  .no-print { display: none !important; }
-  @page { margin: 0; size: A4 portrait; }
-}
-`;
-
 export default function QuotePreviewModal({ quote, onClose, user }) {
   const printRef = useRef(null);
 
   const handlePrint = () => {
-    // Inject print styles if not already done
-    const existing = document.getElementById('acon-print-style');
-    if (!existing) {
-      const style = document.createElement('style');
-      style.id = 'acon-print-style';
-      style.innerHTML = PRINT_CSS;
-      document.head.appendChild(style);
+    const content = printRef.current;
+    if (!content) return;
+
+    const printWindow = window.open('', '_blank', 'width=900,height=700');
+    printWindow.document.write(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Cotización ${quote.folio || ''} – ACON Internacional</title>
+  <style>
+    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; box-sizing: border-box; }
+    body { margin: 0; padding: 0; background: #fff; font-family: Arial, Helvetica, sans-serif; }
+    @page { margin: 0; size: A4 portrait; }
+    @media print {
+      body { margin: 0; }
+      .no-print { display: none !important; }
     }
-    window.print();
+  </style>
+</head>
+<body>
+${content.outerHTML}
+</body>
+</html>`);
+    printWindow.document.close();
+    printWindow.focus();
+    // Small delay to ensure styles apply before print dialog
+    setTimeout(() => {
+      printWindow.print();
+      printWindow.close();
+    }, 500);
   };
 
   const isFCL = IS_FCL(quote.serviceType);
