@@ -98,7 +98,6 @@ quoteSchema.pre('validate', async function (next) {
   next();
 });
 
-quoteSchema.index({ folio: 1 });                   // unique, búsqueda por folio
 quoteSchema.index({ lead: 1 });                    // join con lead
 quoteSchema.index({ status: 1 });                  // filtro de estado
 quoteSchema.index({ createdBy: 1 });

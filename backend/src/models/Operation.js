@@ -72,8 +72,6 @@ operationSchema.pre('validate', async function (next) {
   next();
 });
 
-// bookingNumber tiene unique:true (auto-index), se refuerza explícitamente
-operationSchema.index({ bookingNumber: 1 });
 operationSchema.index({ isActive: 1 });
 operationSchema.index({ isActive: 1, status: 1 });       // filtro más común
 operationSchema.index({ isActive: 1, serviceType: 1 });  // filtro de tipo
