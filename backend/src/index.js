@@ -57,7 +57,18 @@ const io = new Server(server, {
 
 connectDB();
 
-app.use(helmet({ contentSecurityPolicy: false }));
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrc: ["'self'"],
+      imgSrc: ["'self'", 'data:', 'https:'],
+      connectSrc: ["'self'", process.env.FRONTEND_URL || 'http://localhost:3000'],
+    },
+  },
+  hsts: { maxAge: 31536000, includeSubDomains: true },
+}));
 app.use(cors({
   origin: process.env.FRONTEND_URL || 'http://localhost:3000',
   credentials: true
@@ -65,10 +76,12 @@ app.use(cors({
 app.use(morgan('dev'));
 
 const webhookLimiter = rateLimit({ windowMs: 60000, max: 60, standardHeaders: true, legacyHeaders: false });
-const authLimiter = rateLimit({ windowMs: 15 * 60000, max: 20, standardHeaders: true, legacyHeaders: false });
+const authLimiter = rateLimit({ windowMs: 15 * 60000, max: 10, standardHeaders: true, legacyHeaders: false, skipSuccessfulRequests: true });
+const setupLimiter = rateLimit({ windowMs: 60 * 60000, max: 3, standardHeaders: true, legacyHeaders: false });
 app.use('/api/webhooks', webhookLimiter);
 app.use('/api/n8n',      webhookLimiter);
 app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/setup', setupLimiter);
 
 app.use('/api/webhooks', express.raw({ type: 'application/json' }));
 app.use(express.json({ limit: '10mb' }));
@@ -118,7 +131,7 @@ const jwt = require('jsonwebtoken');
 app.get('/api/cache/stats', (req, res) => {
   try {
     const token = req.headers.authorization?.split(' ')[1];
-    const user = jwt.verify(token, process.env.JWT_SECRET);
+    const user = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ['HS256'] });
     if (user.role !== 'admin') return res.status(403).json({ success: false });
     res.json({ success: true, data: cacheStats() });
   } catch { res.status(401).json({ success: false }); }
@@ -126,7 +139,7 @@ app.get('/api/cache/stats', (req, res) => {
 app.post('/api/cache/flush', (req, res) => {
   try {
     const token = req.headers.authorization?.split(' ')[1];
-    const user = jwt.verify(token, process.env.JWT_SECRET);
+    const user = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ['HS256'] });
     if (user.role !== 'admin') return res.status(403).json({ success: false });
     cacheFlush();
     res.json({ success: true, message: 'Cache vaciado' });
@@ -135,7 +148,11 @@ app.post('/api/cache/flush', (req, res) => {
 
 app.use((err, req, res, next) => {
   console.error(err.stack);
-  res.status(err.status || 500).json({ success: false, message: err.message || 'Error interno del servidor' });
+  const isDev = process.env.NODE_ENV !== 'production';
+  res.status(err.status || 500).json({
+    success: false,
+    message: isDev ? (err.message || 'Error interno del servidor') : 'Error interno del servidor',
+  });
 });
 
 setupSocketHandlers(io);

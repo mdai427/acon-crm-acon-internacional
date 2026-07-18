@@ -33,7 +33,10 @@ router.get('/', async (req, res) => {
     if (stage)    filter.stage = stage;
     if (source)   filter.source = source;
     if (priority) filter.priority = priority;
-    if (country)  filter.country = new RegExp(country, 'i');
+    if (country) {
+      const escapedCountry = country.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      filter.country = new RegExp(escapedCountry, 'i');
+    }
     if (services) filter.services = { $in: services.split(',') };
     if (minScore || maxScore) {
       filter.score = {};

@@ -13,7 +13,8 @@ router.get('/', async (req, res) => {
     const { q = '' } = req.query;
     if (q.trim().length < 2) return res.json({ success: true, data: { leads: [], operations: [], quotes: [] } });
 
-    const regex = new RegExp(q.trim(), 'i');
+    const escaped = q.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(escaped, 'i');
     const baseLeadFilter = { isActive: true };
     if (req.user.role === 'executive') baseLeadFilter.assignedTo = req.user._id;
 
