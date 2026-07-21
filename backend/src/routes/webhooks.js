@@ -180,4 +180,78 @@ router.post('/linkedin', express.json(), async (req, res) => {
   }
 });
 
+// ============================================
+// WHATSAPP META CLOUD API WEBHOOK
+// ============================================
+const { parseWebhookPayload, markRead } = require('../services/whatsappMetaService');
+const Activity = require('../models/Activity');
+
+// GET /api/webhooks/whatsapp — Meta webhook verification
+router.get('/whatsapp', (req, res) => {
+  const mode      = req.query['hub.mode'];
+  const token     = req.query['hub.verify_token'];
+  const challenge = req.query['hub.challenge'];
+  if (mode === 'subscribe' && token === process.env.WHATSAPP_VERIFY_TOKEN) {
+    console.log('✅ WhatsApp Cloud API Webhook verificado');
+    return res.status(200).send(challenge);
+  }
+  res.status(403).json({ error: 'Token de verificación inválido' });
+});
+
+// POST /api/webhooks/whatsapp — receive incoming WhatsApp messages
+router.post('/whatsapp', async (req, res) => {
+  try {
+    // Verify X-Hub-Signature-256 if APP_SECRET is set
+    const appSecret = process.env.WHATSAPP_APP_SECRET || process.env.META_APP_SECRET;
+    if (appSecret) {
+      const sig  = req.headers['x-hub-signature-256'];
+      const body = req.body; // raw buffer (set in index.js)
+      const expected = `sha256=${crypto.createHmac('sha256', appSecret).update(body).digest('hex')}`;
+      if (sig !== expected) {
+        console.warn('⚠️ WhatsApp webhook firma inválida');
+        return res.status(403).send('Invalid signature');
+      }
+    }
+
+    const payload = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+    const messages = parseWebhookPayload(payload);
+
+    for (const msg of messages) {
+      // Try to find lead by phone
+      const normalizedPhone = msg.from;
+      const lead = await Lead.findOne({
+        $or: [
+          { phone: { $regex: normalizedPhone.slice(-10), $options: 'i' } },
+          { whatsapp: { $regex: normalizedPhone.slice(-10), $options: 'i' } },
+        ],
+        isActive: true,
+      }).lean();
+
+      // Log as activity (even if no lead found — store as generic)
+      if (lead) {
+        await Activity.create({
+          lead:      lead._id,
+          type:      'whatsapp',
+          direction: 'inbound',
+          content:   msg.text || `[Mensaje ${msg.type}]`,
+          metadata:  { messageId: msg.messageId, from: msg.from, fromName: msg.fromName, type: msg.type },
+        });
+        // Update last contact date
+        await Lead.findByIdAndUpdate(lead._id, { lastContactDate: new Date() });
+      }
+
+      // Mark as read
+      markRead(msg.messageId).catch(() => {});
+
+      // Emit to connected clients
+      req.io?.emit('whatsapp_inbound', { ...msg, leadId: lead?._id });
+    }
+
+    res.status(200).json({ status: 'ok' });
+  } catch (error) {
+    console.error('[webhook/whatsapp]', error);
+    res.status(200).json({ status: 'ok' }); // always 200 to Meta
+  }
+});
+
 module.exports = router;

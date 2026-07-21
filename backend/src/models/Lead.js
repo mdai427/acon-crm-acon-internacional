@@ -58,10 +58,11 @@ const leadSchema = new mongoose.Schema({
   
   // ---- Archivos adjuntos ----
   attachments: [{
-    filename:    { type: String },
+    filename:    { type: String },   // S3 key or local filename
     originalName:{ type: String },
     mimetype:    { type: String },
     size:        { type: Number },
+    s3:          { type: Boolean, default: false }, // true = stored in S3
     uploadedBy:  { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     uploadedAt:  { type: Date, default: Date.now },
   }],

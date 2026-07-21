@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { getCatalog, createCatalogItem, updateCatalogItem, deleteCatalogItem, seedCatalog } from '../services/api';
+import { getCatalog, createCatalogItem, updateCatalogItem, deleteCatalogItem, seedCatalog, uploadCatalogImage, deleteCatalogImage } from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import { Plus, Search, Edit2, Trash2, BookOpen, Download } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, BookOpen, Download, Image } from 'lucide-react';
 
 const TYPE_LABELS = {
   puerto:         { label: 'Puertos',         emoji: '⚓' },
@@ -170,15 +170,30 @@ export default function CatalogPage({ toast }) {
                     {item.code || '—'}
                   </td>
                   <td style={{ padding: '10px 16px', fontWeight: 500, color: 'var(--text)' }}>
-                    {item.name}
-                    {item.extra?.descripcion && (
-                      <div style={{ fontSize: 11, color: 'var(--gray-400)', marginTop: 2 }}>{item.extra.descripcion}</div>
-                    )}
-                    {item.extra?.capacidadM3 && (
-                      <div style={{ fontSize: 11, color: 'var(--gray-400)', marginTop: 2 }}>
-                        {item.extra.teus} TEU · {item.extra.capacidadM3} m³
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      {item.imageUrl ? (
+                        <img src={item.imageUrl} alt={item.name} style={{ width: 32, height: 32, objectFit: 'contain', borderRadius: 4, border: '1px solid var(--border)' }} />
+                      ) : canEdit ? (
+                        <label title="Subir imagen" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, border: '1px dashed var(--border)', borderRadius: 4, color: 'var(--text3)' }}>
+                          <Image size={13} />
+                          <input type="file" accept="image/*" style={{ display: 'none' }} onChange={async e => {
+                            const file = e.target.files?.[0]; if (!file) return;
+                            try {
+                              await uploadCatalogImage(item._id, file);
+                              toast('Imagen subida', 'success');
+                              // Reload catalog items
+                              const r = await getCatalog({ type: activeType, search: search || undefined });
+                              setItems(r.data.data || []);
+                            } catch { toast('Error al subir imagen', 'error'); }
+                          }} />
+                        </label>
+                      ) : null}
+                      <div>
+                        {item.name}
+                        {item.extra?.descripcion && <div style={{ fontSize: 11, color: 'var(--gray-400)', marginTop: 2 }}>{item.extra.descripcion}</div>}
+                        {item.extra?.capacidadM3 && <div style={{ fontSize: 11, color: 'var(--gray-400)', marginTop: 2 }}>{item.extra.teus} TEU · {item.extra.capacidadM3} m³</div>}
                       </div>
-                    )}
+                    </div>
                   </td>
                   <td style={{ padding: '10px 16px', fontSize: 12, color: 'var(--text2)' }}>{item.country || '—'}</td>
                   <td style={{ padding: '10px 16px', fontSize: 12, color: 'var(--text2)' }}>{item.region || '—'}</td>

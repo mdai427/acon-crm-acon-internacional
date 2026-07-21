@@ -115,6 +115,8 @@ export const updateQuote = (id, data) => api.put(`/quotes/${id}`, data);
 export const deleteQuote = (id) => api.delete(`/quotes/${id}`);
 export const updateQuoteStatus = (id, status) => api.put(`/quotes/${id}/status`, { status });
 export const getQuoteVersions = (id) => api.get(`/quotes/${id}/versions`);
+export const downloadQuotePDF = (id) => api.get(`/quotes/${id}/pdf`, { responseType: 'blob' });
+export const suggestQuote = (data) => api.post('/quotes/suggest', data);
 
 // Follow-ups
 export const getFollowUps = () => api.get('/followups');
@@ -231,6 +233,11 @@ export const createCatalogItem = (data) => api.post('/catalog', data);
 export const updateCatalogItem = (id, data) => api.put(`/catalog/${id}`, data);
 export const deleteCatalogItem = (id) => api.delete(`/catalog/${id}`);
 export const seedCatalog = () => api.post('/catalog/seed');
+export const uploadCatalogImage = (id, file) => {
+  const fd = new FormData(); fd.append('image', file);
+  return api.post(`/catalog/${id}/image`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+};
+export const deleteCatalogImage = (id) => api.delete(`/catalog/${id}/image`);
 
 // Lead Attachments
 export const uploadLeadAttachment = (leadId, file) => {
@@ -239,6 +246,19 @@ export const uploadLeadAttachment = (leadId, file) => {
   return api.post(`/leads/${leadId}/attachments`, form, { headers: { 'Content-Type': 'multipart/form-data' } });
 };
 export const deleteLeadAttachment = (leadId, attId) => api.delete(`/leads/${leadId}/attachments/${attId}`);
+// Returns presigned URL for S3 files, or triggers direct download for local files
+export const downloadLeadAttachment = async (leadId, attId, originalName) => {
+  const r = await api.get(`/leads/${leadId}/attachments/${attId}/download`);
+  if (r.data?.url) {
+    // S3 presigned URL
+    const a = document.createElement('a');
+    a.href = r.data.url;
+    a.download = r.data.originalName || originalName;
+    a.target = '_blank';
+    a.click();
+  }
+  return r;
+};
 export const getLeadAttachmentUrl = (leadId, attId) => `${api.defaults.baseURL}/leads/${leadId}/attachments/${attId}/download`;
 
 // WhatsApp Sequences

@@ -5,58 +5,17 @@ const Lead = require('../models/Lead');
 const Activity = require('../models/Activity');
 const { auth } = require('../middleware/auth');
 const { processInboundMessage } = require('../services/aiAgent');
+const metaWA = require('../services/whatsappMetaService');
 
-// ============================================
-// SERVICIO WHATSAPP (Meta Cloud API)
-// ============================================
-const WA_API_URL = 'https://graph.facebook.com/v18.0';
-
+// ── Backward-compat wrapper uses new Meta service ─────────────────────────────
 const sendWhatsApp = async ({ to, message, templateName, templateParams, mediaUrl, mediaType }) => {
-  const phoneId = process.env.META_WA_PHONE_ID;
-  const token = process.env.META_WA_TOKEN;
-
-  let payload;
-
+  const phone = metaWA.normalizePhone(to) || to;
   if (templateName) {
-    // Mensaje por plantilla (para iniciar conversación)
-    payload = {
-      messaging_product: 'whatsapp',
-      to,
-      type: 'template',
-      template: {
-        name: templateName,
-        language: { code: 'es_MX' },
-        components: templateParams ? [{
-          type: 'body',
-          parameters: templateParams.map(p => ({ type: 'text', text: p }))
-        }] : []
-      }
-    };
-  } else if (mediaUrl) {
-    // Mensaje con medio (imagen, PDF, etc.)
-    payload = {
-      messaging_product: 'whatsapp',
-      to,
-      type: mediaType || 'image',
-      [mediaType || 'image']: { link: mediaUrl }
-    };
-  } else {
-    // Mensaje de texto simple
-    payload = {
-      messaging_product: 'whatsapp',
-      to,
-      type: 'text',
-      text: { body: message, preview_url: false }
-    };
+    const components = templateParams ? [{ type: 'body', parameters: templateParams.map(p => ({ type: 'text', text: p })) }] : [];
+    return metaWA.sendTemplate(phone, templateName, 'es_MX', components);
   }
-
-  const response = await axios.post(
-    `${WA_API_URL}/${phoneId}/messages`,
-    payload,
-    { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } }
-  );
-
-  return response.data;
+  if (mediaUrl) return metaWA.sendMedia(phone, mediaType || 'image', mediaUrl);
+  return metaWA.sendText(phone, message);
 };
 
 // ============================================
@@ -289,6 +248,75 @@ async function handleIncomingMessage(msg, contact, io) {
   // Procesar con agente IA (respuesta automatica si aplica)
   await processInboundMessage({ lead, message: text, channel: 'whatsapp', io });
 }
+
+// GET /api/whatsapp/meta/status — check if Meta Cloud API is configured
+router.get('/meta/status', auth, (req, res) => {
+  res.json({
+    success: true,
+    data: {
+      configured: metaWA.isConfigured(),
+      phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID ? '***' + process.env.WHATSAPP_PHONE_NUMBER_ID.slice(-4) : null,
+    },
+  });
+});
+
+// GET /api/whatsapp/meta/templates — list approved templates from Meta
+router.get('/meta/templates', auth, async (req, res) => {
+  try {
+    const templates = await metaWA.listTemplates();
+    res.json({ success: true, data: templates });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+});
+
+// POST /api/whatsapp/meta/send-text — send text via Meta Cloud API
+router.post('/meta/send-text', auth, async (req, res) => {
+  try {
+    const { to, message, leadId } = req.body;
+    if (!to || !message) return res.status(400).json({ success: false, message: 'Falta teléfono o mensaje' });
+
+    const result = await metaWA.sendText(to, message);
+
+    // Log activity if leadId provided
+    if (leadId) {
+      await Activity.create({
+        lead: leadId, user: req.user._id,
+        type: 'whatsapp', direction: 'outbound',
+        content: message,
+        metadata: { messageId: result.messages?.[0]?.id },
+      });
+      await Lead.findByIdAndUpdate(leadId, { lastContactDate: new Date() });
+    }
+
+    res.json({ success: true, data: result });
+  } catch (e) {
+    res.status(400).json({ success: false, message: e.message });
+  }
+});
+
+// POST /api/whatsapp/meta/send-template — send approved template
+router.post('/meta/send-template', auth, async (req, res) => {
+  try {
+    const { to, templateName, languageCode, components, leadId } = req.body;
+    if (!to || !templateName) return res.status(400).json({ success: false, message: 'Falta teléfono o template' });
+
+    const result = await metaWA.sendTemplate(to, templateName, languageCode || 'es_MX', components || []);
+
+    if (leadId) {
+      await Activity.create({
+        lead: leadId, user: req.user._id,
+        type: 'whatsapp', direction: 'outbound',
+        content: `[Plantilla: ${templateName}]`,
+        metadata: { template: templateName, messageId: result.messages?.[0]?.id },
+      });
+    }
+
+    res.json({ success: true, data: result });
+  } catch (e) {
+    res.status(400).json({ success: false, message: e.message });
+  }
+});
 
 module.exports = router;
 module.exports.sendWhatsApp = sendWhatsApp;

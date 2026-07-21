@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Upload, FileSpreadsheet, CheckCircle, AlertCircle, Download, Clock } from 'lucide-react';
-import { importLeads, getJob } from '../services/api';
+import { importLeads, getJob, createQuote, getLeads } from '../services/api';
 
 const REQUIRED_COLS = ['company', 'contact'];
 const COL_MAP = {
@@ -49,7 +49,32 @@ function parseXLSX(file) {
   });
 }
 
+const QUOTE_COL_MAP = {
+  folio: 'folio', 'tipo de servicio': 'serviceType', servicetype: 'serviceType',
+  cliente: 'clientName', clientname: 'clientName', empresa: 'clientName',
+  contacto: 'contactName', contactname: 'contactName',
+  email: 'clientEmail', clientemail: 'clientEmail',
+  telefono: 'clientPhone', phone: 'clientPhone',
+  origen: 'origin', origin: 'origin',
+  destino: 'destination', destination: 'destination',
+  incoterm: 'incoterm',
+  carrier: 'carrier', naviera: 'carrier',
+  mercancia: 'commodity', commodity: 'commodity',
+  'total usd': 'totalUSD', totalusd: 'totalUSD',
+  notas: 'notes', notes: 'notes',
+};
+
+const SERVICE_MAP = {
+  'maritimo fcl': 'maritimo_fcl', 'maritimo_fcl': 'maritimo_fcl', 'fcl': 'maritimo_fcl',
+  'maritimo lcl': 'maritimo_lcl', 'maritimo_lcl': 'maritimo_lcl', 'lcl': 'maritimo_lcl',
+  'aereo': 'aereo', 'aéreo': 'aereo',
+  'terrestre full': 'terrestre_full', 'full': 'terrestre_full',
+  'aduanal importacion': 'aduanal_importacion', 'aduanal_importacion': 'aduanal_importacion',
+  'aduanal exportacion': 'aduanal_exportacion', 'aduanal_exportacion': 'aduanal_exportacion',
+};
+
 export default function ImportPage({ toast, onNavigate }) {
+  const [importTab, setImportTab] = useState('leads'); // 'leads' | 'quotes'
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState([]);
   const [importing, setImporting] = useState(false);
@@ -153,16 +178,72 @@ export default function ImportPage({ toast, onNavigate }) {
     });
   };
 
+  const handleImportQuotes = async () => {
+    if (!file) return;
+    setImporting(true);
+    try {
+      const rows = await parseXLSX(file);
+      if (!rows.length) return toast('No hay filas válidas para importar', 'error');
+
+      // Map columns
+      const quotes = rows.map(raw => {
+        const q = {};
+        Object.entries(raw).forEach(([k, v]) => {
+          const key = QUOTE_COL_MAP[k.toLowerCase().trim()];
+          if (key) q[key] = String(v).trim();
+        });
+        // Normalize serviceType
+        if (q.serviceType) q.serviceType = SERVICE_MAP[q.serviceType.toLowerCase()] || 'maritimo_fcl';
+        if (!q.serviceType) q.serviceType = 'maritimo_fcl';
+        return q;
+      }).filter(q => q.clientName || q.folio);
+
+      let created = 0, errs = [];
+      for (const q of quotes) {
+        try { await createQuote(q); created++; }
+        catch (e) { errs.push(`${q.folio || q.clientName}: ${e.response?.data?.message || e.message}`); }
+      }
+
+      setResult({ created, skipped: rows.length - quotes.length, errors: errs });
+      toast(`${created} cotizaciones importadas`, 'success');
+    } catch (e) { toast(e.response?.data?.message || 'Error al importar', 'error'); }
+    finally { setImporting(false); }
+  };
+
+  const downloadQuoteTemplate = () => {
+    import('xlsx').then(XLSX => {
+      const ws = XLSX.utils.aoa_to_sheet([
+        ['folio','serviceType','clientName','contactName','clientEmail','clientPhone','origin','destination','incoterm','carrier','commodity','totalUSD','notes'],
+        ['COT-2024-0001','maritimo_fcl','ACME Corp','Juan Pérez','juan@acme.com','5551234567','Shanghai','Manzanillo','FOB','Maersk','Autopartes','5000','Urgente'],
+      ]);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Cotizaciones');
+      XLSX.writeFile(wb, 'plantilla_importacion_cotizaciones.xlsx');
+    });
+  };
+
   return (
     <div className="page">
       <div className="page-header">
         <div>
-          <h1 className="page-title">Importar Leads desde Excel</h1>
-          <p className="page-subtitle">Carga masiva de leads desde archivo .xlsx o .csv</p>
+          <h1 className="page-title">Importar desde Excel</h1>
+          <p className="page-subtitle">Carga masiva de leads o cotizaciones desde archivo .xlsx o .csv</p>
         </div>
-        <button className="btn btn-ghost" onClick={downloadTemplate}>
-          <Download size={15} /> Descargar plantilla
+        <button className="btn btn-ghost" onClick={importTab === 'leads' ? downloadTemplate : downloadQuoteTemplate}>
+          <Download size={15} /> Descargar plantilla {importTab === 'leads' ? 'leads' : 'cotizaciones'}
         </button>
+      </div>
+
+      {/* Tab switcher */}
+      <div style={{ display: 'flex', gap: 0, marginBottom: 20, borderBottom: '2px solid var(--border)' }}>
+        {[{ id: 'leads', label: '👥 Leads' }, { id: 'quotes', label: '📋 Cotizaciones' }].map(t => (
+          <button key={t.id} onClick={() => { setImportTab(t.id); setFile(null); setPreview([]); setResult(null); setErrors([]); }}
+            style={{ padding: '8px 20px', background: 'none', border: 'none', cursor: 'pointer', fontWeight: importTab === t.id ? 700 : 400,
+              borderBottom: importTab === t.id ? '2px solid var(--primary)' : '2px solid transparent',
+              color: importTab === t.id ? 'var(--primary)' : 'var(--text3)', fontSize: 13, marginBottom: -2 }}>
+            {t.label}
+          </button>
+        ))}
       </div>
 
       {/* Drop zone */}
@@ -259,8 +340,8 @@ export default function ImportPage({ toast, onNavigate }) {
               ))}
             </div>
           )}
-          <button className="btn btn-primary" style={{ marginTop: 12 }} onClick={() => onNavigate('leads')}>
-            Ver leads importados
+          <button className="btn btn-primary" style={{ marginTop: 12 }} onClick={() => onNavigate(importTab === 'quotes' ? 'quoter' : 'leads')}>
+            Ver {importTab === 'quotes' ? 'cotizaciones' : 'leads'} importados
           </button>
         </div>
       )}
@@ -268,10 +349,10 @@ export default function ImportPage({ toast, onNavigate }) {
       <div style={{ display: 'flex', gap: 12 }}>
         <button
           className="btn btn-primary"
-          onClick={handleImport}
+          onClick={importTab === 'leads' ? handleImport : handleImportQuotes}
           disabled={!file || importing}
         >
-          {importing ? <><div className="spinner" style={{ width: 14, height: 14 }} /> Importando...</> : <><Upload size={15} /> Importar leads</>}
+          {importing ? <><div className="spinner" style={{ width: 14, height: 14 }} /> Importando...</> : <><Upload size={15} /> Importar {importTab === 'leads' ? 'leads' : 'cotizaciones'}</>}
         </button>
         {file && !importing && (
           <button className="btn btn-ghost" onClick={() => { setFile(null); setPreview([]); setResult(null); setErrors([]); }}>

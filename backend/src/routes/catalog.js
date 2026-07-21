@@ -1,8 +1,22 @@
 const express = require('express');
 const router = express.Router();
+const multer = require('multer');
 const Catalog = require('../models/Catalog');
 const { auth } = require('../middleware/auth');
 const { checkPerm } = require('../middleware/auth');
+const { USE_S3, uploadBuffer, getPresignedUrl, deleteObject } = require('../services/s3Service');
+const path = require('path');
+const fs = require('fs');
+
+const IMG_UPLOAD_DIR = path.join(__dirname, '../../uploads/catalog');
+const imgUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
+  fileFilter: (_req, file, cb) => {
+    if (['image/jpeg','image/png','image/webp','image/gif','image/svg+xml'].includes(file.mimetype)) cb(null, true);
+    else cb(new Error('Solo se permiten imágenes'));
+  },
+});
 
 const VALID_TYPES = ['puerto', 'aduana', 'aeropuerto', 'naviera', 'aerolinea', 'transportista', 'incoterm', 'contenedor', 'ruta_frecuente', 'pais', 'ciudad'];
 
@@ -55,6 +69,53 @@ router.put('/:id', auth, checkPerm('catalog.edit'), async (req, res) => {
 router.delete('/:id', auth, checkPerm('catalog.edit'), async (req, res) => {
   try {
     await Catalog.findByIdAndUpdate(req.params.id, { isActive: false });
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+// POST /api/catalog/:id/image — upload image for catalog item
+router.post('/:id/image', auth, checkPerm('catalog.edit'), imgUpload.single('image'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ success: false, message: 'No se recibió imagen' });
+    const item = await Catalog.findById(req.params.id);
+    if (!item) return res.status(404).json({ success: false, message: 'Item no encontrado' });
+
+    const filename = `${Date.now()}-${req.file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+    let imageUrl;
+
+    if (USE_S3) {
+      const key = `catalog/${req.params.id}/${filename}`;
+      await uploadBuffer(req.file.buffer, key, req.file.mimetype);
+      imageUrl = await getPresignedUrl(key, 3600 * 24 * 365); // 1 year presigned (or use public bucket)
+      item.imageKey = key;
+    } else {
+      if (!fs.existsSync(IMG_UPLOAD_DIR)) fs.mkdirSync(IMG_UPLOAD_DIR, { recursive: true });
+      fs.writeFileSync(path.join(IMG_UPLOAD_DIR, filename), req.file.buffer);
+      imageUrl = `/uploads/catalog/${filename}`;
+      item.imageKey = filename;
+    }
+
+    item.imageUrl = imageUrl;
+    await item.save();
+    res.json({ success: true, data: { imageUrl } });
+  } catch (e) { res.status(400).json({ success: false, message: e.message }); }
+});
+
+// DELETE /api/catalog/:id/image — remove image
+router.delete('/:id/image', auth, checkPerm('catalog.edit'), async (req, res) => {
+  try {
+    const item = await Catalog.findById(req.params.id);
+    if (!item) return res.status(404).json({ success: false });
+    if (item.imageKey) {
+      if (USE_S3) await deleteObject(item.imageKey).catch(() => {});
+      else {
+        const fp = path.join(IMG_UPLOAD_DIR, item.imageKey);
+        if (fs.existsSync(fp)) fs.unlinkSync(fp);
+      }
+    }
+    item.imageUrl = undefined;
+    item.imageKey = undefined;
+    await item.save();
     res.json({ success: true });
   } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 });

@@ -9,6 +9,8 @@ const { invalidateLead } = require('../services/cache');
 const { enqueue } = require('../services/jobQueue');
 const { generateStageTasks, DEFAULT_PLAYBOOKS } = require('../services/aiTasks');
 const Playbook = require('../models/Playbook');
+const User = require('../models/User');
+const { notifyLeadAssigned } = require('../services/notificationService');
 
 // Todos los endpoints requieren autenticación
 router.use(auth);
@@ -191,6 +193,15 @@ router.post('/', async (req, res) => {
     // Notificar via socket al ejecutivo asignado
     req.io?.to(`user_${assignedTo}`).emit('new_lead', lead);
     invalidateLead(String(req.user._id), assignedTo ? String(assignedTo) : null);
+
+    // Notificación email + WhatsApp si fue asignado a alguien distinto al creador
+    if (assignedTo && String(assignedTo) !== String(req.user._id)) {
+      const assignee = await User.findById(assignedTo).select('name email phone').lean();
+      if (assignee) {
+        notifyLeadAssigned({ lead, assignee, io: req.io }).catch(() => {});
+      }
+    }
+
     res.status(201).json({ success: true, data: lead });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -288,6 +299,14 @@ router.put('/:id', async (req, res) => {
       }
     }
     audit({ req, action: 'update', entity: 'Lead', entityId: lead._id, entityLabel: lead.company, before, after }).catch(() => {});
+
+    // Notify new assignee if assignedTo changed
+    if (updates.assignedTo && String(updates.assignedTo) !== String(lead.assignedTo)) {
+      const assignee = await User.findById(updates.assignedTo).select('name email phone').lean();
+      if (assignee && String(updates.assignedTo) !== String(req.user._id)) {
+        notifyLeadAssigned({ lead: updated, assignee, io: req.io }).catch(() => {});
+      }
+    }
 
     req.io?.emit('lead_updated', updated);
     invalidateLead(String(req.user._id), updated.assignedTo ? String(updated.assignedTo._id || updated.assignedTo) : null);
@@ -417,30 +436,28 @@ router.post('/:id/create-stage-tasks', async (req, res) => {
   }
 });
 
-// ── File attachments ────────────────────────────────────────────
+// ── File attachments (S3 + local fallback) ──────────────────────
 const multer = require('multer');
 const path   = require('path');
 const fs     = require('fs');
+const { USE_S3, uploadBuffer, getPresignedUrl, deleteObject } = require('../services/s3Service');
 
 const UPLOAD_DIR = path.join(__dirname, '../../uploads/leads');
-if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+if (!USE_S3 && !fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
-  filename: (_req, file, cb) => {
-    const safe = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
-    cb(null, `${Date.now()}-${safe}`);
-  },
-});
+const ALLOWED_TYPES = [
+  'application/pdf','image/jpeg','image/png','image/gif',
+  'application/vnd.ms-excel','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/msword','application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'text/plain','text/csv',
+];
+
+// Always use memory storage — we either upload to S3 or write to disk manually
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 20 * 1024 * 1024 }, // 20 MB
   fileFilter: (_req, file, cb) => {
-    const ALLOWED = ['application/pdf','image/jpeg','image/png','image/gif',
-      'application/vnd.ms-excel','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'application/msword','application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      'text/plain','text/csv'];
-    if (ALLOWED.includes(file.mimetype)) cb(null, true);
+    if (ALLOWED_TYPES.includes(file.mimetype)) cb(null, true);
     else cb(new Error('Tipo de archivo no permitido'));
   },
 });
@@ -452,23 +469,36 @@ router.post('/:id/attachments', upload.single('file'), async (req, res) => {
     const lead = await Lead.findById(req.params.id);
     if (!lead) return res.status(404).json({ success: false, message: 'Lead no encontrado' });
 
+    const safe = req.file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const filename = `${Date.now()}-${safe}`;
+    let s3Key = null;
+
+    if (USE_S3) {
+      s3Key = `leads/${req.params.id}/${filename}`;
+      await uploadBuffer(req.file.buffer, s3Key, req.file.mimetype);
+    } else {
+      // Fallback: write to local disk
+      if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+      fs.writeFileSync(path.join(UPLOAD_DIR, filename), req.file.buffer);
+    }
+
     const att = {
-      filename:     req.file.filename,
+      filename:     s3Key || filename,   // S3 key or local filename
       originalName: req.file.originalname,
       mimetype:     req.file.mimetype,
       size:         req.file.size,
+      s3:           USE_S3,
       uploadedBy:   req.user._id,
       uploadedAt:   new Date(),
     };
     lead.attachments.push(att);
     await lead.save();
 
-    // Log activity
     await Activity.create({
       lead: lead._id, user: req.user._id,
       type: 'document', direction: 'internal',
       content: `Archivo adjunto: ${req.file.originalname}`,
-      metadata: { filename: req.file.filename, originalName: req.file.originalname, size: req.file.size },
+      metadata: { filename: att.filename, originalName: req.file.originalname, size: req.file.size },
     });
 
     res.json({ success: true, data: att });
@@ -480,13 +510,15 @@ router.delete('/:id/attachments/:attId', async (req, res) => {
   try {
     const lead = await Lead.findById(req.params.id);
     if (!lead) return res.status(404).json({ success: false, message: 'Lead no encontrado' });
-
     const att = lead.attachments.id(req.params.attId);
     if (!att) return res.status(404).json({ success: false, message: 'Archivo no encontrado' });
 
-    // Delete file from disk
-    const filePath = path.join(UPLOAD_DIR, att.filename);
-    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    if (att.s3) {
+      await deleteObject(att.filename).catch(() => {});
+    } else {
+      const filePath = path.join(UPLOAD_DIR, att.filename);
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    }
 
     att.deleteOne();
     await lead.save();
@@ -495,17 +527,21 @@ router.delete('/:id/attachments/:attId', async (req, res) => {
 });
 
 // GET /api/leads/:id/attachments/:attId/download
+// Returns presigned URL (S3) or streams file (local)
 router.get('/:id/attachments/:attId/download', async (req, res) => {
   try {
     const lead = await Lead.findById(req.params.id).lean();
     if (!lead) return res.status(404).json({ success: false });
-
     const att = lead.attachments.find(a => a._id.toString() === req.params.attId);
     if (!att) return res.status(404).json({ success: false });
 
+    if (att.s3) {
+      const url = await getPresignedUrl(att.filename, 900); // 15 min
+      return res.json({ success: true, url, originalName: att.originalName });
+    }
+
     const filePath = path.join(UPLOAD_DIR, att.filename);
     if (!fs.existsSync(filePath)) return res.status(404).json({ success: false, message: 'Archivo no encontrado en disco' });
-
     res.download(filePath, att.originalName);
   } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 });

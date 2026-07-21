@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { getQuotes, createQuote, updateQuoteStatus, deleteQuote, getLeads, getExchangeRate, refreshExchangeRate, setManualExchangeRate, requestQuoteApproval, reviewQuote, getQuoteVersions } from '../services/api';
+import { getQuotes, createQuote, updateQuoteStatus, deleteQuote, getLeads, getExchangeRate, refreshExchangeRate, setManualExchangeRate, requestQuoteApproval, reviewQuote, getQuoteVersions, downloadQuotePDF, suggestQuote } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import QuotePreviewModal from '../components/QuotePreviewModal';
 import {
   Calculator, Plus, FileDown, Trash2, Send, Check, X,
   Anchor, Plane, Truck, Warehouse, BadgeCheck, Search,
-  Eye, Copy, ChevronDown, ChevronUp, PlusCircle, MinusCircle, DollarSign, History
+  Eye, Copy, ChevronDown, ChevronUp, PlusCircle, MinusCircle, DollarSign, History, Sparkles
 } from 'lucide-react';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -136,6 +136,8 @@ export default function QuoterPage({ toast }) {
   const [dofLoading, setDofLoading] = useState(false);
   const [editingRate, setEditingRate] = useState(false);
   const [manualRateInput, setManualRateInput] = useState('');
+  const [aiSuggestion, setAiSuggestion] = useState(null);
+  const [aiLoading, setAiLoading] = useState(false);
 
   // Cargar tipo de cambio DOF al montar
   useEffect(() => {
@@ -289,6 +291,18 @@ export default function QuoterPage({ toast }) {
       toast('Cotización eliminada', 'success');
       load();
     } catch { toast('Error al eliminar', 'error'); }
+  };
+
+  const handleDownloadPDF = async (q) => {
+    try {
+      const r = await downloadQuotePDF(q._id);
+      const url = URL.createObjectURL(new Blob([r.data], { type: 'application/pdf' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${q.folio || 'cotizacion'}.pdf`;
+      a.click();
+      toast('PDF descargado', 'success');
+    } catch { toast('Error al generar PDF', 'error'); }
   };
 
   const [versionsModal, setVersionsModal] = useState(null); // { quoteId, folio, data }
@@ -479,6 +493,9 @@ export default function QuoterPage({ toast }) {
                               </button>
                             </>
                           )}
+                          <button className="btn btn-ghost btn-sm" title="Descargar PDF" onClick={() => handleDownloadPDF(q)} style={{ padding: '5px 8px', color: 'var(--primary)' }}>
+                            <FileDown size={13} />
+                          </button>
                           <button className="btn btn-ghost btn-sm" title="Historial de versiones" onClick={() => handleViewVersions(q)} style={{ padding: '5px 8px' }}>
                             <History size={13} />
                           </button>
@@ -577,6 +594,58 @@ export default function QuoterPage({ toast }) {
                   <input className="form-input" value={form.paymentTerms} onChange={e => f('paymentTerms', e.target.value)} />
                 </div>
               </div>
+
+              {/* ── IA Suggestion button ── */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>
+                <button type="button" className="btn btn-ghost btn-sm" style={{ color: '#7C3AED', borderColor: '#DDD6FE', background: '#F5F3FF' }}
+                  disabled={aiLoading}
+                  onClick={async () => {
+                    setAiLoading(true); setAiSuggestion(null);
+                    try {
+                      const r = await suggestQuote({ serviceType: form.serviceType, origin: form.origin, destination: form.destination, containerType: form.containerType, weight: form.weight, commodity: form.commodity });
+                      setAiSuggestion(r.data.data);
+                    } catch (e) { toast('Error al consultar IA', 'error'); }
+                    finally { setAiLoading(false); }
+                  }}>
+                  <Sparkles size={13} /> {aiLoading ? 'Consultando IA...' : 'Sugerir precio con IA'}
+                </button>
+              </div>
+
+              {/* IA Suggestion panel */}
+              {aiSuggestion && (
+                <div style={{ background: '#F5F3FF', border: '1px solid #DDD6FE', borderRadius: 10, padding: '14px 16px', marginBottom: 12 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: '#6D28D9', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <Sparkles size={14} /> Sugerencia IA {aiSuggestion.source === 'heuristic' ? '(heurística)' : ''}
+                    </div>
+                    <button onClick={() => setAiSuggestion(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF' }}><X size={14} /></button>
+                  </div>
+                  <div style={{ display: 'flex', gap: 20, marginTop: 10, flexWrap: 'wrap' }}>
+                    {aiSuggestion.suggestedPriceUSD && (
+                      <div>
+                        <div style={{ fontSize: 10, color: '#6D28D9', fontWeight: 600 }}>PRECIO SUGERIDO</div>
+                        <div style={{ fontSize: 20, fontWeight: 700, color: '#4C1D95' }}>${aiSuggestion.suggestedPriceUSD?.toLocaleString()} USD</div>
+                        {aiSuggestion.priceRangeMin && <div style={{ fontSize: 11, color: '#7C3AED' }}>${aiSuggestion.priceRangeMin?.toLocaleString()} – ${aiSuggestion.priceRangeMax?.toLocaleString()} USD</div>}
+                        <button style={{ marginTop: 6, fontSize: 11, background: '#7C3AED', color: '#fff', border: 'none', borderRadius: 5, padding: '3px 10px', cursor: 'pointer' }}
+                          onClick={() => {
+                            // Apply to first USD item if exists, else just note it
+                            toast(`Precio de referencia: $${aiSuggestion.suggestedPriceUSD?.toLocaleString()} USD`, 'info');
+                          }}>Usar este precio</button>
+                      </div>
+                    )}
+                    <div>
+                      {aiSuggestion.recommendedCarrier && <div style={{ fontSize: 12, color: '#374151' }}><strong>Carrier recomendado:</strong> {aiSuggestion.recommendedCarrier}</div>}
+                      {aiSuggestion.transitDays && <div style={{ fontSize: 12, color: '#374151' }}><strong>Tránsito estimado:</strong> {aiSuggestion.transitDays}</div>}
+                    </div>
+                  </div>
+                  {aiSuggestion.reasoning && <div style={{ fontSize: 12, color: '#4C1D95', marginTop: 8 }}>{aiSuggestion.reasoning}</div>}
+                  {aiSuggestion.tips?.length > 0 && (
+                    <ul style={{ margin: '8px 0 0', paddingLeft: 16 }}>
+                      {aiSuggestion.tips.map((t, i) => <li key={i} style={{ fontSize: 11, color: '#6D28D9' }}>{t}</li>)}
+                    </ul>
+                  )}
+                </div>
+              )}
 
               {/* ── Ruta principal ── */}
               <div className="form-row" style={{ gridTemplateColumns: '1fr 1fr 1fr 1fr' }}>
