@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import {
   getFollowUpRules, createFollowUpRule, updateFollowUpRule,
-  deleteFollowUpRule, getPendingFollowUps, executeFollowUpRule
+  deleteFollowUpRule, getPendingFollowUps, executeFollowUpRule,
+  getSequences, createSequence, updateSequence, deleteSequence,
+  enrollInSequence, getSequenceEnrollments, exitSequenceEnrollment,
 } from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import { Zap, Plus, Play, Trash2, ToggleLeft, ToggleRight, Clock, Users, AlertTriangle, X, ChevronRight, RefreshCw } from 'lucide-react';
+import { Zap, Plus, Play, Trash2, ToggleLeft, ToggleRight, Clock, Users, AlertTriangle, X, ChevronRight, RefreshCw, GitBranch, ArrowDown, MessageSquare, Mail, CheckSquare } from 'lucide-react';
 
 const TRIGGER_TYPES = [
   { id: 'days_inactive', label: 'Días sin contacto', Icon: Clock, desc: 'Se activa si un lead lleva N días sin ser contactado' },
@@ -93,27 +95,107 @@ function RuleCard({ rule, onToggle, onDelete, onExecute, executing }) {
   );
 }
 
+const EMPTY_SEQUENCE = {
+  name: '', description: '', isActive: true,
+  steps: [{ order: 0, delayHours: 0, channel: 'whatsapp', message: 'Hola {contacto}, soy de ACON Internacional. ¿Pudiste revisar nuestra propuesta para {empresa}?', skipIf: { type: 'none', stages: [] } }],
+  autoEnrollTrigger: { type: 'none', stages: [] },
+  cooldownDays: 7,
+};
+
+function SequenceStepEditor({ step, index, onChange, onDelete }) {
+  const CHANNELS = [{ v: 'whatsapp', label: '💬 WhatsApp' }, { v: 'email', label: '📧 Email' }, { v: 'task', label: '✅ Tarea' }];
+  const SKIP_TYPES = [{ v: 'none', label: 'Siempre enviar' }, { v: 'stage_is', label: 'Si etapa ES...' }, { v: 'stage_not', label: 'Si etapa NO ES...' }];
+  const STAGES = ['new','contacted','qualified','proposal','negotiation','closed_won','closed_lost'];
+
+  return (
+    <div style={{ border: '1px solid var(--border)', borderRadius: 10, padding: 14, background: 'var(--gray-50)', position: 'relative' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+        <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--text)' }}>Paso {index + 1}</div>
+        {index > 0 && (
+          <button className="btn btn-ghost btn-sm btn-icon" style={{ color: 'var(--red)' }} onClick={onDelete}><Trash2 size={12} /></button>
+        )}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+        <div>
+          <label style={{ fontSize: 11, color: 'var(--text3)', display: 'block', marginBottom: 4 }}>Canal</label>
+          <select className="form-select" value={step.channel} onChange={e => onChange('channel', e.target.value)}>
+            {CHANNELS.map(c => <option key={c.v} value={c.v}>{c.label}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={{ fontSize: 11, color: 'var(--text3)', display: 'block', marginBottom: 4 }}>
+            {index === 0 ? 'Retraso desde el enroll (horas)' : 'Retraso desde paso anterior (horas)'}
+          </label>
+          <input type="number" className="form-input" min={0} value={step.delayHours}
+            onChange={e => onChange('delayHours', Number(e.target.value))} />
+        </div>
+      </div>
+      <div style={{ marginBottom: 10 }}>
+        <label style={{ fontSize: 11, color: 'var(--text3)', display: 'block', marginBottom: 4 }}>
+          {step.channel === 'task' ? 'Descripción de la tarea' : 'Mensaje'}
+        </label>
+        <textarea className="form-input" rows={2} value={step.message}
+          onChange={e => onChange('message', e.target.value)}
+          placeholder="Variables: {empresa} {contacto} {etapa}" />
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+        <div>
+          <label style={{ fontSize: 11, color: 'var(--text3)', display: 'block', marginBottom: 4 }}>Condición para omitir paso</label>
+          <select className="form-select" value={step.skipIf?.type || 'none'}
+            onChange={e => onChange('skipIf', { ...step.skipIf, type: e.target.value, stages: [] })}>
+            {SKIP_TYPES.map(s => <option key={s.v} value={s.v}>{s.label}</option>)}
+          </select>
+        </div>
+        {step.skipIf?.type !== 'none' && (
+          <div>
+            <label style={{ fontSize: 11, color: 'var(--text3)', display: 'block', marginBottom: 4 }}>Etapas</label>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+              {STAGES.map(s => (
+                <button key={s} type="button"
+                  className={`btn btn-sm ${(step.skipIf?.stages || []).includes(s) ? 'btn-navy' : 'btn-ghost'}`}
+                  style={{ padding: '2px 8px', fontSize: 10 }}
+                  onClick={() => {
+                    const cur = step.skipIf?.stages || [];
+                    onChange('skipIf', { ...step.skipIf, stages: cur.includes(s) ? cur.filter(x => x !== s) : [...cur, s] });
+                  }}>{s}</button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function FollowUpsPage({ toast }) {
   const { user } = useAuth();
-  const isAdmin = user?.role === 'admin';
+  const isAdmin = ['admin', 'gerencia', 'direccion'].includes(user?.role);
 
   const [rules, setRules] = useState([]);
   const [pending, setPending] = useState([]);
+  const [sequences, setSequences] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [showSeqModal, setShowSeqModal] = useState(false);
+  const [seqForm, setSeqForm] = useState(EMPTY_SEQUENCE);
+  const [editingSeq, setEditingSeq] = useState(null);
   const [form, setForm] = useState(EMPTY_RULE);
   const [saving, setSaving] = useState(false);
   const [executing, setExecuting] = useState(null);
   const [tab, setTab] = useState('rules');
+  const [viewEnrollSeq, setViewEnrollSeq] = useState(null);
+  const [enrollments, setEnrollments] = useState([]);
 
   const load = () => {
     setLoading(true);
     Promise.all([
       getFollowUpRules(),
       getPendingFollowUps(),
-    ]).then(([r, p]) => {
+      getSequences(),
+    ]).then(([r, p, s]) => {
       setRules(r.data.data || []);
       setPending(p.data.data || []);
+      setSequences(s.data.data || []);
     }).catch(() => toast('Error al cargar', 'error'))
       .finally(() => setLoading(false));
   };
@@ -182,6 +264,56 @@ export default function FollowUpsPage({ toast }) {
     } finally { setExecuting(null); }
   };
 
+  // Sequence handlers
+  const handleSaveSequence = async () => {
+    if (!seqForm.name) return toast('El nombre es requerido', 'error');
+    setSaving(true);
+    try {
+      if (editingSeq) {
+        await updateSequence(editingSeq, seqForm);
+        toast('Secuencia actualizada', 'success');
+      } else {
+        await createSequence(seqForm);
+        toast('Secuencia creada', 'success');
+      }
+      setShowSeqModal(false);
+      setEditingSeq(null);
+      setSeqForm(EMPTY_SEQUENCE);
+      load();
+    } catch (e) { toast(e.response?.data?.message || 'Error', 'error'); }
+    finally { setSaving(false); }
+  };
+
+  const handleDeleteSequence = async (id) => {
+    if (!window.confirm('¿Eliminar esta secuencia?')) return;
+    try { await deleteSequence(id); toast('Eliminada', 'success'); load(); }
+    catch { toast('Error', 'error'); }
+  };
+
+  const handleViewEnrollments = async (seq) => {
+    setViewEnrollSeq(seq);
+    try {
+      const r = await getSequenceEnrollments(seq._id);
+      setEnrollments(r.data.data || []);
+    } catch { setEnrollments([]); }
+  };
+
+  const addStep = () => {
+    const steps = [...seqForm.steps];
+    steps.push({ order: steps.length, delayHours: 48, channel: 'whatsapp', message: '', skipIf: { type: 'none', stages: [] } });
+    setSeqForm(f => ({ ...f, steps }));
+  };
+
+  const updateStep = (idx, key, val) => {
+    const steps = seqForm.steps.map((s, i) => i === idx ? { ...s, [key]: val } : s);
+    setSeqForm(f => ({ ...f, steps }));
+  };
+
+  const removeStep = (idx) => {
+    const steps = seqForm.steps.filter((_, i) => i !== idx).map((s, i) => ({ ...s, order: i }));
+    setSeqForm(f => ({ ...f, steps }));
+  };
+
   const activeRules = rules.filter(r => r.isActive).length;
   const totalPending = pending.reduce((s, p) => s + p.leads.length, 0);
 
@@ -220,7 +352,11 @@ export default function FollowUpsPage({ toast }) {
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 0, marginBottom: 16, borderBottom: '1px solid var(--gray-200)' }}>
-        {[{ id: 'rules', label: 'Reglas' }, { id: 'pending', label: `Pendientes (${totalPending})` }].map(t => (
+        {[
+          { id: 'rules', label: 'Reglas Simples' },
+          { id: 'sequences', label: `Secuencias (${sequences.length})` },
+          { id: 'pending', label: `Pendientes (${totalPending})` },
+        ].map(t => (
           <button key={t.id} onClick={() => setTab(t.id)} style={{
             padding: '8px 18px', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600,
             background: 'transparent', color: tab === t.id ? 'var(--navy-900)' : 'var(--gray-400)',
@@ -245,6 +381,159 @@ export default function FollowUpsPage({ toast }) {
             <RuleCard key={rule._id} rule={rule} onToggle={handleToggle} onDelete={handleDelete} onExecute={handleExecute} executing={executing} />
           ))
         )
+      )}
+
+      {/* ── SECUENCIAS ── */}
+      {tab === 'sequences' && (
+        <div>
+          {isAdmin && (
+            <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'flex-end' }}>
+              <button className="btn btn-primary" onClick={() => { setEditingSeq(null); setSeqForm(EMPTY_SEQUENCE); setShowSeqModal(true); }}>
+                <Plus size={14} /> Nueva Secuencia
+              </button>
+            </div>
+          )}
+          {sequences.length === 0 ? (
+            <div className="card"><div className="empty-state"><GitBranch size={44} /><p>No hay secuencias configuradas. Crea una para automatizar flujos multi-paso.</p></div></div>
+          ) : sequences.map(seq => (
+            <div key={seq._id} className="card" style={{ marginBottom: 12, borderLeft: `4px solid ${seq.isActive ? 'var(--blue)' : 'var(--gray-200)'}` }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--text)', marginBottom: 4 }}>{seq.name}</div>
+                  {seq.description && <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 8 }}>{seq.description}</div>}
+                  {/* Step preview */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+                    {(seq.steps || []).sort((a,b)=>a.order-b.order).map((step, i) => (
+                      <React.Fragment key={i}>
+                        <span style={{ fontSize: 11, background: 'var(--gray-100)', padding: '2px 8px', borderRadius: 12, color: 'var(--text2)', fontWeight: 500 }}>
+                          {step.channel === 'whatsapp' ? '💬' : step.channel === 'email' ? '📧' : '✅'} +{step.delayHours}h
+                        </span>
+                        {i < (seq.steps.length - 1) && <ChevronRight size={12} style={{ color: 'var(--text3)', flexShrink: 0 }} />}
+                      </React.Fragment>
+                    ))}
+                  </div>
+                  <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text3)' }}>
+                    {seq.steps?.length} pasos · cooldown {seq.cooldownDays}d
+                    {seq.autoEnrollTrigger?.type !== 'none' && ` · Auto-enroll: ${seq.autoEnrollTrigger.type}`}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button className="btn btn-ghost btn-sm" onClick={() => handleViewEnrollments(seq)}>
+                    <Users size={13} /> Enrollments
+                  </button>
+                  {isAdmin && <>
+                    <button className="btn btn-ghost btn-sm" onClick={() => { setEditingSeq(seq._id); setSeqForm({ name: seq.name, description: seq.description || '', isActive: seq.isActive, steps: seq.steps, autoEnrollTrigger: seq.autoEnrollTrigger || EMPTY_SEQUENCE.autoEnrollTrigger, cooldownDays: seq.cooldownDays }); setShowSeqModal(true); }}>Editar</button>
+                    <button className="btn btn-ghost btn-sm" style={{ color: 'var(--red)' }} onClick={() => handleDeleteSequence(seq._id)}><Trash2 size={13} /></button>
+                  </>}
+                </div>
+              </div>
+            </div>
+          ))}
+
+          {/* Enrollments drawer */}
+          {viewEnrollSeq && (
+            <div className="modal-overlay" onClick={() => setViewEnrollSeq(null)}>
+              <div className="modal" style={{ maxWidth: 640 }} onClick={e => e.stopPropagation()}>
+                <div className="modal-header">
+                  <div className="modal-title">Enrollments — {viewEnrollSeq.name}</div>
+                  <button className="modal-close" onClick={() => setViewEnrollSeq(null)}><X size={16} /></button>
+                </div>
+                {enrollments.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: 30, color: 'var(--text3)' }}>Sin leads enrolados aún</div>
+                ) : (
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                    <thead>
+                      <tr style={{ background: 'var(--gray-50)', borderBottom: '1px solid var(--border)' }}>
+                        {['Lead', 'Estado', 'Paso', 'Próxima ejecución', 'Enrolado por', ''].map(h => (
+                          <th key={h} style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text3)', fontWeight: 600 }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {enrollments.map(en => (
+                        <tr key={en._id} style={{ borderBottom: '1px solid var(--border)' }}>
+                          <td style={{ padding: '8px 12px', fontWeight: 600 }}>{en.lead?.company || '—'}</td>
+                          <td style={{ padding: '8px 12px' }}>
+                            <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 12, fontWeight: 600,
+                              background: en.status === 'active' ? '#DCFCE7' : en.status === 'completed' ? '#DBEAFE' : '#F4F5F7',
+                              color: en.status === 'active' ? '#16A34A' : en.status === 'completed' ? '#1D4ED8' : '#9AA3AE' }}>
+                              {en.status}
+                            </span>
+                          </td>
+                          <td style={{ padding: '8px 12px', color: 'var(--text2)' }}>{en.currentStep + 1}/{viewEnrollSeq.steps?.length}</td>
+                          <td style={{ padding: '8px 12px', color: 'var(--text3)' }}>{en.nextRunAt ? new Date(en.nextRunAt).toLocaleString('es-MX', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'}</td>
+                          <td style={{ padding: '8px 12px', color: 'var(--text3)' }}>{en.enrolledBy?.name || '—'}</td>
+                          <td style={{ padding: '8px 12px' }}>
+                            {en.status === 'active' && (
+                              <button className="btn btn-ghost btn-sm" style={{ fontSize: 10 }}
+                                onClick={async () => { await exitSequenceEnrollment(en._id, 'Manual'); handleViewEnrollments(viewEnrollSeq); }}>
+                                Salir
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Sequence builder modal */}
+          {showSeqModal && (
+            <div className="modal-overlay" onClick={() => setShowSeqModal(false)}>
+              <div className="modal" style={{ maxWidth: 640, maxHeight: '90vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+                <div className="modal-header">
+                  <div className="modal-title"><GitBranch size={16} style={{ color: 'var(--blue)' }} /> {editingSeq ? 'Editar Secuencia' : 'Nueva Secuencia'}</div>
+                  <button className="modal-close" onClick={() => setShowSeqModal(false)}><X size={16} /></button>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Nombre *</label>
+                  <input className="form-input" value={seqForm.name} onChange={e => setSeqForm(f => ({ ...f, name: e.target.value }))} placeholder="Ej: Seguimiento post-propuesta 4 pasos" />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Descripción</label>
+                  <input className="form-input" value={seqForm.description} onChange={e => setSeqForm(f => ({ ...f, description: e.target.value }))} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Cooldown (días mínimo entre enrollments del mismo lead)</label>
+                  <input type="number" className="form-input" style={{ maxWidth: 100 }} value={seqForm.cooldownDays}
+                    onChange={e => setSeqForm(f => ({ ...f, cooldownDays: Number(e.target.value) }))} min={1} />
+                </div>
+
+                <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--text)', margin: '16px 0 12px' }}>Pasos de la secuencia</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {seqForm.steps.sort((a,b) => a.order - b.order).map((step, i) => (
+                    <React.Fragment key={i}>
+                      <SequenceStepEditor
+                        step={step} index={i}
+                        onChange={(key, val) => updateStep(i, key, val)}
+                        onDelete={() => removeStep(i)}
+                      />
+                      {i < seqForm.steps.length - 1 && (
+                        <div style={{ display: 'flex', justifyContent: 'center' }}>
+                          <ArrowDown size={16} style={{ color: 'var(--text3)' }} />
+                        </div>
+                      )}
+                    </React.Fragment>
+                  ))}
+                </div>
+                <button className="btn btn-ghost btn-sm" style={{ marginTop: 12, width: '100%' }} onClick={addStep}>
+                  <Plus size={13} /> Agregar paso
+                </button>
+
+                <div className="modal-actions" style={{ marginTop: 20 }}>
+                  <button className="btn btn-ghost" onClick={() => setShowSeqModal(false)}>Cancelar</button>
+                  <button className="btn btn-primary" onClick={handleSaveSequence} disabled={saving}>
+                    {saving ? 'Guardando...' : editingSeq ? 'Actualizar' : 'Crear Secuencia'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       )}
 
       {/* ── PENDIENTES ── */}

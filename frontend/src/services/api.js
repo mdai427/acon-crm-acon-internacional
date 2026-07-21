@@ -234,3 +234,12 @@ export const uploadLeadAttachment = (leadId, file) => {
 };
 export const deleteLeadAttachment = (leadId, attId) => api.delete(`/leads/${leadId}/attachments/${attId}`);
 export const getLeadAttachmentUrl = (leadId, attId) => `${api.defaults.baseURL}/leads/${leadId}/attachments/${attId}/download`;
+
+// WhatsApp Sequences
+export const getSequences = () => api.get('/sequences');
+export const createSequence = (data) => api.post('/sequences', data);
+export const updateSequence = (id, data) => api.put(`/sequences/${id}`, data);
+export const deleteSequence = (id) => api.delete(`/sequences/${id}`);
+export const enrollInSequence = (id, data) => api.post(`/sequences/${id}/enroll`, data);
+export const getSequenceEnrollments = (id) => api.get(`/sequences/${id}/enrollments`);
+export const exitSequenceEnrollment = (enrollId, reason) => api.post(`/sequences/enrollments/${enrollId}/exit`, { reason });

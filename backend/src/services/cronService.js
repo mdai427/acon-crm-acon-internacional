@@ -277,6 +277,57 @@ const startCronJobs = (io) => {
   // Ejecutar inmediatamente al iniciar el servidor (carga inicial)
   fetchAndSaveRate().catch(err => console.warn('[DOF] Carga inicial:', err.message));
 
+  // ============================================
+  // JOB 8: Procesar pasos de secuencias WA — cada 30 min
+  // ============================================
+  new CronJob('*/30 * * * *', async () => {
+    console.log('⏰ Cron: Procesando secuencias WhatsApp...');
+    try {
+      const SequenceEnrollment = require('../models/SequenceEnrollment');
+      const Sequence = require('../models/Sequence');
+      const now = new Date();
+      const due = await SequenceEnrollment.find({ status: 'active', nextRunAt: { $lte: now } })
+        .populate({ path: 'sequence', select: 'steps cooldownDays' })
+        .populate({ path: 'lead', select: 'company contact whatsapp email stage' })
+        .limit(200);
+
+      let processed = 0;
+      for (const enroll of due) {
+        try {
+          const seq = enroll.sequence;
+          if (!seq) { await SequenceEnrollment.findByIdAndUpdate(enroll._id, { status: 'exited', exitReason: 'Sequence deleted' }); continue; }
+          const steps = seq.steps.sort((a, b) => a.order - b.order);
+          const step = steps[enroll.currentStep];
+          if (!step) { await SequenceEnrollment.findByIdAndUpdate(enroll._id, { status: 'completed' }); continue; }
+
+          const contact = typeof enroll.lead.contact === 'object' ? enroll.lead.contact?.name : enroll.lead.contact;
+          const message = (step.message || '').replace('{empresa}', enroll.lead.company || '').replace('{contacto}', contact || '').replace('{etapa}', enroll.lead.stage || '');
+
+          let shouldSkip = false;
+          if (step.skipIf?.type === 'stage_is') shouldSkip = step.skipIf.stages?.includes(enroll.lead?.stage);
+          else if (step.skipIf?.type === 'stage_not') shouldSkip = !step.skipIf.stages?.includes(enroll.lead?.stage);
+
+          if (!shouldSkip && message) {
+            const actType = step.channel === 'task' ? 'task' : step.channel === 'email' ? 'email_out' : 'whatsapp_out';
+            const act = { lead: enroll.lead._id, type: actType, direction: step.channel === 'task' ? 'internal' : 'outbound', isAuto: true, content: message };
+            if (step.channel === 'task') act.taskData = { completed: false, dueDate: new Date(Date.now() + 24 * 3600000) };
+            await Activity.create(act);
+          }
+
+          const nextIdx = enroll.currentStep + 1;
+          const nextStep = steps[nextIdx];
+          await SequenceEnrollment.findByIdAndUpdate(enroll._id, {
+            currentStep: nextIdx, status: nextStep ? 'active' : 'completed',
+            nextRunAt: nextStep ? new Date(Date.now() + (nextStep.delayHours || 24) * 3600000) : null,
+            $push: { log: { step: enroll.currentStep, executedAt: now, channel: step.channel, result: shouldSkip ? 'skipped' : 'sent' } },
+          });
+          processed++;
+        } catch (err) { console.error('[Seq] step error:', err.message); }
+      }
+      if (processed > 0) console.log(`✅ Secuencias: ${processed} pasos ejecutados`);
+    } catch (err) { console.error('Cron sequences error:', err.message); }
+  }, null, true, 'America/Mexico_City');
+
   console.log('✅ Cron jobs iniciados (zona: Mexico City)');
 };
 
