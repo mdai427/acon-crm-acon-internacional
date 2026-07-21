@@ -4,6 +4,7 @@ const Quote = require('../models/Quote');
 const Lead  = require('../models/Lead');
 const Activity = require('../models/Activity');
 const { auth, adminOnly } = require('../middleware/auth');
+const { audit } = require('../services/auditService');
 
 // GET /api/quotes
 router.get('/', auth, async (req, res) => {
@@ -180,6 +181,7 @@ router.post('/:id/review', auth, async (req, res) => {
       });
     }
 
+    audit({ req, action: 'approve', entity: 'Quote', entityId: quote._id, entityLabel: quote.folio, meta: { decision, comments } }).catch(() => {});
     res.json({ success: true, data: quote, message: `Cotización ${decision === 'approved' ? 'aprobada' : 'rechazada'}` });
   } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 });

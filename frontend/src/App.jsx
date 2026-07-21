@@ -25,6 +25,7 @@ import CommissionsPage from './pages/CommissionsPage';
 import PermissionsPage from './pages/PermissionsPage';
 import CatalogPage from './pages/CatalogPage';
 import DireccionPage from './pages/DireccionPage';
+import AuditPage from './pages/AuditPage';
 import CopilotDrawer from './components/CopilotDrawer';
 import { useIdleLogout } from './hooks/useIdleLogout';
 import { globalSearch, getNotifications } from './services/api';
@@ -33,7 +34,7 @@ import {
   BarChart3, Settings, Plug, Package, UserPlus,
   Calculator, Zap, LogOut, Bell, FileText, Upload,
   Megaphone, HeartHandshake, Menu, X, ChevronRight, Sparkles, DollarSign,
-  Search, AlertTriangle, Clock, Building2, Moon, Sun, Shield, BookOpen, TrendingUp
+  Search, AlertTriangle, Clock, Building2, Moon, Sun, Shield, BookOpen, TrendingUp, FileSearch
 } from 'lucide-react';
 
 const NAV = [
@@ -55,6 +56,7 @@ const NAV = [
   { id: 'users',        label: 'Usuarios',          Icon: UserPlus,        section: 'config',    mobile: false },
   { id: 'permissions',  label: 'Permisos',          Icon: Shield,          section: 'config',    mobile: false },
   { id: 'catalog',     label: 'Catálogo',           Icon: BookOpen,        section: 'config',    mobile: false },
+  { id: 'audit',       label: 'Auditoría',          Icon: FileSearch,      section: 'config',    mobile: false },
   { id: 'config',       label: 'Configuración',     Icon: Settings,        section: 'config',    mobile: false },
   { id: 'integrations', label: 'Integraciones',     Icon: Plug,            section: 'config',    mobile: false },
 ];
@@ -413,6 +415,7 @@ function CRMApp() {
           {page === 'permissions'  && <PermissionsPage toast={toast} />}
           {page === 'catalog'      && <CatalogPage toast={toast} />}
           {page === 'direccion'    && <DireccionPage toast={toast} onSelectLead={handleSelectLead} />}
+          {page === 'audit'        && <AuditPage toast={toast} />}
         </div>
       </div>
 

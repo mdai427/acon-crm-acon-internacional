@@ -246,3 +246,8 @@ export const exitSequenceEnrollment = (enrollId, reason) => api.post(`/sequences
 
 // Direccion Dashboard
 export const getDireccionReport = () => api.get('/reports/direccion');
+
+// Audit Log
+export const getAuditLogs = (params) => api.get('/audit', { params });
+export const getAuditEntities = () => api.get('/audit/entities');
+export const getRecordAudit = (entityId) => api.get(`/audit/record/${entityId}`);

@@ -3,6 +3,7 @@ const router = express.Router();
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const { auth, adminOnly } = require('../middleware/auth');
+const { audit } = require('../services/auditService');
 
 // POST /api/auth/login
 router.post('/login', async (req, res) => {
@@ -18,6 +19,7 @@ router.post('/login', async (req, res) => {
     }
 
     await User.findByIdAndUpdate(user._id, { lastLogin: new Date() });
+    audit({ req, action: 'login', entity: 'User', entityId: user._id, entityLabel: user.email }).catch(() => {});
 
     const token = jwt.sign(
       { id: user._id, role: user.role },

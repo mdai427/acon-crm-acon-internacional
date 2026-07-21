@@ -3,6 +3,7 @@ const router = express.Router();
 const Lead = require('../models/Lead');
 const Activity = require('../models/Activity');
 const { auth, adminOnly } = require('../middleware/auth');
+const { audit } = require('../services/auditService');
 const { scoreLeadWithAI } = require('../services/aiAgent');
 const { invalidateLead } = require('../services/cache');
 const { enqueue } = require('../services/jobQueue');
@@ -276,6 +277,18 @@ router.put('/:id', async (req, res) => {
       });
     }
 
+    // Audit log
+    const TRACKED = ['stage', 'value', 'priority', 'assignedTo', 'notes', 'isActive'];
+    const before = {};
+    const after  = {};
+    for (const key of TRACKED) {
+      if (key in updates) {
+        before[key] = lead[key];
+        after[key]  = updated[key];
+      }
+    }
+    audit({ req, action: 'update', entity: 'Lead', entityId: lead._id, entityLabel: lead.company, before, after }).catch(() => {});
+
     req.io?.emit('lead_updated', updated);
     invalidateLead(String(req.user._id), updated.assignedTo ? String(updated.assignedTo._id || updated.assignedTo) : null);
     res.json({ success: true, data: updated });
@@ -287,7 +300,9 @@ router.put('/:id', async (req, res) => {
 // DELETE /api/leads/:id (soft delete)
 router.delete('/:id', async (req, res) => {
   try {
+    const lead = await Lead.findById(req.params.id).select('company').lean();
     await Lead.findByIdAndUpdate(req.params.id, { isActive: false });
+    audit({ req, action: 'delete', entity: 'Lead', entityId: req.params.id, entityLabel: lead?.company }).catch(() => {});
     invalidateLead(String(req.user._id));
     res.json({ success: true, message: 'Lead archivado' });
   } catch (error) {
