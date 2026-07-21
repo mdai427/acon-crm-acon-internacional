@@ -402,4 +402,97 @@ router.post('/:id/create-stage-tasks', async (req, res) => {
   }
 });
 
+// ── File attachments ────────────────────────────────────────────
+const multer = require('multer');
+const path   = require('path');
+const fs     = require('fs');
+
+const UPLOAD_DIR = path.join(__dirname, '../../uploads/leads');
+if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+
+const storage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
+  filename: (_req, file, cb) => {
+    const safe = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
+    cb(null, `${Date.now()}-${safe}`);
+  },
+});
+const upload = multer({
+  storage,
+  limits: { fileSize: 20 * 1024 * 1024 }, // 20 MB
+  fileFilter: (_req, file, cb) => {
+    const ALLOWED = ['application/pdf','image/jpeg','image/png','image/gif',
+      'application/vnd.ms-excel','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/msword','application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'text/plain','text/csv'];
+    if (ALLOWED.includes(file.mimetype)) cb(null, true);
+    else cb(new Error('Tipo de archivo no permitido'));
+  },
+});
+
+// POST /api/leads/:id/attachments
+router.post('/:id/attachments', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ success: false, message: 'No se recibió archivo' });
+    const lead = await Lead.findById(req.params.id);
+    if (!lead) return res.status(404).json({ success: false, message: 'Lead no encontrado' });
+
+    const att = {
+      filename:     req.file.filename,
+      originalName: req.file.originalname,
+      mimetype:     req.file.mimetype,
+      size:         req.file.size,
+      uploadedBy:   req.user._id,
+      uploadedAt:   new Date(),
+    };
+    lead.attachments.push(att);
+    await lead.save();
+
+    // Log activity
+    await Activity.create({
+      lead: lead._id, user: req.user._id,
+      type: 'document', direction: 'internal',
+      content: `Archivo adjunto: ${req.file.originalname}`,
+      metadata: { filename: req.file.filename, originalName: req.file.originalname, size: req.file.size },
+    });
+
+    res.json({ success: true, data: att });
+  } catch (e) { res.status(400).json({ success: false, message: e.message }); }
+});
+
+// DELETE /api/leads/:id/attachments/:attId
+router.delete('/:id/attachments/:attId', async (req, res) => {
+  try {
+    const lead = await Lead.findById(req.params.id);
+    if (!lead) return res.status(404).json({ success: false, message: 'Lead no encontrado' });
+
+    const att = lead.attachments.id(req.params.attId);
+    if (!att) return res.status(404).json({ success: false, message: 'Archivo no encontrado' });
+
+    // Delete file from disk
+    const filePath = path.join(UPLOAD_DIR, att.filename);
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+
+    att.deleteOne();
+    await lead.save();
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+// GET /api/leads/:id/attachments/:attId/download
+router.get('/:id/attachments/:attId/download', async (req, res) => {
+  try {
+    const lead = await Lead.findById(req.params.id).lean();
+    if (!lead) return res.status(404).json({ success: false });
+
+    const att = lead.attachments.find(a => a._id.toString() === req.params.attId);
+    if (!att) return res.status(404).json({ success: false });
+
+    const filePath = path.join(UPLOAD_DIR, att.filename);
+    if (!fs.existsSync(filePath)) return res.status(404).json({ success: false, message: 'Archivo no encontrado en disco' });
+
+    res.download(filePath, att.originalName);
+  } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
 module.exports = router;

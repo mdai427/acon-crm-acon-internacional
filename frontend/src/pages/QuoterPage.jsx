@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { getQuotes, createQuote, updateQuoteStatus, deleteQuote, getLeads } from '../services/api';
+import { getQuotes, createQuote, updateQuoteStatus, deleteQuote, getLeads, getExchangeRate, refreshExchangeRate, setManualExchangeRate, requestQuoteApproval, reviewQuote } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import QuotePreviewModal from '../components/QuotePreviewModal';
 import {
   Calculator, Plus, FileDown, Trash2, Send, Check, X,
   Anchor, Plane, Truck, Warehouse, BadgeCheck, Search,
-  Eye, Copy, ChevronDown, ChevronUp, PlusCircle, MinusCircle
+  Eye, Copy, ChevronDown, ChevronUp, PlusCircle, MinusCircle, DollarSign
 } from 'lucide-react';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -81,11 +81,14 @@ const DEFAULT_ITEMS = {
 const INCOTERMS = ['EXW','FCA','FAS','FOB','CFR','CIF','CPT','CIP','DAP','DPU','DDP'];
 
 const STATUS_MAP = {
-  draft:    { label: 'Borrador',  bg: '#F4F5F7', color: '#5A6472' },
-  sent:     { label: 'Enviada',   bg: '#DBEAFE', color: '#2563EB' },
-  accepted: { label: 'Aceptada', bg: '#DCFCE7', color: '#16A34A' },
-  rejected: { label: 'Rechazada',bg: '#FEE2E2', color: '#DC2626' },
-  expired:  { label: 'Vencida',  bg: '#F4F5F7', color: '#9AA3AE' },
+  draft:              { label: 'Borrador',          bg: '#F4F5F7', color: '#5A6472' },
+  pending_approval:   { label: 'En revisión',       bg: '#FEF9C3', color: '#CA8A04' },
+  approved:           { label: 'Aprobada',          bg: '#DCFCE7', color: '#16A34A' },
+  rejected_approval:  { label: 'Rechazada por ger.',bg: '#FEE2E2', color: '#DC2626' },
+  sent:               { label: 'Enviada',           bg: '#DBEAFE', color: '#2563EB' },
+  accepted:           { label: 'Aceptada',          bg: '#DCFCE7', color: '#16A34A' },
+  rejected:           { label: 'Rechazada',         bg: '#FEE2E2', color: '#DC2626' },
+  expired:            { label: 'Vencida',           bg: '#F4F5F7', color: '#9AA3AE' },
 };
 
 const FREQUENT_PORTS = [
@@ -129,6 +132,49 @@ export default function QuoterPage({ toast }) {
   const [statusFilter, setStatusFilter] = useState('');
   const [previewQuote, setPreviewQuote] = useState(null);
   const [showRoutes, setShowRoutes] = useState(true);
+  const [dofRate, setDofRate] = useState(null);
+  const [dofLoading, setDofLoading] = useState(false);
+  const [editingRate, setEditingRate] = useState(false);
+  const [manualRateInput, setManualRateInput] = useState('');
+
+  // Cargar tipo de cambio DOF al montar
+  useEffect(() => {
+    getExchangeRate()
+      .then(r => {
+        const rate = r.data?.data;
+        if (rate) {
+          setDofRate(rate);
+          setForm(p => ({ ...p, exchangeRate: rate.rate }));
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleRefreshRate = async () => {
+    setDofLoading(true);
+    try {
+      const r = await refreshExchangeRate();
+      const rate = r.data?.data;
+      if (rate) {
+        setDofRate(rate);
+        setForm(p => ({ ...p, exchangeRate: rate.rate }));
+        toast(`Tipo de cambio actualizado: $${rate.rate} MXN/USD`, 'success');
+      }
+    } catch { toast('Error al actualizar tipo de cambio', 'error'); }
+    finally { setDofLoading(false); }
+  };
+
+  const handleManualRate = async () => {
+    const val = parseFloat(manualRateInput);
+    if (!val || val < 1) return toast('Valor inválido', 'error');
+    try {
+      await setManualExchangeRate(val);
+      setDofRate(r => ({ ...r, rate: val, source: 'manual' }));
+      setForm(p => ({ ...p, exchangeRate: val }));
+      setEditingRate(false);
+      toast(`Tipo de cambio manual: $${val} MXN/USD`, 'success');
+    } catch { toast('Error al guardar tipo de cambio', 'error'); }
+  };
 
   const load = () => {
     setLoading(true);
@@ -245,6 +291,27 @@ export default function QuoterPage({ toast }) {
     } catch { toast('Error al eliminar', 'error'); }
   };
 
+  const handleRequestApproval = async (id, folio) => {
+    if (!window.confirm(`¿Enviar cotización ${folio} a aprobación de gerencia?`)) return;
+    try {
+      await requestQuoteApproval(id);
+      toast('Cotización enviada a aprobación', 'success');
+      load();
+    } catch { toast('Error al solicitar aprobación', 'error'); }
+  };
+
+  const handleReview = async (id, folio, decision) => {
+    const comments = decision === 'rejected'
+      ? window.prompt(`Motivo del rechazo para ${folio}:`)
+      : null;
+    if (decision === 'rejected' && comments === null) return; // canceló el prompt
+    try {
+      await reviewQuote(id, { decision, comments });
+      toast(decision === 'approved' ? 'Cotización aprobada ✓' : 'Cotización rechazada', decision === 'approved' ? 'success' : 'error');
+      load();
+    } catch { toast('Error al revisar', 'error'); }
+  };
+
   const isMaritime = IS_MARITIME(form.serviceType);
 
   return (
@@ -257,6 +324,43 @@ export default function QuoterPage({ toast }) {
         <button className="btn btn-primary" onClick={() => setShowForm(true)} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <Plus size={15} /> Nueva Cotización
         </button>
+      </div>
+
+      {/* Widget Tipo de Cambio DOF */}
+      <div className="card card-sm" style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', background: 'var(--blue-50, #EFF6FF)', borderColor: 'var(--blue-200, #BFDBFE)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1 }}>
+          <DollarSign size={15} color="#2563EB" />
+          <span style={{ fontWeight: 600, color: 'var(--gray-800)', fontSize: 13 }}>Tipo de cambio DOF:</span>
+          {dofRate ? (
+            <>
+              <span style={{ fontSize: 16, fontWeight: 700, color: '#2563EB' }}>${dofRate.rate?.toFixed(4)} MXN/USD</span>
+              <span style={{ fontSize: 11, color: 'var(--gray-500)', background: dofRate.source === 'manual' ? '#FEF9C3' : '#DCFCE7', padding: '2px 8px', borderRadius: 20 }}>
+                {dofRate.source === 'manual' ? 'Manual' : dofRate.source === 'dof' ? 'DOF oficial' : 'Caché'} · {dofRate.date}
+              </span>
+            </>
+          ) : (
+            <span style={{ color: 'var(--gray-400)', fontSize: 13 }}>Cargando...</span>
+          )}
+        </div>
+        {editingRate ? (
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <input type="number" step="0.01" placeholder="Ej: 17.45" value={manualRateInput} onChange={e => setManualRateInput(e.target.value)}
+              style={{ width: 110, padding: '4px 8px', border: '1px solid var(--blue-300, #93C5FD)', borderRadius: 6, fontSize: 13 }} />
+            <button className="btn btn-primary" style={{ padding: '4px 12px', fontSize: 12 }} onClick={handleManualRate}>Guardar</button>
+            <button className="btn btn-ghost" style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => setEditingRate(false)}>Cancelar</button>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', gap: 6 }}>
+            {user?.role === 'admin' && (
+              <>
+                <button className="btn btn-ghost" style={{ fontSize: 12, padding: '4px 10px' }} onClick={() => { setManualRateInput(dofRate?.rate || ''); setEditingRate(true); }}>Ajustar manual</button>
+                <button className="btn btn-ghost" style={{ fontSize: 12, padding: '4px 10px' }} onClick={handleRefreshRate} disabled={dofLoading}>
+                  {dofLoading ? 'Actualizando...' : '↻ Actualizar DOF'}
+                </button>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Filtros */}
@@ -336,9 +440,25 @@ export default function QuoterPage({ toast }) {
                           <button className="btn btn-ghost btn-sm" title="Vista previa / PDF" onClick={() => setPreviewQuote(q)} style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#f97316' }}>
                             <Eye size={13} /> Vista previa
                           </button>
+                          {/* Flujo de aprobación */}
                           {q.status === 'draft' && (
+                            <button className="btn btn-ghost btn-sm" onClick={() => handleRequestApproval(q._id, q.folio)} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11 }}>
+                              ✉ Pedir aprobación
+                            </button>
+                          )}
+                          {q.status === 'pending_approval' && user?.role === 'admin' && (
+                            <>
+                              <button className="btn btn-sm" style={{ background: '#DCFCE7', color: '#16A34A', border: 'none', cursor: 'pointer', fontSize: 11 }} onClick={() => handleReview(q._id, q.folio, 'approved')}>
+                                ✓ Aprobar
+                              </button>
+                              <button className="btn btn-sm" style={{ background: '#FEE2E2', color: '#DC2626', border: 'none', cursor: 'pointer', fontSize: 11 }} onClick={() => handleReview(q._id, q.folio, 'rejected')}>
+                                ✗ Rechazar
+                              </button>
+                            </>
+                          )}
+                          {q.status === 'approved' && (
                             <button className="btn btn-primary btn-sm" onClick={() => handleStatusChange(q._id, 'sent')} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                              <Send size={12} /> Enviada
+                              <Send size={12} /> Enviar cliente
                             </button>
                           )}
                           {q.status === 'sent' && (

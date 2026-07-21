@@ -1,0 +1,131 @@
+/**
+ * ACON CRM — Matriz de Permisos Granulares
+ *
+ * Roles disponibles:
+ *   admin         — Administrador del sistema (acceso total)
+ *   direccion     — Dirección general (lectura total + aprobar cotizaciones)
+ *   gerencia      — Gerencia comercial (gestión de equipo + aprobaciones)
+ *   executive     — Ejecutivo comercial (su propio pipeline)
+ *   operaciones   — Operaciones y logística
+ *   marketing     — Campañas y automatizaciones
+ *   finanzas      — Comisiones y reportes financieros
+ *   viewer        — Solo lectura
+ */
+
+const PERMISSIONS = {
+  // ── LEADS ────────────────────────────────────────────────
+  'leads.view':           ['admin','direccion','gerencia','executive','operaciones','marketing','finanzas','viewer'],
+  'leads.create':         ['admin','direccion','gerencia','executive','marketing'],
+  'leads.edit':           ['admin','direccion','gerencia','executive'],
+  'leads.delete':         ['admin','gerencia'],
+  'leads.assign':         ['admin','gerencia'],
+  'leads.view_all':       ['admin','direccion','gerencia','finanzas'],  // sin este rol, ejecutivo solo ve los suyos
+  'leads.import':         ['admin','gerencia','marketing'],
+  'leads.export':         ['admin','direccion','gerencia','finanzas'],
+  'leads.rescore':        ['admin','gerencia'],
+
+  // ── PIPELINE ─────────────────────────────────────────────
+  'pipeline.view':        ['admin','direccion','gerencia','executive','operaciones','marketing','finanzas','viewer'],
+  'pipeline.move':        ['admin','gerencia','executive'],
+
+  // ── COTIZADOR ────────────────────────────────────────────
+  'quotes.view':          ['admin','direccion','gerencia','executive','finanzas','viewer'],
+  'quotes.create':        ['admin','gerencia','executive'],
+  'quotes.edit':          ['admin','gerencia','executive'],
+  'quotes.delete':        ['admin','gerencia'],
+  'quotes.approve':       ['admin','direccion','gerencia'],   // puede aprobar/rechazar cotizaciones
+  'quotes.send':          ['admin','gerencia','executive'],
+
+  // ── OPERACIONES ──────────────────────────────────────────
+  'operations.view':      ['admin','direccion','gerencia','executive','operaciones','finanzas','viewer'],
+  'operations.create':    ['admin','gerencia','operaciones'],
+  'operations.edit':      ['admin','gerencia','operaciones'],
+  'operations.delete':    ['admin','gerencia'],
+
+  // ── COMISIONES ───────────────────────────────────────────
+  'commissions.view':     ['admin','direccion','gerencia','executive','finanzas'],
+  'commissions.view_all': ['admin','direccion','gerencia','finanzas'],
+  'commissions.create':   ['admin','gerencia','finanzas'],
+  'commissions.edit':     ['admin','gerencia','finanzas'],
+  'commissions.delete':   ['admin'],
+  'commissions.config':   ['admin'],
+
+  // ── MARKETING ────────────────────────────────────────────
+  'marketing.view':       ['admin','direccion','gerencia','marketing','finanzas','viewer'],
+  'marketing.create':     ['admin','gerencia','marketing'],
+  'marketing.launch':     ['admin','gerencia','marketing'],
+  'marketing.delete':     ['admin','gerencia'],
+
+  // ── REPORTES ─────────────────────────────────────────────
+  'reports.view':         ['admin','direccion','gerencia','finanzas','viewer'],
+  'reports.team':         ['admin','direccion','gerencia'],
+  'reports.export':       ['admin','direccion','gerencia','finanzas'],
+
+  // ── USUARIOS ─────────────────────────────────────────────
+  'users.view':           ['admin','direccion','gerencia'],
+  'users.create':         ['admin'],
+  'users.edit':           ['admin'],
+  'users.delete':         ['admin'],
+
+  // ── CONFIGURACIÓN ────────────────────────────────────────
+  'config.view':          ['admin'],
+  'config.edit':          ['admin'],
+
+  // ── INTEGRACIONES ────────────────────────────────────────
+  'integrations.view':    ['admin','direccion'],
+  'integrations.connect': ['admin'],
+
+  // ── WHATSAPP ─────────────────────────────────────────────
+  'whatsapp.view':        ['admin','direccion','gerencia','executive','marketing'],
+  'whatsapp.send':        ['admin','gerencia','executive','marketing'],
+  'whatsapp.templates':   ['admin','gerencia','marketing'],
+
+  // ── PLANTILLAS Y AUTOMATIZACIONES ────────────────────────
+  'templates.view':       ['admin','gerencia','executive','marketing'],
+  'templates.edit':       ['admin','gerencia','marketing'],
+  'followups.view':       ['admin','gerencia','marketing'],
+  'followups.edit':       ['admin','gerencia','marketing'],
+  'playbooks.view':       ['admin','gerencia','executive','marketing'],
+  'playbooks.edit':       ['admin','gerencia'],
+
+  // ── POST-VENTA ───────────────────────────────────────────
+  'postventa.view':       ['admin','direccion','gerencia','executive','operaciones','finanzas'],
+  'postventa.edit':       ['admin','gerencia','operaciones'],
+
+  // ── CATÁLOGO ─────────────────────────────────────────────
+  'catalog.view':         ['admin','direccion','gerencia','executive','operaciones','marketing','finanzas','viewer'],
+  'catalog.edit':         ['admin','gerencia','operaciones'],
+
+  // ── AUDITORÍA ────────────────────────────────────────────
+  'audit.view':           ['admin','direccion'],
+};
+
+/**
+ * Verifica si un rol tiene un permiso específico.
+ */
+function can(role, permission) {
+  const allowed = PERMISSIONS[permission];
+  if (!allowed) return false;
+  return allowed.includes(role);
+}
+
+/**
+ * Middleware de Express: verifica permiso antes de continuar.
+ * Uso: router.get('/endpoint', auth, require('./permission')('leads.view'), handler)
+ */
+function permission(perm) {
+  return (req, res, next) => {
+    if (!req.user) return res.status(401).json({ success: false, message: 'Sin autenticación' });
+    if (!can(req.user.role, perm)) {
+      return res.status(403).json({
+        success: false,
+        message: `Acceso denegado. Se requiere permiso: ${perm}`,
+        required: perm,
+        role: req.user.role,
+      });
+    }
+    next();
+  };
+}
+
+module.exports = { PERMISSIONS, can, permission };

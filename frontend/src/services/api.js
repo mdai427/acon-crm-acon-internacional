@@ -206,3 +206,31 @@ export const globalSearch = (q) => api.get('/search', { params: { q } });
 
 // Notifications
 export const getNotifications = () => api.get('/notifications');
+
+// Exchange Rate (DOF)
+export const getExchangeRate = () => api.get('/exchange-rate/current');
+export const refreshExchangeRate = () => api.post('/exchange-rate/refresh');
+export const setManualExchangeRate = (rate) => api.put('/exchange-rate/manual', { rate });
+export const getExchangeRateHistory = (days = 30) => api.get('/exchange-rate/history', { params: { days } });
+
+// Quote Approval Flow
+export const requestQuoteApproval = (id) => api.post(`/quotes/${id}/request-approval`);
+export const reviewQuote = (id, data) => api.post(`/quotes/${id}/review`, data);
+export const getPendingApprovalQuotes = () => api.get('/quotes/pending-approval/list');
+
+// Catalog
+export const getCatalog = (params) => api.get('/catalog', { params });
+export const getCatalogTypes = () => api.get('/catalog/types');
+export const createCatalogItem = (data) => api.post('/catalog', data);
+export const updateCatalogItem = (id, data) => api.put(`/catalog/${id}`, data);
+export const deleteCatalogItem = (id) => api.delete(`/catalog/${id}`);
+export const seedCatalog = () => api.post('/catalog/seed');
+
+// Lead Attachments
+export const uploadLeadAttachment = (leadId, file) => {
+  const form = new FormData();
+  form.append('file', file);
+  return api.post(`/leads/${leadId}/attachments`, form, { headers: { 'Content-Type': 'multipart/form-data' } });
+};
+export const deleteLeadAttachment = (leadId, attId) => api.delete(`/leads/${leadId}/attachments/${attId}`);
+export const getLeadAttachmentUrl = (leadId, attId) => `${api.defaults.baseURL}/leads/${leadId}/attachments/${attId}/download`;

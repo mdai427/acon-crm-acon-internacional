@@ -56,6 +56,16 @@ const leadSchema = new mongoose.Schema({
   aiResearch:      { type: mongoose.Schema.Types.Mixed }, // investigación de empresa
   autoReplySent:   { type: Boolean, default: false },
   
+  // ---- Archivos adjuntos ----
+  attachments: [{
+    filename:    { type: String },
+    originalName:{ type: String },
+    mimetype:    { type: String },
+    size:        { type: Number },
+    uploadedBy:  { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    uploadedAt:  { type: Date, default: Date.now },
+  }],
+
   // ---- Metadata ----
   tags:     [{ type: String }],
   notes:    { type: String },

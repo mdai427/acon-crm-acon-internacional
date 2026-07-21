@@ -75,10 +75,20 @@ const quoteSchema = new mongoose.Schema({
   notes:       String,
   terms:       String,
 
-  status: { type: String, enum: ['draft','sent','accepted','rejected','expired'], default: 'draft' },
+  status: { type: String, enum: ['draft','pending_approval','approved','rejected_approval','sent','accepted','rejected','expired'], default: 'draft' },
 
   sentAt:     Date,
   acceptedAt: Date,
+
+  // ── Flujo de aprobación interna ──────────────────────────
+  approval: {
+    requestedAt:  Date,
+    requestedBy:  { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    reviewedAt:   Date,
+    reviewedBy:   { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    decision:     { type: String, enum: ['approved', 'rejected'] },
+    comments:     String,
+  },
 
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
 }, { timestamps: true });

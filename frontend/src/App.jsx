@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import './index.css';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { useTheme } from './context/ThemeContext';
 import { Toast, useToast } from './components/Toast';
 import LoginPage from './pages/LoginPage';
 import Dashboard from './pages/Dashboard';
@@ -21,6 +22,8 @@ import MarketingPage from './pages/MarketingPage';
 import PostVentaPage from './pages/PostVentaPage';
 import PlaybooksPage from './pages/PlaybooksPage';
 import CommissionsPage from './pages/CommissionsPage';
+import PermissionsPage from './pages/PermissionsPage';
+import CatalogPage from './pages/CatalogPage';
 import CopilotDrawer from './components/CopilotDrawer';
 import { useIdleLogout } from './hooks/useIdleLogout';
 import { globalSearch, getNotifications } from './services/api';
@@ -29,7 +32,7 @@ import {
   BarChart3, Settings, Plug, Package, UserPlus,
   Calculator, Zap, LogOut, Bell, FileText, Upload,
   Megaphone, HeartHandshake, Menu, X, ChevronRight, Sparkles, DollarSign,
-  Search, AlertTriangle, Clock, Building2
+  Search, AlertTriangle, Clock, Building2, Moon, Sun, Shield, BookOpen
 } from 'lucide-react';
 
 const NAV = [
@@ -48,6 +51,8 @@ const NAV = [
   { id: 'postventa',    label: 'Post-Venta',        Icon: HeartHandshake,  section: 'marketing', mobile: false },
   { id: 'reports',      label: 'Reportes',          Icon: BarChart3,       section: 'analytics', mobile: true,  mobileOrder: 4 },
   { id: 'users',        label: 'Usuarios',          Icon: UserPlus,        section: 'config',    mobile: false },
+  { id: 'permissions',  label: 'Permisos',          Icon: Shield,          section: 'config',    mobile: false },
+  { id: 'catalog',     label: 'Catálogo',           Icon: BookOpen,        section: 'config',    mobile: false },
   { id: 'config',       label: 'Configuración',     Icon: Settings,        section: 'config',    mobile: false },
   { id: 'integrations', label: 'Integraciones',     Icon: Plug,            section: 'config',    mobile: false },
 ];
@@ -253,6 +258,7 @@ const MOBILE_NAV = NAV.filter(n => n.mobile).sort((a, b) => a.mobileOrder - b.mo
 
 function CRMApp() {
   const { user, logout } = useAuth();
+  const { theme, toggle: toggleTheme, isDark } = useTheme();
   const { toasts, setToasts, show: toast } = useToast();
   const [page, setPage] = useState('dashboard');
   const [selectedLeadId, setSelectedLeadId] = useState(null);
@@ -317,6 +323,16 @@ function CRMApp() {
           <div className="topbar-date">
             {new Date().toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric', month: 'short' })}
           </div>
+
+          {/* Theme Toggle */}
+          <button
+            className="top-btn"
+            onClick={toggleTheme}
+            title={isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+            style={{ padding: '5px 10px' }}
+          >
+            {isDark ? <Sun size={14} /> : <Moon size={14} />}
+          </button>
 
           {/* Notification Center */}
           <NotificationCenter />
@@ -392,6 +408,8 @@ function CRMApp() {
           {page === 'postventa'    && <PostVentaPage toast={toast} />}
           {page === 'playbooks'    && <PlaybooksPage toast={toast} />}
           {page === 'commissions'  && <CommissionsPage toast={toast} />}
+          {page === 'permissions'  && <PermissionsPage toast={toast} />}
+          {page === 'catalog'      && <CatalogPage toast={toast} />}
         </div>
       </div>
 

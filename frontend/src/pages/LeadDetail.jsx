@@ -2,10 +2,11 @@ import React, { useEffect, useState, useCallback } from 'react';
 import {
   getLead, updateLead, getActivities, createActivity,
   draftEmail, rescoreLead, sendEmail,
-  getGmailMessages, sendGmailMessage, getCalendarEvents, createCalendarEvent
+  getGmailMessages, sendGmailMessage, getCalendarEvents, createCalendarEvent,
+  uploadLeadAttachment, deleteLeadAttachment, getLeadAttachmentUrl,
 } from '../services/api';
 import { ScoreBadge, StageBadge, SourceBadge } from '../components/Badges';
-import { Mail, Calendar, FileText, MessageSquare, RefreshCw, Plus, Send, Video, Clock, MapPin, CheckSquare, Square, Building2, Zap } from 'lucide-react';
+import { Mail, Calendar, FileText, MessageSquare, RefreshCw, Plus, Send, Video, Clock, MapPin, CheckSquare, Square, Building2, Zap, Paperclip, Trash2, Download, Phone } from 'lucide-react';
 import { triggerLeadResearch } from '../services/api';
 import AISuggestionsPanel from '../components/AISuggestionsPanel';
 import { completeActivity } from '../services/api';
@@ -16,7 +17,8 @@ const STAGE_LABELS = { new:'Nuevo', contacted:'Contactado', qualified:'Calificad
 const TABS = [
   { id: 'info',      label: 'Información', Icon: FileText },
   { id: 'research',  label: 'Empresa IA',  Icon: Building2 },
-  { id: 'activity',  label: 'Actividades', Icon: MessageSquare },
+  { id: 'activity',  label: 'Timeline',    Icon: MessageSquare },
+  { id: 'archivos',  label: 'Archivos',    Icon: Paperclip },
   { id: 'emails',    label: 'Correos',     Icon: Mail },
   { id: 'calendar',  label: 'Calendario',  Icon: Calendar },
 ];
@@ -104,6 +106,18 @@ export default function LeadDetail({ leadId, toast, onBack }) {
   const [eventsLoading, setEventsLoading] = useState(false);
   const [showNewEvent, setShowNewEvent] = useState(false);
   const [eventForm, setEventForm] = useState({ title: '', start: '', end: '', attendees: '', description: '', location: '' });
+
+  // Timeline filters + new activity forms
+  const [activityFilter, setActivityFilter] = useState('all');
+  const [newActivityType, setNewActivityType] = useState('note');
+  const [newActivityContent, setNewActivityContent] = useState('');
+  const [newActivityDue, setNewActivityDue] = useState('');
+  const [showNewActivity, setShowNewActivity] = useState(false);
+  const [savingActivity, setSavingActivity] = useState(false);
+
+  // Attachments
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
 
   const load = async () => {
     try {
@@ -256,6 +270,48 @@ export default function LeadDetail({ leadId, toast, onBack }) {
     } catch (err) {
       toast(err.response?.data?.message || 'Error al crear evento', 'error');
     }
+  };
+
+  const handleUploadFile = async (file) => {
+    if (!file) return;
+    setUploadingFile(true);
+    try {
+      await uploadLeadAttachment(leadId, file);
+      toast('Archivo adjuntado', 'success');
+      load();
+    } catch (err) {
+      toast(err.response?.data?.message || 'Error al subir archivo', 'error');
+    } finally { setUploadingFile(false); }
+  };
+
+  const handleDeleteAttachment = async (attId, name) => {
+    if (!window.confirm(`¿Eliminar "${name}"?`)) return;
+    try {
+      await deleteLeadAttachment(leadId, attId);
+      toast('Archivo eliminado', 'success');
+      load();
+    } catch { toast('Error al eliminar', 'error'); }
+  };
+
+  const handleSaveActivity = async () => {
+    if (!newActivityContent.trim()) return toast('El contenido es requerido', 'error');
+    setSavingActivity(true);
+    try {
+      const payload = {
+        lead: leadId, type: newActivityType, direction: 'internal',
+        content: newActivityContent,
+      };
+      if (newActivityType === 'task' && newActivityDue) {
+        payload.taskData = { completed: false, dueDate: new Date(newActivityDue) };
+      }
+      await createActivity(payload);
+      setNewActivityContent('');
+      setNewActivityDue('');
+      setShowNewActivity(false);
+      toast('Actividad registrada', 'success');
+      load();
+    } catch { toast('Error al guardar', 'error'); }
+    finally { setSavingActivity(false); }
   };
 
   if (loading) return <div className="loading"><div className="spinner" />Cargando...</div>;
@@ -431,28 +487,159 @@ export default function LeadDetail({ leadId, toast, onBack }) {
         <ResearchPanel lead={lead} loading={researchLoading} onResearch={handleResearch} />
       )}
 
-      {/* ── TAB: ACTIVITY ── */}
-      {tab === 'activity' && (
-        <div className="card">
-          <div style={{ fontWeight: 700, marginBottom: 14 }}>Historial Completo</div>
-          <div style={{ marginBottom: 16 }}>
-            <textarea className="form-input" rows={3} placeholder="Escribe una nota o actividad..." value={noteText} onChange={e => setNoteText(e.target.value)} style={{ marginBottom: 8 }} />
-            <button className="btn btn-primary btn-sm" onClick={addNote}>Guardar</button>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {activities.map(a => (
-              <div key={a._id} style={{ padding: '12px 14px', background: 'var(--gray-50)', borderRadius: 10, border: '1px solid var(--gray-200)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                  <span style={{ fontSize: 11, color: 'var(--orange)', fontWeight: 600, textTransform: 'uppercase' }}>
-                    {a.type === 'whatsapp' ? '💬' : a.type === 'email' ? '📧' : a.type === 'call' ? '📞' : a.type === 'stage_change' ? '🔄' : '📝'} {a.type}
-                  </span>
-                  <span style={{ fontSize: 11, color: 'var(--text3)' }}>{new Date(a.createdAt).toLocaleDateString('es-MX', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' })}</span>
+      {/* ── TAB: TIMELINE (ENRICHED) ── */}
+      {tab === 'activity' && (() => {
+        const TYPE_FILTERS = [
+          { id: 'all', label: 'Todos' },
+          { id: 'note', label: '📝 Notas' },
+          { id: 'call', label: '📞 Llamadas' },
+          { id: 'task', label: '✅ Tareas' },
+          { id: 'whatsapp_in', label: '💬 WhatsApp' },
+          { id: 'email_out', label: '📧 Email' },
+          { id: 'stage_change', label: '🔄 Etapa' },
+          { id: 'document', label: '📎 Archivos' },
+        ];
+        const TYPE_GROUPS = { whatsapp_in: 'whatsapp', whatsapp_out: 'whatsapp', email_in: 'email', email_out: 'email' };
+        const filteredActivities = activityFilter === 'all'
+          ? activities
+          : activities.filter(a => a.type === activityFilter || TYPE_GROUPS[a.type] === activityFilter.replace('_in','').replace('_out',''));
+
+        return (
+          <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: 16 }}>
+            {/* Left: add activity form */}
+            <div>
+              <div className="card">
+                <div style={{ fontWeight: 700, marginBottom: 14, fontSize: 14 }}>Registrar Actividad</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
+                  {[
+                    { v: 'note', label: '📝 Nota' },
+                    { v: 'call', label: '📞 Llamada' },
+                    { v: 'task', label: '✅ Tarea' },
+                    { v: 'meeting', label: '🤝 Reunión' },
+                  ].map(({ v, label }) => (
+                    <button key={v} className={`btn btn-sm ${newActivityType === v ? 'btn-navy' : 'btn-ghost'}`}
+                      onClick={() => setNewActivityType(v)}>{label}</button>
+                  ))}
                 </div>
-                <div style={{ fontSize: 13, color: 'var(--text2)' }}>{a.content}</div>
-                {a.user && <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 4 }}>— {a.user.name}</div>}
+                <textarea
+                  className="form-input" rows={3}
+                  placeholder={newActivityType === 'call' ? 'Resultado de la llamada...' : newActivityType === 'task' ? 'Descripción de la tarea...' : 'Escribe tu nota...'}
+                  value={newActivityContent}
+                  onChange={e => setNewActivityContent(e.target.value)}
+                  style={{ marginBottom: 10 }}
+                />
+                {newActivityType === 'task' && (
+                  <div style={{ marginBottom: 10 }}>
+                    <label style={{ fontSize: 11, color: 'var(--text3)', display: 'block', marginBottom: 4 }}>Fecha límite</label>
+                    <input type="datetime-local" className="form-input" value={newActivityDue}
+                      onChange={e => setNewActivityDue(e.target.value)} />
+                  </div>
+                )}
+                <button className="btn btn-primary btn-sm" style={{ width: '100%' }}
+                  onClick={handleSaveActivity} disabled={savingActivity}>
+                  {savingActivity ? 'Guardando...' : 'Registrar'}
+                </button>
               </div>
-            ))}
+            </div>
+
+            {/* Right: filtered timeline */}
+            <div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
+                {TYPE_FILTERS.map(({ id, label }) => (
+                  <button key={id} className={`btn btn-sm ${activityFilter === id ? 'btn-navy' : 'btn-ghost'}`}
+                    onClick={() => setActivityFilter(id)}>{label}</button>
+                ))}
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {filteredActivities.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: 40, color: 'var(--text3)', fontSize: 13 }}>
+                    Sin actividades en este filtro
+                  </div>
+                ) : filteredActivities.map(a => (
+                  <ActivityCard key={a._id} activity={a} onComplete={async () => {
+                    try { await completeActivity(a._id); toast('Tarea completada', 'success'); load(); }
+                    catch { toast('Error', 'error'); }
+                  }} />
+                ))}
+              </div>
+            </div>
           </div>
+        );
+      })()}
+
+      {/* ── TAB: ARCHIVOS ── */}
+      {tab === 'archivos' && (
+        <div>
+          {/* Drop zone */}
+          <div
+            onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={e => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files[0]; if (f) handleUploadFile(f); }}
+            style={{
+              border: `2px dashed ${dragOver ? 'var(--orange)' : 'var(--border)'}`,
+              borderRadius: 12, padding: 32, textAlign: 'center', marginBottom: 20,
+              background: dragOver ? 'rgba(242,100,30,.04)' : 'transparent',
+              transition: 'all .2s',
+            }}
+          >
+            <Paperclip size={28} style={{ color: dragOver ? 'var(--orange)' : 'var(--gray-300)', marginBottom: 8 }} />
+            <div style={{ fontSize: 14, color: 'var(--text2)', marginBottom: 6 }}>
+              {uploadingFile ? 'Subiendo...' : 'Arrastra un archivo aquí o'}
+            </div>
+            {!uploadingFile && (
+              <label className="btn btn-primary btn-sm" style={{ cursor: 'pointer' }}>
+                Seleccionar archivo
+                <input type="file" style={{ display: 'none' }}
+                  accept=".pdf,.jpg,.jpeg,.png,.gif,.xlsx,.xls,.doc,.docx,.txt,.csv"
+                  onChange={e => { if (e.target.files[0]) handleUploadFile(e.target.files[0]); e.target.value = ''; }}
+                />
+              </label>
+            )}
+            <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 8 }}>PDF, imágenes, Excel, Word, CSV · Max 20 MB</div>
+          </div>
+
+          {/* File list */}
+          {(!lead.attachments || lead.attachments.length === 0) ? (
+            <div style={{ textAlign: 'center', color: 'var(--text3)', padding: 20, fontSize: 13 }}>Sin archivos adjuntos</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {lead.attachments.map(att => {
+                const isImg = att.mimetype?.startsWith('image/');
+                const ext = att.originalName?.split('.').pop()?.toUpperCase() || 'FILE';
+                const sizeKb = Math.round((att.size || 0) / 1024);
+                return (
+                  <div key={att._id} style={{
+                    display: 'flex', alignItems: 'center', gap: 12,
+                    padding: '10px 14px', background: 'var(--white)',
+                    border: '1px solid var(--border)', borderRadius: 8,
+                  }}>
+                    <div style={{ width: 36, height: 36, borderRadius: 6, background: 'var(--gray-100)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 10, fontWeight: 700, color: 'var(--text2)', flexShrink: 0 }}>
+                      {isImg ? '🖼️' : ext === 'PDF' ? '📄' : ext.includes('XLS') ? '📊' : '📎'}&nbsp;{ext}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {att.originalName}
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--text3)' }}>
+                        {sizeKb < 1024 ? `${sizeKb} KB` : `${(sizeKb/1024).toFixed(1)} MB`} · {new Date(att.uploadedAt).toLocaleDateString('es-MX', { day:'numeric', month:'short', year:'numeric' })}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      <a className="btn btn-ghost btn-sm btn-icon" href={getLeadAttachmentUrl(leadId, att._id)} target="_blank" rel="noreferrer" title="Descargar">
+                        <Download size={13} />
+                      </a>
+                      <button className="btn btn-ghost btn-sm btn-icon" style={{ color: 'var(--red)' }}
+                        onClick={() => handleDeleteAttachment(att._id, att.originalName)} title="Eliminar">
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 

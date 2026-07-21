@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const { can } = require('../config/permissions');
 
 const auth = async (req, res, next) => {
   try {
@@ -19,6 +20,7 @@ const auth = async (req, res, next) => {
   }
 };
 
+// Solo admin
 const adminOnly = (req, res, next) => {
   if (req.user.role !== 'admin') {
     return res.status(403).json({ success: false, message: 'Acceso restringido a administradores' });
@@ -26,4 +28,20 @@ const adminOnly = (req, res, next) => {
   next();
 };
 
-module.exports = { auth, adminOnly };
+// Admin o gerencia/dirección
+const managerOnly = (req, res, next) => {
+  if (!['admin', 'direccion', 'gerencia'].includes(req.user.role)) {
+    return res.status(403).json({ success: false, message: 'Acceso restringido a gerencia' });
+  }
+  next();
+};
+
+// Permiso granular: checkPerm('leads.view')
+const checkPerm = (perm) => (req, res, next) => {
+  if (!can(req.user?.role, perm)) {
+    return res.status(403).json({ success: false, message: `Sin permiso: ${perm}`, required: perm });
+  }
+  next();
+};
+
+module.exports = { auth, adminOnly, managerOnly, checkPerm };

@@ -4,6 +4,7 @@ const Activity = require('../models/Activity');
 const User = require('../models/User');
 const FollowUpRule = require('../models/FollowUpRule');
 const { scoreLeadWithAI } = require('./aiAgent');
+const { fetchAndSaveRate } = require('./dofService');
 
 const startCronJobs = (io) => {
   // ============================================
@@ -259,6 +260,22 @@ const startCronJobs = (io) => {
       console.error('Cron reassignment error:', error);
     }
   }, null, true, 'America/Mexico_City');
+
+  // ============================================
+  // JOB 7: Tipo de cambio DOF — cada día 9:05am L-V
+  // ============================================
+  new CronJob('5 9 * * 1-5', async () => {
+    console.log('⏰ Cron: Actualizando tipo de cambio DOF...');
+    try {
+      const result = await fetchAndSaveRate();
+      console.log(`✅ Tipo de cambio: $${result.rate} MXN/USD (${result.source})`);
+    } catch (err) {
+      console.error('Cron DOF rate error:', err.message);
+    }
+  }, null, true, 'America/Mexico_City');
+
+  // Ejecutar inmediatamente al iniciar el servidor (carga inicial)
+  fetchAndSaveRate().catch(err => console.warn('[DOF] Carga inicial:', err.message));
 
   console.log('✅ Cron jobs iniciados (zona: Mexico City)');
 };
