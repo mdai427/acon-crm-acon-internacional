@@ -71,9 +71,33 @@ router.put('/:id', auth, async (req, res) => {
     const body = req.body;
     const totalUSD = (body.items || []).filter(i => i.currency === 'USD').reduce((s, i) => s + (i.qty * i.unitPrice), 0);
     const totalMXN = (body.items || []).filter(i => i.currency === 'MXN').reduce((s, i) => s + (i.qty * i.unitPrice), 0);
-    const quote = await Quote.findByIdAndUpdate(req.params.id, { ...body, totalUSD, totalMXN }, { new: true });
+
+    // Snapshot current version before overwriting
+    const existing = await Quote.findById(req.params.id).lean();
+    const versionPush = existing ? {
+      versionNumber: (existing.versions?.length || 0) + 1,
+      savedAt: new Date(),
+      savedBy: req.user._id,
+      snapshot: { ...existing, versions: undefined },
+    } : null;
+
+    const update = { ...body, totalUSD, totalMXN };
+    if (versionPush) update.$push = { versions: versionPush };
+    const quote = await Quote.findByIdAndUpdate(req.params.id, update, { new: true });
     res.json({ success: true, data: quote });
   } catch (e) { res.status(400).json({ success: false, message: e.message }); }
+});
+
+// GET /api/quotes/:id/versions — list version history
+router.get('/:id/versions', auth, async (req, res) => {
+  try {
+    const quote = await Quote.findById(req.params.id)
+      .populate('versions.savedBy', 'name')
+      .select('folio versions')
+      .lean();
+    if (!quote) return res.status(404).json({ success: false, message: 'No encontrada' });
+    res.json({ success: true, data: (quote.versions || []).reverse() });
+  } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 });
 
 // PUT /api/quotes/:id/status

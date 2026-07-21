@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { getQuotes, createQuote, updateQuoteStatus, deleteQuote, getLeads, getExchangeRate, refreshExchangeRate, setManualExchangeRate, requestQuoteApproval, reviewQuote } from '../services/api';
+import { getQuotes, createQuote, updateQuoteStatus, deleteQuote, getLeads, getExchangeRate, refreshExchangeRate, setManualExchangeRate, requestQuoteApproval, reviewQuote, getQuoteVersions } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import QuotePreviewModal from '../components/QuotePreviewModal';
 import {
   Calculator, Plus, FileDown, Trash2, Send, Check, X,
   Anchor, Plane, Truck, Warehouse, BadgeCheck, Search,
-  Eye, Copy, ChevronDown, ChevronUp, PlusCircle, MinusCircle, DollarSign
+  Eye, Copy, ChevronDown, ChevronUp, PlusCircle, MinusCircle, DollarSign, History
 } from 'lucide-react';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -291,6 +291,14 @@ export default function QuoterPage({ toast }) {
     } catch { toast('Error al eliminar', 'error'); }
   };
 
+  const [versionsModal, setVersionsModal] = useState(null); // { quoteId, folio, data }
+  const handleViewVersions = async (q) => {
+    try {
+      const r = await getQuoteVersions(q._id);
+      setVersionsModal({ quoteId: q._id, folio: q.folio, data: r.data.data || [] });
+    } catch { toast('Error al cargar versiones', 'error'); }
+  };
+
   const handleRequestApproval = async (id, folio) => {
     if (!window.confirm(`¿Enviar cotización ${folio} a aprobación de gerencia?`)) return;
     try {
@@ -471,6 +479,9 @@ export default function QuoterPage({ toast }) {
                               </button>
                             </>
                           )}
+                          <button className="btn btn-ghost btn-sm" title="Historial de versiones" onClick={() => handleViewVersions(q)} style={{ padding: '5px 8px' }}>
+                            <History size={13} />
+                          </button>
                           <button className="btn btn-ghost btn-sm" onClick={() => handleDelete(q._id)} style={{ color: 'var(--red)', padding: '5px 8px' }}>
                             <Trash2 size={13} />
                           </button>
@@ -777,6 +788,44 @@ export default function QuoterPage({ toast }) {
               <button className="btn btn-primary" onClick={handleCreate} disabled={saving}>
                 {saving ? 'Guardando...' : 'Guardar cotización'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Versions Modal */}
+      {versionsModal && (
+        <div className="modal-overlay" onClick={() => setVersionsModal(null)}>
+          <div className="modal" style={{ maxWidth: 600 }} onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <div className="modal-title">Historial de versiones — {versionsModal.folio}</div>
+              <button className="btn btn-ghost btn-sm" onClick={() => setVersionsModal(null)}><X size={16} /></button>
+            </div>
+            <div className="modal-body">
+              {versionsModal.data.length === 0 ? (
+                <div style={{ color: 'var(--text3)', textAlign: 'center', padding: '24px 0' }}>Sin versiones guardadas aún.<br /><small>Las versiones se crean automáticamente al editar la cotización.</small></div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {versionsModal.data.map((v, i) => (
+                    <div key={i} style={{ border: '1px solid var(--border)', borderRadius: 8, padding: '12px 14px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ fontWeight: 600, fontSize: 13 }}>Versión {v.versionNumber}</div>
+                        <div style={{ fontSize: 12, color: 'var(--text3)' }}>
+                          {v.savedBy?.name || 'Sistema'} · {new Date(v.savedAt).toLocaleString('es-MX')}
+                        </div>
+                      </div>
+                      {v.snapshot && (
+                        <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 6, display: 'flex', gap: 16 }}>
+                          <span>Total USD: <strong>${(v.snapshot.totalUSD || 0).toLocaleString()}</strong></span>
+                          <span>Total MXN: <strong>${(v.snapshot.totalMXN || 0).toLocaleString()}</strong></span>
+                          <span>Estado: <strong>{v.snapshot.status || '—'}</strong></span>
+                          <span>Partidas: <strong>{v.snapshot.items?.length || 0}</strong></span>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>

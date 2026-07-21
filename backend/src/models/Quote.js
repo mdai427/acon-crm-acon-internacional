@@ -91,6 +91,14 @@ const quoteSchema = new mongoose.Schema({
   },
 
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+
+  // Version history — snapshot on each PUT
+  versions: [{
+    versionNumber: Number,
+    savedAt: { type: Date, default: Date.now },
+    savedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    snapshot: { type: mongoose.Schema.Types.Mixed }, // JSON snapshot of full doc
+  }],
 }, { timestamps: true });
 
 // Auto folio

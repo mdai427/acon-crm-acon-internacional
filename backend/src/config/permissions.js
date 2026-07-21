@@ -74,6 +74,7 @@ const PERMISSIONS = {
   // ── INTEGRACIONES ────────────────────────────────────────
   'integrations.view':    ['admin','direccion'],
   'integrations.connect': ['admin'],
+  'integrations.manage':  ['admin','gerencia'],
 
   // ── WHATSAPP ─────────────────────────────────────────────
   'whatsapp.view':        ['admin','direccion','gerencia','executive','marketing'],

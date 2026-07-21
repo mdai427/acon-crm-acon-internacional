@@ -750,4 +750,114 @@ router.get('/direccion', async (req, res) => {
   }
 });
 
+// ── Excel Export ───────────────────────────────────────────────────────────────
+
+// GET /api/reports/export/leads — export leads as XLSX
+router.get('/export/leads', async (req, res) => {
+  try {
+    const XLSX = require('xlsx');
+    const { from, to, stage, assignedTo } = req.query;
+    const filter = {};
+    if (stage) filter.stage = stage;
+    if (assignedTo) filter.assignedTo = assignedTo;
+    if (from || to) {
+      filter.createdAt = {};
+      if (from) filter.createdAt.$gte = new Date(from);
+      if (to) filter.createdAt.$lte = new Date(to);
+    }
+    const leads = await Lead.find(filter).populate('assignedTo', 'name').lean();
+    const rows = leads.map(l => ({
+      'Folio': l._id.toString().slice(-6).toUpperCase(),
+      'Nombre': l.name || '',
+      'Empresa': l.company || '',
+      'Email': l.email || '',
+      'Teléfono': l.phone || '',
+      'Etapa': l.stage || '',
+      'Valor USD': l.value || 0,
+      'Prioridad': l.priority || '',
+      'Score': l.score || 0,
+      'Asignado a': l.assignedTo?.name || '',
+      'Creado': l.createdAt ? new Date(l.createdAt).toLocaleDateString('es-MX') : '',
+      'Último contacto': l.lastContactDate ? new Date(l.lastContactDate).toLocaleDateString('es-MX') : '',
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Leads');
+    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    res.setHeader('Content-Disposition', `attachment; filename="leads_${Date.now()}.xlsx"`);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.send(buf);
+  } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+// GET /api/reports/export/quotes — export quotes as XLSX
+router.get('/export/quotes', async (req, res) => {
+  try {
+    const XLSX = require('xlsx');
+    const { from, to, status } = req.query;
+    const filter = {};
+    if (status) filter.status = status;
+    if (from || to) {
+      filter.createdAt = {};
+      if (from) filter.createdAt.$gte = new Date(from);
+      if (to) filter.createdAt.$lte = new Date(to);
+    }
+    const quotes = await Quote.find(filter).populate('createdBy', 'name').lean();
+    const rows = quotes.map(q => ({
+      'Folio': q.folio || '',
+      'Cliente': q.clientName || '',
+      'Email': q.clientEmail || '',
+      'Servicio': q.serviceType || '',
+      'Origen': q.origin || '',
+      'Destino': q.destination || '',
+      'Total USD': q.totalUSD || 0,
+      'Total MXN': q.totalMXN || 0,
+      'Estado': q.status || '',
+      'Ejecutivo': q.createdBy?.name || '',
+      'Creado': q.createdAt ? new Date(q.createdAt).toLocaleDateString('es-MX') : '',
+      'Válido hasta': q.validUntil ? new Date(q.validUntil).toLocaleDateString('es-MX') : '',
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Cotizaciones');
+    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    res.setHeader('Content-Disposition', `attachment; filename="cotizaciones_${Date.now()}.xlsx"`);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.send(buf);
+  } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+// GET /api/reports/export/commissions — export commissions as XLSX
+router.get('/export/commissions', async (req, res) => {
+  try {
+    const XLSX = require('xlsx');
+    const Commission = require('../models/Commission');
+    const { from, to, userId, status } = req.query;
+    const filter = {};
+    if (userId) filter.user = userId;
+    if (status) filter.status = status;
+    if (from || to) {
+      filter.createdAt = {};
+      if (from) filter.createdAt.$gte = new Date(from);
+      if (to) filter.createdAt.$lte = new Date(to);
+    }
+    const comms = await Commission.find(filter).populate('user', 'name').lean();
+    const rows = comms.map(c => ({
+      'Ejecutivo': c.user?.name || '',
+      'Concepto': c.concept || '',
+      'Monto USD': c.amount || 0,
+      'Estado': c.status || '',
+      'Período': c.period || '',
+      'Creado': c.createdAt ? new Date(c.createdAt).toLocaleDateString('es-MX') : '',
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Comisiones');
+    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    res.setHeader('Content-Disposition', `attachment; filename="comisiones_${Date.now()}.xlsx"`);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.send(buf);
+  } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
 module.exports = router;

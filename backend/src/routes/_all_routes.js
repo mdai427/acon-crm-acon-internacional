@@ -214,6 +214,51 @@ activitiesRouter.post('/', async (req, res) => {
   }
 });
 
+// GET /api/activities/mine?from=&to=&type= — all activities for calendar view
+activitiesRouter.get('/mine', async (req, res) => {
+  try {
+    const { from, to, type } = req.query;
+    const q = { user: req.user._id };
+    if (type) q.type = type;
+    if (from || to) {
+      q.createdAt = {};
+      if (from) q.createdAt.$gte = new Date(from);
+      if (to) q.createdAt.$lte = new Date(to);
+    }
+    const activities = await Activity.find(q)
+      .populate('lead', 'name company')
+      .populate('user', 'name avatar')
+      .sort({ createdAt: -1 })
+      .limit(200);
+    res.json({ success: true, data: activities });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// GET /api/activities/team?from=&to=&type= — all activities (managers)
+activitiesRouter.get('/team', async (req, res) => {
+  try {
+    const { from, to, type, userId } = req.query;
+    const q = {};
+    if (userId) q.user = userId;
+    if (type) q.type = type;
+    if (from || to) {
+      q.createdAt = {};
+      if (from) q.createdAt.$gte = new Date(from);
+      if (to) q.createdAt.$lte = new Date(to);
+    }
+    const activities = await Activity.find(q)
+      .populate('lead', 'name company')
+      .populate('user', 'name avatar')
+      .sort({ createdAt: -1 })
+      .limit(500);
+    res.json({ success: true, data: activities });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 activitiesRouter.put('/:id/complete', async (req, res) => {
   try {
     const activity = await Activity.findByIdAndUpdate(

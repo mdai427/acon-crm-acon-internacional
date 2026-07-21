@@ -43,6 +43,8 @@ export const moveLead = (data) => api.put('/pipeline/move', data);
 export const getActivities = (leadId) => api.get(`/activities/lead/${leadId}`);
 export const createActivity = (data) => api.post('/activities', data);
 export const completeActivity = (id) => api.put(`/activities/${id}/complete`);
+export const getMyActivities = (params) => api.get('/activities/mine', { params });
+export const getTeamActivities = (params) => api.get('/activities/team', { params });
 
 // WhatsApp
 export const getConversation = (leadId) => api.get(`/whatsapp/conversations/${leadId}`);
@@ -75,6 +77,9 @@ export const getConversionReport = () => api.get('/reports/conversion');
 export const rescoreAllLeads = () => api.post('/leads/rescore-all');
 export const getAIInsights = () => api.get('/reports/ai-insights');
 export const exportCSV = () => api.get('/reports/export', { responseType: 'blob' });
+export const exportLeadsXLSX = (params) => api.get('/reports/export/leads', { params, responseType: 'blob' });
+export const exportQuotesXLSX = (params) => api.get('/reports/export/quotes', { params, responseType: 'blob' });
+export const exportCommissionsXLSX = (params) => api.get('/reports/export/commissions', { params, responseType: 'blob' });
 export const getOperationsSummary = () => api.get('/operations/summary');
 export const getOperationsReport = () => api.get('/reports/operations');
 
@@ -109,6 +114,7 @@ export const createQuote = (data) => api.post('/quotes', data);
 export const updateQuote = (id, data) => api.put(`/quotes/${id}`, data);
 export const deleteQuote = (id) => api.delete(`/quotes/${id}`);
 export const updateQuoteStatus = (id, status) => api.put(`/quotes/${id}/status`, { status });
+export const getQuoteVersions = (id) => api.get(`/quotes/${id}/versions`);
 
 // Follow-ups
 export const getFollowUps = () => api.get('/followups');
@@ -251,3 +257,8 @@ export const getDireccionReport = () => api.get('/reports/direccion');
 export const getAuditLogs = (params) => api.get('/audit', { params });
 export const getAuditEntities = () => api.get('/audit/entities');
 export const getRecordAudit = (entityId) => api.get(`/audit/record/${entityId}`);
+
+// ERP Providers
+export const getERPProviders = () => api.get('/erp/providers');
+export const saveERPProvider = (id, data) => api.put(`/erp/providers/${id}`, data);
+export const testERPProvider = (id) => api.post(`/erp/providers/${id}/test`);

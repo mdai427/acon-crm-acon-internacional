@@ -5,7 +5,7 @@ import {
   PieChart, Pie, Cell, Legend, RadarChart, Radar, PolarGrid,
   PolarAngleAxis, PolarRadiusAxis
 } from 'recharts';
-import { getDashboard, getTeamReport, getConversionReport, exportCSV, rescoreAllLeads } from '../services/api';
+import { getDashboard, getTeamReport, getConversionReport, exportCSV, rescoreAllLeads, exportLeadsXLSX, exportQuotesXLSX, exportCommissionsXLSX } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import {
   FileDown, FileSpreadsheet, RefreshCw, TrendingUp, Users,
@@ -145,6 +145,20 @@ export default function ReportsPage({ toast }) {
     } catch { toast('Error al exportar', 'error'); }
   };
 
+  const handleExportXLSX = async (type) => {
+    try {
+      const fns = { leads: exportLeadsXLSX, quotes: exportQuotesXLSX, commissions: exportCommissionsXLSX };
+      const names = { leads: 'leads', quotes: 'cotizaciones', commissions: 'comisiones' };
+      const r = await fns[type]();
+      const url = URL.createObjectURL(new Blob([r.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `acon_${names[type]}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      a.click();
+      toast(`Excel de ${names[type]} descargado`, 'success');
+    } catch { toast('Error al exportar Excel', 'error'); }
+  };
+
   const handleExportPDF = async () => {
     if (!reportRef.current) return;
     setExporting(true);
@@ -203,7 +217,13 @@ export default function ReportsPage({ toast }) {
             </button>
           )}
           <button className="btn btn-ghost btn-sm" onClick={handleExportCSV} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-            <FileSpreadsheet size={13} /> CSV
+            <FileSpreadsheet size={13} /> CSV Leads
+          </button>
+          <button className="btn btn-ghost btn-sm" onClick={() => handleExportXLSX('leads')} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            <FileSpreadsheet size={13} /> Excel Leads
+          </button>
+          <button className="btn btn-ghost btn-sm" onClick={() => handleExportXLSX('quotes')} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            <FileSpreadsheet size={13} /> Excel Cotiz.
           </button>
           <button className="btn btn-primary btn-sm" onClick={handleExportPDF} disabled={exporting} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
             <FileDown size={13} /> {exporting ? 'Generando...' : 'Exportar PDF'}

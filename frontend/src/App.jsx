@@ -26,6 +26,8 @@ import PermissionsPage from './pages/PermissionsPage';
 import CatalogPage from './pages/CatalogPage';
 import DireccionPage from './pages/DireccionPage';
 import AuditPage from './pages/AuditPage';
+import ERPPage from './pages/ERPPage';
+import CalendarPage from './pages/CalendarPage';
 import CopilotDrawer from './components/CopilotDrawer';
 import { useIdleLogout } from './hooks/useIdleLogout';
 import { globalSearch, getNotifications } from './services/api';
@@ -34,7 +36,7 @@ import {
   BarChart3, Settings, Plug, Package, UserPlus,
   Calculator, Zap, LogOut, Bell, FileText, Upload,
   Megaphone, HeartHandshake, Menu, X, ChevronRight, Sparkles, DollarSign,
-  Search, AlertTriangle, Clock, Building2, Moon, Sun, Shield, BookOpen, TrendingUp, FileSearch
+  Search, AlertTriangle, Clock, Building2, Moon, Sun, Shield, BookOpen, TrendingUp, FileSearch, Database, CalendarDays
 } from 'lucide-react';
 
 const NAV = [
@@ -58,6 +60,8 @@ const NAV = [
   { id: 'catalog',     label: 'Catálogo',           Icon: BookOpen,        section: 'config',    mobile: false },
   { id: 'audit',       label: 'Auditoría',          Icon: FileSearch,      section: 'config',    mobile: false },
   { id: 'config',       label: 'Configuración',     Icon: Settings,        section: 'config',    mobile: false },
+  { id: 'calendar',     label: 'Calendario',        Icon: CalendarDays,    section: 'ventas',    mobile: false },
+  { id: 'erp',          label: 'ERP',               Icon: Database,        section: 'config',    mobile: false },
   { id: 'integrations', label: 'Integraciones',     Icon: Plug,            section: 'config',    mobile: false },
 ];
 
@@ -416,6 +420,8 @@ function CRMApp() {
           {page === 'catalog'      && <CatalogPage toast={toast} />}
           {page === 'direccion'    && <DireccionPage toast={toast} onSelectLead={handleSelectLead} />}
           {page === 'audit'        && <AuditPage toast={toast} />}
+          {page === 'erp'          && <ERPPage toast={toast} />}
+          {page === 'calendar'    && <CalendarPage toast={toast} onSelectLead={handleSelectLead} />}
         </div>
       </div>
 
