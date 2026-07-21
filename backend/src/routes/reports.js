@@ -574,4 +574,180 @@ router.get('/operations', async (req, res) => {
   }
 });
 
+// GET /api/reports/direccion — Dashboard Dirección estratégico
+router.get('/direccion', async (req, res) => {
+  if (!['admin', 'direccion', 'gerencia'].includes(req.user?.role)) {
+    return res.status(403).json({ success: false, message: 'Acceso denegado' });
+  }
+  try {
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const qStart = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1);
+    const yearStart = new Date(now.getFullYear(), 0, 1);
+
+    const INACTIVE_DAYS = 14; // cliente sin contacto > 14 días = inactivo
+    const inactiveCutoff = new Date(now.getTime() - INACTIVE_DAYS * 86400000);
+    const opportunityExpiredDays = 30; // oportunidad en proposal/negotiation > 30 días = vencida
+    const opportunityExpiredCutoff = new Date(now.getTime() - opportunityExpiredDays * 86400000);
+
+    const [
+      // Pipeline por etapa con valor
+      pipelineByStage,
+      // Leads ganados este mes (revenue)
+      wonThisMonth,
+      // Leads ganados mes anterior
+      wonLastMonth,
+      // Leads ganados este trimestre
+      wonThisQ,
+      // Leads ganados este año
+      wonThisYear,
+      // Total pipeline activo (no closed)
+      activePipeline,
+      // Clientes inactivos (> 14 días sin contacto, etapa activa)
+      inactiveLeads,
+      // Oportunidades vencidas (> 30 días en proposal/negotiation)
+      expiredOpportunities,
+      // Nuevos leads este mes
+      newLeadsMonth,
+      // Nuevos leads mes anterior
+      newLeadsPrevMonth,
+      // Cotizaciones por estado
+      quotesByStatus,
+      // Tareas vencidas sin completar
+      overdueTasks,
+      // Revenue por ejecutivo (won, este año)
+      revenueByExec,
+      // Leads por ejecutivo (activos)
+      leadsByExec,
+      // Stage conversion funnel
+      stageByExec,
+    ] = await Promise.all([
+      // pipelineByStage
+      Lead.aggregate([
+        { $match: { isActive: true, stage: { $nin: ['closed_won', 'closed_lost'] } } },
+        { $group: { _id: '$stage', count: { $sum: 1 }, value: { $sum: '$value' } } },
+        { $sort: { value: -1 } },
+      ]),
+      // won this month
+      Lead.aggregate([
+        { $match: { isActive: true, stage: 'closed_won', updatedAt: { $gte: monthStart } } },
+        { $group: { _id: null, count: { $sum: 1 }, value: { $sum: '$value' } } },
+      ]),
+      // won last month
+      Lead.aggregate([
+        { $match: { isActive: true, stage: 'closed_won', updatedAt: { $gte: prevMonthStart, $lt: monthStart } } },
+        { $group: { _id: null, count: { $sum: 1 }, value: { $sum: '$value' } } },
+      ]),
+      // won this quarter
+      Lead.aggregate([
+        { $match: { isActive: true, stage: 'closed_won', updatedAt: { $gte: qStart } } },
+        { $group: { _id: null, count: { $sum: 1 }, value: { $sum: '$value' } } },
+      ]),
+      // won this year
+      Lead.aggregate([
+        { $match: { isActive: true, stage: 'closed_won', updatedAt: { $gte: yearStart } } },
+        { $group: { _id: null, count: { $sum: 1 }, value: { $sum: '$value' } } },
+      ]),
+      // active pipeline value
+      Lead.aggregate([
+        { $match: { isActive: true, stage: { $nin: ['closed_won', 'closed_lost'] } } },
+        { $group: { _id: null, count: { $sum: 1 }, value: { $sum: '$value' } } },
+      ]),
+      // inactive clients
+      Lead.find({
+        isActive: true,
+        stage: { $nin: ['closed_won', 'closed_lost'] },
+        $or: [
+          { lastContactDate: { $lt: inactiveCutoff } },
+          { lastContactDate: { $exists: false }, createdAt: { $lt: inactiveCutoff } },
+        ],
+      }).populate('assignedTo', 'name').select('company contact stage priority value lastContactDate assignedTo').sort({ lastContactDate: 1 }).limit(50).lean(),
+      // expired opportunities
+      Lead.find({
+        isActive: true,
+        stage: { $in: ['proposal', 'negotiation'] },
+        updatedAt: { $lt: opportunityExpiredCutoff },
+      }).populate('assignedTo', 'name').select('company contact stage priority value updatedAt assignedTo').sort({ updatedAt: 1 }).limit(50).lean(),
+      // new leads this month
+      Lead.countDocuments({ isActive: true, createdAt: { $gte: monthStart } }),
+      // new leads prev month
+      Lead.countDocuments({ isActive: true, createdAt: { $gte: prevMonthStart, $lt: monthStart } }),
+      // quotes by status
+      Quote.aggregate([
+        { $group: { _id: '$status', count: { $sum: 1 }, value: { $sum: '$totalUSD' } } },
+      ]),
+      // overdue tasks
+      Activity.countDocuments({
+        type: 'task', 'taskData.completed': false,
+        'taskData.dueDate': { $lt: now },
+      }),
+      // revenue by exec (won this year)
+      Lead.aggregate([
+        { $match: { isActive: true, stage: 'closed_won', updatedAt: { $gte: yearStart } } },
+        { $group: { _id: '$assignedTo', count: { $sum: 1 }, value: { $sum: '$value' } } },
+        { $lookup: { from: 'users', localField: '_id', foreignField: '_id', as: 'user' } },
+        { $unwind: { path: '$user', preserveNullAndEmpty: true } },
+        { $project: { name: { $ifNull: ['$user.name', 'Sin asignar'] }, count: 1, value: 1 } },
+        { $sort: { value: -1 } },
+        { $limit: 10 },
+      ]),
+      // leads by exec (active)
+      Lead.aggregate([
+        { $match: { isActive: true, stage: { $nin: ['closed_won', 'closed_lost'] } } },
+        { $group: { _id: '$assignedTo', count: { $sum: 1 }, pipelineValue: { $sum: '$value' } } },
+        { $lookup: { from: 'users', localField: '_id', foreignField: '_id', as: 'user' } },
+        { $unwind: { path: '$user', preserveNullAndEmpty: true } },
+        { $project: { name: { $ifNull: ['$user.name', 'Sin asignar'] }, count: 1, pipelineValue: 1 } },
+        { $sort: { pipelineValue: -1 } },
+        { $limit: 10 },
+      ]),
+      // stage conversion (rough funnel)
+      Lead.aggregate([
+        { $match: { isActive: true } },
+        { $group: { _id: '$stage', count: { $sum: 1 } } },
+      ]),
+    ]);
+
+    const wonM  = wonThisMonth[0]  || { count: 0, value: 0 };
+    const wonLM = wonLastMonth[0]  || { count: 0, value: 0 };
+    const wonQ  = wonThisQ[0]      || { count: 0, value: 0 };
+    const wonY  = wonThisYear[0]   || { count: 0, value: 0 };
+    const pipe  = activePipeline[0]|| { count: 0, value: 0 };
+
+    // Simple revenue forecast: this month pace × remaining days
+    const dayOfMonth = now.getDate();
+    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    const forecastMonth = dayOfMonth > 0 ? Math.round(wonM.value / dayOfMonth * daysInMonth) : 0;
+
+    res.json({
+      success: true,
+      data: {
+        kpis: {
+          wonThisMonth: wonM,
+          wonLastMonth: wonLM,
+          wonThisQ: wonQ,
+          wonThisYear: wonY,
+          activePipeline: pipe,
+          newLeadsMonth: { current: newLeadsMonth, previous: newLeadsPrevMonth },
+          overdueTasks,
+          inactiveCount: inactiveLeads.length,
+          expiredCount: expiredOpportunities.length,
+        },
+        forecast: { month: forecastMonth, daysElapsed: dayOfMonth, daysInMonth },
+        pipelineByStage,
+        quotesByStatus,
+        inactiveLeads,
+        expiredOpportunities,
+        revenueByExec,
+        leadsByExec,
+        stageFunnel: stageByExec,
+      },
+    });
+  } catch (e) {
+    console.error('[reports/direccion]', e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+});
+
 module.exports = router;

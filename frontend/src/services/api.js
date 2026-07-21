@@ -243,3 +243,6 @@ export const deleteSequence = (id) => api.delete(`/sequences/${id}`);
 export const enrollInSequence = (id, data) => api.post(`/sequences/${id}/enroll`, data);
 export const getSequenceEnrollments = (id) => api.get(`/sequences/${id}/enrollments`);
 export const exitSequenceEnrollment = (enrollId, reason) => api.post(`/sequences/enrollments/${enrollId}/exit`, { reason });
+
+// Direccion Dashboard
+export const getDireccionReport = () => api.get('/reports/direccion');

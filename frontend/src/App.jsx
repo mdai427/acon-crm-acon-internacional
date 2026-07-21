@@ -24,6 +24,7 @@ import PlaybooksPage from './pages/PlaybooksPage';
 import CommissionsPage from './pages/CommissionsPage';
 import PermissionsPage from './pages/PermissionsPage';
 import CatalogPage from './pages/CatalogPage';
+import DireccionPage from './pages/DireccionPage';
 import CopilotDrawer from './components/CopilotDrawer';
 import { useIdleLogout } from './hooks/useIdleLogout';
 import { globalSearch, getNotifications } from './services/api';
@@ -32,7 +33,7 @@ import {
   BarChart3, Settings, Plug, Package, UserPlus,
   Calculator, Zap, LogOut, Bell, FileText, Upload,
   Megaphone, HeartHandshake, Menu, X, ChevronRight, Sparkles, DollarSign,
-  Search, AlertTriangle, Clock, Building2, Moon, Sun, Shield, BookOpen
+  Search, AlertTriangle, Clock, Building2, Moon, Sun, Shield, BookOpen, TrendingUp
 } from 'lucide-react';
 
 const NAV = [
@@ -49,6 +50,7 @@ const NAV = [
   { id: 'playbooks',    label: 'Playbooks IA',      Icon: Sparkles,        section: 'marketing', mobile: false },
   { id: 'templates',    label: 'Plantillas',        Icon: FileText,        section: 'marketing', mobile: false },
   { id: 'postventa',    label: 'Post-Venta',        Icon: HeartHandshake,  section: 'marketing', mobile: false },
+  { id: 'direccion',    label: 'Dirección',          Icon: TrendingUp,      section: 'analytics', mobile: false },
   { id: 'reports',      label: 'Reportes',          Icon: BarChart3,       section: 'analytics', mobile: true,  mobileOrder: 4 },
   { id: 'users',        label: 'Usuarios',          Icon: UserPlus,        section: 'config',    mobile: false },
   { id: 'permissions',  label: 'Permisos',          Icon: Shield,          section: 'config',    mobile: false },
@@ -410,6 +412,7 @@ function CRMApp() {
           {page === 'commissions'  && <CommissionsPage toast={toast} />}
           {page === 'permissions'  && <PermissionsPage toast={toast} />}
           {page === 'catalog'      && <CatalogPage toast={toast} />}
+          {page === 'direccion'    && <DireccionPage toast={toast} onSelectLead={handleSelectLead} />}
         </div>
       </div>
 
