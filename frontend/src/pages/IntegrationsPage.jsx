@@ -1,9 +1,10 @@
 import React, { useEffect, useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { getIntegrations, getOAuthStatus, connectGoogle, disconnectOAuth } from '../services/api';
 import {
   CheckCircle2, XCircle, ExternalLink, RefreshCw, Plug,
   Mail, Calendar, MessageSquare, Bot, Users, Globe,
-  Link2, Zap, FileSpreadsheet, Video, Package
+  Link2, Zap, FileSpreadsheet, Video, Package, Settings
 } from 'lucide-react';
 
 const CATEGORY_COLORS = {
@@ -97,9 +98,10 @@ function SectionHeader({ title, subtitle }) {
   );
 }
 
-export default function IntegrationsPage({ toast }) {
+export default function IntegrationsPage({ toast, onNavigate }) {
   const [sysData, setSysData] = useState(null);
   const [oauthData, setOauthData] = useState({});
+  const [googleConfigured, setGoogleConfigured] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
@@ -118,8 +120,18 @@ export default function IntegrationsPage({ toast }) {
     }
   }, []);
 
+  // Verify if Google is configured in backend
+  const checkGoogleConfig = useCallback(async () => {
+    try {
+      const api = (await import('../services/api')).default;
+      const r = await api.get('/config');
+      setGoogleConfigured(!!(r.data.data?.google?.configured));
+    } catch {}
+  }, []);
+
   useEffect(() => {
     load();
+    checkGoogleConfig();
     // Handle OAuth callback params
     const params = new URLSearchParams(window.location.search);
     if (params.get('connected')) {
@@ -136,6 +148,13 @@ export default function IntegrationsPage({ toast }) {
   }, []);
 
   const handleConnectGoogle = async () => {
+    // If credentials not configured, send to ConfigPage first
+    if (!googleConfigured) {
+      toast('Primero configura las credenciales de Google en Configuración', 'error');
+      // Navigate to config page
+      if (onNavigate) onNavigate('config');
+      return;
+    }
     try {
       const r = await connectGoogle();
       if (r.data.url) {
@@ -143,7 +162,13 @@ export default function IntegrationsPage({ toast }) {
       }
     } catch (err) {
       const msg = err.response?.data?.message || 'Error al iniciar OAuth de Google';
-      toast(msg, 'error');
+      // If it's a "not configured" error, redirect to config
+      if (msg.includes('GOOGLE_CLIENT_ID') || msg.includes('no configurado')) {
+        toast('Ve a Configuración → Google Suite para agregar las credenciales', 'error');
+        if (onNavigate) onNavigate('config');
+      } else {
+        toast(msg, 'error');
+      }
     }
   };
 
@@ -175,6 +200,32 @@ export default function IntegrationsPage({ toast }) {
 
       {/* ── Google Suite ── */}
       <SectionHeader title="Google Suite" subtitle="Conecta tu cuenta Google para sincronizar correos y calendario" />
+
+      {!googleConfigured && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 12,
+          padding: '12px 16px', marginBottom: 14, borderRadius: 10,
+          background: '#FEF9C3', border: '1px solid #FDE047',
+        }}>
+          <span style={{ fontSize: 20 }}>⚠️</span>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 700, fontSize: 13, color: '#92400E' }}>Credenciales de Google no configuradas</div>
+            <div style={{ fontSize: 12, color: '#78350F', marginTop: 2 }}>
+              Antes de conectar tu cuenta, necesitas agregar GOOGLE_CLIENT_ID y GOOGLE_CLIENT_SECRET.
+            </div>
+          </div>
+          <button
+            onClick={() => onNavigate && onNavigate('config')}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '7px 14px', borderRadius: 8, border: 'none',
+              background: '#D97706', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', flexShrink: 0,
+            }}>
+            <Settings size={13} /> Ir a Configuración
+          </button>
+        </div>
+      )}
+
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 14, marginBottom: 28 }}>
         <IntCard
           icon={Mail} iconColor="#EA4335"

@@ -409,7 +409,7 @@ function CRMApp() {
           {page === 'quoter'       && <QuoterPage toast={toast} />}
           {page === 'followups'    && <FollowUpsPage toast={toast} />}
           {page === 'users'        && <UsersPage toast={toast} />}
-          {page === 'integrations' && <IntegrationsPage toast={toast} />}
+          {page === 'integrations' && <IntegrationsPage toast={toast} onNavigate={setPage} />}
           {page === 'templates'    && <TemplatesPage toast={toast} />}
           {page === 'import'       && <ImportPage toast={toast} onNavigate={navigate} />}
           {page === 'marketing'    && <MarketingPage toast={toast} />}
