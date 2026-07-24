@@ -62,24 +62,24 @@ agentsRouter.post('/campaign', async (req, res) => {
               .replace(/\{\{empresa\}\}/gi, lead.company || '')
               .replace(/\{\{servicio\}\}/gi, (lead.services || []).join(', ') || '');
 
-            if (channel === 'whatsapp' && process.env.META_WA_TOKEN && process.env.META_WA_PHONE_ID) {
+            const waToken = process.env.WHATSAPP_TOKEN || process.env.META_WA_TOKEN;
+            const waPhoneId = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.META_WA_PHONE_ID;
+            if (channel === 'whatsapp' && waToken && waPhoneId) {
               const phone = (lead.whatsapp || lead.phone || '').replace(/\D/g, '');
               if (phone) {
                 await axios.post(
-                  `https://graph.facebook.com/v19.0/${process.env.META_WA_PHONE_ID}/messages`,
+                  `https://graph.facebook.com/v19.0/${waPhoneId}/messages`,
                   { messaging_product: 'whatsapp', to: phone, type: 'text', text: { body: resolvedBody } },
-                  { headers: { Authorization: `Bearer ${process.env.META_WA_TOKEN}`, 'Content-Type': 'application/json' } }
+                  { headers: { Authorization: `Bearer ${waToken}`, 'Content-Type': 'application/json' } }
                 ).catch(() => {});
               }
             }
 
             await Activity.create({
               lead: leadId,
-              type: 'whatsapp',
+              type: 'whatsapp_out',
               direction: 'outbound',
               content: resolvedBody,
-              channel: channel || 'whatsapp',
-              campaignSent: true,
             });
           } catch (err) {
             console.error('Campaign lead error:', leadId, err.message);
@@ -204,7 +204,7 @@ activitiesRouter.get('/lead/:leadId', async (req, res) => {
 activitiesRouter.post('/', async (req, res) => {
   try {
     const activity = await Activity.create({ ...req.body, user: req.user._id });
-    if (req.body.type !== 'task') {
+    if (req.body.lead && req.body.type !== 'task') {
       await Lead.findByIdAndUpdate(req.body.lead, { lastContactDate: new Date() });
     }
     req.io?.emit('activity_new', { leadId: req.body.lead, activity });
@@ -221,9 +221,16 @@ activitiesRouter.get('/mine', async (req, res) => {
     const q = { user: req.user._id };
     if (type) q.type = type;
     if (from || to) {
-      q.createdAt = {};
-      if (from) q.createdAt.$gte = new Date(from);
-      if (to) q.createdAt.$lte = new Date(to);
+      const dateFrom = from ? new Date(from) : null;
+      const dateTo   = to   ? new Date(to)   : null;
+      const dateRange = {};
+      if (dateFrom) dateRange.$gte = dateFrom;
+      if (dateTo)   dateRange.$lte = dateTo;
+      // match if either createdAt OR taskData.dueDate falls in range
+      q.$or = [
+        { createdAt: dateRange },
+        { 'taskData.dueDate': dateRange },
+      ];
     }
     const activities = await Activity.find(q)
       .populate('lead', 'name company')
@@ -244,9 +251,15 @@ activitiesRouter.get('/team', async (req, res) => {
     if (userId) q.user = userId;
     if (type) q.type = type;
     if (from || to) {
-      q.createdAt = {};
-      if (from) q.createdAt.$gte = new Date(from);
-      if (to) q.createdAt.$lte = new Date(to);
+      const dateFrom = from ? new Date(from) : null;
+      const dateTo   = to   ? new Date(to)   : null;
+      const dateRange = {};
+      if (dateFrom) dateRange.$gte = dateFrom;
+      if (dateTo)   dateRange.$lte = dateTo;
+      q.$or = [
+        { createdAt: dateRange },
+        { 'taskData.dueDate': dateRange },
+      ];
     }
     const activities = await Activity.find(q)
       .populate('lead', 'name company')
@@ -367,9 +380,10 @@ integrationsRouter.get('/status', (req, res) => {
     success: true,
     data: {
       whatsapp: {
-        connected: !!(process.env.META_WA_TOKEN && process.env.META_WA_PHONE_ID),
+        connected: !!(  (process.env.WHATSAPP_TOKEN || process.env.META_WA_TOKEN) &&
+                        (process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.META_WA_PHONE_ID)),
         provider: 'Meta WhatsApp Cloud API',
-        phoneId: process.env.META_WA_PHONE_ID ? '✅ Configurado' : '❌ No configurado'
+        phoneId: (process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.META_WA_PHONE_ID) ? '✅ Configurado' : '❌ No configurado'
       },
       email: {
         connected: !!(process.env.SMTP_USER && process.env.SMTP_PASS),

@@ -13,11 +13,11 @@ const axios = require('axios');
 const BASE_URL = 'https://graph.facebook.com/v19.0';
 
 function getPhoneId() {
-  return process.env.WHATSAPP_PHONE_NUMBER_ID;
+  return process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.META_WA_PHONE_ID;
 }
 
 function getToken() {
-  return process.env.WHATSAPP_TOKEN;
+  return process.env.WHATSAPP_TOKEN || process.env.META_WA_TOKEN;
 }
 
 function isConfigured() {

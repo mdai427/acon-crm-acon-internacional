@@ -629,7 +629,7 @@ export default function QuoterPage({ toast }) {
                         <button style={{ marginTop: 6, fontSize: 11, background: '#7C3AED', color: '#fff', border: 'none', borderRadius: 5, padding: '3px 10px', cursor: 'pointer' }}
                           onClick={() => {
                             // Apply to first USD item if exists, else just note it
-                            toast(`Precio de referencia: $${aiSuggestion.suggestedPriceUSD?.toLocaleString()} USD`, 'info');
+                            toast(`Precio de referencia: $${aiSuggestion.suggestedPriceUSD?.toLocaleString()} USD`, 'success');
                           }}>Usar este precio</button>
                       </div>
                     )}

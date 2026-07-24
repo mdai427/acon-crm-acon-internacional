@@ -149,7 +149,8 @@ router.get('/webhook', (req, res) => {
   const token     = req.query['hub.verify_token'];
   const challenge = req.query['hub.challenge'];
 
-  if (mode === 'subscribe' && token === process.env.META_WA_VERIFY_TOKEN) {
+  const verifyToken = process.env.META_WA_VERIFY_TOKEN || process.env.WHATSAPP_VERIFY_TOKEN;
+  if (mode === 'subscribe' && token === verifyToken) {
     console.log('✅ WhatsApp Webhook verificado');
     return res.status(200).send(challenge);
   }
@@ -282,9 +283,9 @@ router.post('/meta/send-text', auth, async (req, res) => {
     if (leadId) {
       await Activity.create({
         lead: leadId, user: req.user._id,
-        type: 'whatsapp', direction: 'outbound',
+        type: 'whatsapp_out', direction: 'outbound',
         content: message,
-        metadata: { messageId: result.messages?.[0]?.id },
+        waData: { messageId: result.messages?.[0]?.id, to, status: 'sent' },
       });
       await Lead.findByIdAndUpdate(leadId, { lastContactDate: new Date() });
     }
@@ -306,9 +307,9 @@ router.post('/meta/send-template', auth, async (req, res) => {
     if (leadId) {
       await Activity.create({
         lead: leadId, user: req.user._id,
-        type: 'whatsapp', direction: 'outbound',
+        type: 'whatsapp_out', direction: 'outbound',
         content: `[Plantilla: ${templateName}]`,
-        metadata: { template: templateName, messageId: result.messages?.[0]?.id },
+        waData: { template: templateName, messageId: result.messages?.[0]?.id, status: 'sent' },
       });
     }
 

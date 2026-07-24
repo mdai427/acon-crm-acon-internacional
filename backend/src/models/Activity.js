@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 
 const activitySchema = new mongoose.Schema({
-  lead:      { type: mongoose.Schema.Types.ObjectId, ref: 'Lead', required: true },
+  lead:      { type: mongoose.Schema.Types.ObjectId, ref: 'Lead' },
   user:      { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // null si es automatico por IA
   type: {
     type: String,

@@ -24,16 +24,18 @@ function getTransporter() {
     secure: process.env.SMTP_SECURE === 'true',
     auth:   {
       user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
+      // Gmail app passwords have spaces — strip them
+      pass: (process.env.SMTP_PASS || '').replace(/\s/g, ''),
     },
+    tls: { rejectUnauthorized: false },
   });
   return transporter;
 }
 
 // ── WhatsApp Meta Cloud API ──────────────────────────────────────────────────
 async function sendWhatsAppText(to, message) {
-  const token   = process.env.WHATSAPP_TOKEN;
-  const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  const token   = process.env.WHATSAPP_TOKEN || process.env.META_WA_TOKEN;
+  const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.META_WA_PHONE_ID;
   if (!token || !phoneId || !to) return;
 
   // Normalize phone: strip non-digits, ensure country code

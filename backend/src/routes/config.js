@@ -23,28 +23,38 @@ function readEnv() {
       const eq = trimmed.indexOf('=');
       if (eq === -1) continue;
       const key = trimmed.slice(0, eq).trim();
-      const val = trimmed.slice(eq + 1).trim();
+      let val = trimmed.slice(eq + 1).trim();
+      // Quitar comillas si el valor está entre comillas simples o dobles
+      if ((val.startsWith('"') && val.endsWith('"')) ||
+          (val.startsWith("'") && val.endsWith("'"))) {
+        val = val.slice(1, -1);
+      }
       env[key] = val;
     }
     return env;
   } catch { return {}; }
 }
 
-// Escribe claves en el .env sin borrar comentarios
+// Escribe claves en el .env sin borrar comentarios.
+// Los valores se guardan con comillas dobles para soportar espacios y chars especiales.
 function writeEnv(updates) {
   let content = '';
   try { content = fs.readFileSync(ENV_PATH, 'utf-8'); } catch {}
 
   for (const [key, value] of Object.entries(updates)) {
+    // Eliminar espacios del inicio/fin; eliminar espacios internos solo en contraseñas de app
+    const cleanValue = String(value).trim();
+    // Escapar comillas dobles internas
+    const escaped = cleanValue.replace(/"/g, '\\"');
+    const line = `${key}="${escaped}"`;
     const regex = new RegExp(`^${key}=.*$`, 'm');
-    const line = `${key}=${value}`;
     if (regex.test(content)) {
       content = content.replace(regex, line);
     } else {
       content += `\n${line}`;
     }
     // Actualizar también en process.env para efecto inmediato
-    process.env[key] = value;
+    process.env[key] = cleanValue;
   }
 
   fs.writeFileSync(ENV_PATH, content);
@@ -169,12 +179,20 @@ router.post('/email/test', auth, adminOnly, async (req, res) => {
   if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
     return res.status(400).json({ success: false, message: 'Configura SMTP_USER y SMTP_PASS primero' });
   }
+
+  const host   = process.env.SMTP_HOST   || 'smtp.gmail.com';
+  const port   = Number(process.env.SMTP_PORT || 587);
+  const secure = process.env.SMTP_SECURE === 'true'; // true = SSL/465, false = STARTTLS/587
+  // Gmail app passwords come with spaces — strip them
+  const pass   = (process.env.SMTP_PASS || '').replace(/\s/g, '');
+
   try {
     const transporter = nodemailer.createTransport({
-      host:   process.env.SMTP_HOST   || 'smtp.gmail.com',
-      port:   Number(process.env.SMTP_PORT || 587),
-      secure: process.env.SMTP_SECURE === 'true',
-      auth:   { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
+      host,
+      port,
+      secure,
+      auth: { user: process.env.SMTP_USER, pass },
+      tls: { rejectUnauthorized: false }, // tolera certs auto-firmados (Hostinger, etc.)
     });
     await transporter.verify();
     if (testTo) {
@@ -187,7 +205,20 @@ router.post('/email/test', auth, adminOnly, async (req, res) => {
     }
     res.json({ success: true, message: testTo ? `✅ Email enviado a ${testTo}` : '✅ Conexión SMTP verificada' });
   } catch (e) {
-    res.json({ success: false, message: e.message });
+    // Traducir errores comunes a mensajes claros en español
+    let msg = e.message || 'Error desconocido';
+    if (msg.includes('Invalid login') || msg.includes('Username and Password not accepted') || msg.includes('535')) {
+      msg = '❌ Usuario o contraseña incorrectos. Para Gmail: usa Contraseña de aplicación de 16 caracteres (sin espacios), NO tu contraseña normal. Verifica que 2-Step Verification esté activo.';
+    } else if (msg.includes('ECONNREFUSED') || msg.includes('ENOTFOUND')) {
+      msg = `❌ No se pudo conectar al servidor ${host}:${port}. Verifica el host y puerto.`;
+    } else if (msg.includes('ETIMEDOUT') || msg.includes('timeout')) {
+      msg = `❌ Tiempo de espera agotado conectando a ${host}:${port}. Puede ser un problema de firewall o puerto incorrecto.`;
+    } else if (msg.includes('self signed') || msg.includes('certificate')) {
+      msg = `❌ Error de certificado SSL. Prueba cambiando a puerto 587 con STARTTLS.`;
+    } else if (msg.includes('STARTTLS') || msg.includes('greeting')) {
+      msg = `❌ Error de protocolo. Para Hostinger: usa port 465 + SSL/TLS. Para Gmail: usa port 587 + STARTTLS.`;
+    }
+    res.json({ success: false, message: msg });
   }
 });
 

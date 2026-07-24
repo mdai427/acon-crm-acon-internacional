@@ -173,6 +173,8 @@ export default function ConfigPage({ toast }) {
 
   return (
     <div className="page">
+      {/* form wrapper elimina warnings "password field not in form" del navegador */}
+      <form autoComplete="off" onSubmit={e => e.preventDefault()} style={{ display: 'contents' }}>
       <div className="page-header">
         <div>
           <div className="page-title">⚙️ Configuración de Integraciones</div>
@@ -265,11 +267,30 @@ export default function ConfigPage({ toast }) {
           <StatusPill connected={cfg?.email?.connected} />
         </div>
 
+        {/* Presets */}
+        <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 12, color: 'var(--text3)', alignSelf: 'center' }}>Preset rápido:</span>
+          {[
+            { label: '📧 Gmail', host: 'smtp.gmail.com', port: '587', secure: 'false' },
+            { label: '🌐 Hostinger', host: 'smtp.hostinger.com', port: '465', secure: 'true' },
+            { label: '📨 Outlook', host: 'smtp.office365.com', port: '587', secure: 'false' },
+          ].map(p => (
+            <button key={p.label} type="button" className="btn btn-ghost btn-sm"
+              onClick={() => setEmail(f => ({ ...f, SMTP_HOST: p.host, SMTP_PORT: p.port, SMTP_SECURE: p.secure }))}>
+              {p.label}
+            </button>
+          ))}
+        </div>
+
         <div style={{ padding: '12px 14px', background: 'var(--dark3)', borderRadius: 8, fontSize: 12, color: 'var(--text2)', marginBottom: 14 }}>
           <b style={{ color: 'var(--orange)' }}>📋 Gmail — Contraseña de aplicación:</b><br />
           1. Google Account → Seguridad → Verificación en 2 pasos (activa)<br />
-          2. Seguridad → <b>Contraseñas de aplicaciones</b> → Correo → Generar<br />
-          3. Pega la contraseña de 16 caracteres en SMTP_PASS
+          2. Seguridad → <b>Contraseñas de aplicaciones</b> → Selecciona "Correo" → Generar<br />
+          3. Pega la contraseña de <b>16 caracteres</b> en SMTP_PASS (sin espacios)<br />
+          4. SMTP_USER = tu correo Gmail completo · Host: smtp.gmail.com · Puerto: 587<br />
+          <br />
+          <b style={{ color: 'var(--orange)' }}>🌐 Hostinger:</b> Host: smtp.hostinger.com · Puerto: 465 · SSL/TLS activado<br />
+          SMTP_USER = tu email del dominio (ej: crm@tudominio.com) · SMTP_PASS = tu contraseña del correo
         </div>
 
         <div className="form-row">
@@ -281,8 +302,8 @@ export default function ConfigPage({ toast }) {
               <input className="form-input" name="SMTP_PORT" value={email.SMTP_PORT} onChange={chEm}
                 placeholder="587" style={{ width: 80 }} />
               <select className="form-select" name="SMTP_SECURE" value={email.SMTP_SECURE} onChange={chEm}>
-                <option value="false">STARTTLS (587)</option>
-                <option value="true">SSL/TLS (465)</option>
+                <option value="false">STARTTLS (587) — Gmail / Outlook</option>
+                <option value="true">SSL/TLS (465) — Hostinger</option>
               </select>
             </div>
           </div>
@@ -496,6 +517,7 @@ export default function ConfigPage({ toast }) {
           <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>Primeros 20 chars de JWT_SECRET</div>
         </div>
       </Section>
+      </form>
     </div>
   );
 }
