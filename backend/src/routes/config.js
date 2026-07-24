@@ -88,6 +88,12 @@ router.get('/', auth, adminOnly, (req, res) => {
         EMAIL_FROM:  e.EMAIL_FROM  || '',
         connected: !!(e.SMTP_USER && e.SMTP_PASS),
       },
+      google: {
+        GOOGLE_CLIENT_ID:     e.GOOGLE_CLIENT_ID     ? mask(e.GOOGLE_CLIENT_ID)     : '',
+        GOOGLE_CLIENT_SECRET: e.GOOGLE_CLIENT_SECRET ? '••••••••••••'               : '',
+        GOOGLE_REDIRECT_URI:  e.GOOGLE_REDIRECT_URI  || '',
+        configured: !!(e.GOOGLE_CLIENT_ID && e.GOOGLE_CLIENT_SECRET),
+      },
       openai: {
         OPENAI_API_KEY: e.OPENAI_API_KEY ? mask(e.OPENAI_API_KEY) : '',
         OPENAI_MODEL:   e.OPENAI_MODEL   || 'gpt-4o-mini',
@@ -220,6 +226,39 @@ router.post('/email/test', auth, adminOnly, async (req, res) => {
     }
     res.json({ success: false, message: msg });
   }
+});
+
+// ─────────────────────────────────────────
+// POST /api/config/google — guarda credenciales Google OAuth
+// ─────────────────────────────────────────
+router.post('/google', auth, adminOnly, (req, res) => {
+  const { GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI } = req.body;
+  const updates = {};
+  if (GOOGLE_CLIENT_ID)     updates.GOOGLE_CLIENT_ID     = GOOGLE_CLIENT_ID;
+  if (GOOGLE_CLIENT_SECRET) updates.GOOGLE_CLIENT_SECRET = GOOGLE_CLIENT_SECRET;
+  if (GOOGLE_REDIRECT_URI)  updates.GOOGLE_REDIRECT_URI  = GOOGLE_REDIRECT_URI;
+  writeEnv(updates);
+  res.json({ success: true, message: 'Credenciales Google guardadas' });
+});
+
+// ─────────────────────────────────────────
+// POST /api/config/google/test — verifica que los IDs son válidos
+// ─────────────────────────────────────────
+router.post('/google/test', auth, adminOnly, (req, res) => {
+  if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+    return res.json({ success: false, message: 'Configura GOOGLE_CLIENT_ID y GOOGLE_CLIENT_SECRET primero' });
+  }
+  // We cannot do a real OAuth verify without user interaction — just confirm they're set
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const isValid = clientId.endsWith('.apps.googleusercontent.com');
+  if (!isValid) {
+    return res.json({ success: false, message: 'GOOGLE_CLIENT_ID no parece válido — debe terminar en .apps.googleusercontent.com' });
+  }
+  res.json({
+    success: true,
+    message: '✅ Credenciales Google configuradas. Ahora ve a Integraciones y haz click en "Conectar con Google" para autorizar tu cuenta.',
+    data: { clientId: clientId.slice(0, 20) + '...' }
+  });
 });
 
 // ─────────────────────────────────────────

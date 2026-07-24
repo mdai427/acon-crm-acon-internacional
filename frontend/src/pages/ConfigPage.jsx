@@ -88,6 +88,7 @@ export default function ConfigPage({ toast }) {
   // Formularios locales por sección
   const [wa, setWa] = useState({ META_WA_TOKEN: '', META_WA_PHONE_ID: '', META_WA_VERIFY_TOKEN: '', META_APP_SECRET: '' });
   const [email, setEmail] = useState({ SMTP_HOST: 'smtp.gmail.com', SMTP_PORT: '587', SMTP_SECURE: 'false', SMTP_USER: '', SMTP_PASS: '', EMAIL_FROM: '' });
+  const [google, setGoogle] = useState({ GOOGLE_CLIENT_ID: '', GOOGLE_CLIENT_SECRET: '', GOOGLE_REDIRECT_URI: '' });
   const [openai, setOpenai] = useState({ OPENAI_API_KEY: '', OPENAI_MODEL: 'gpt-4o-mini' });
   const [fb, setFb] = useState({ META_ACCESS_TOKEN: '', META_PAGE_ID: '', META_WEBHOOK_VERIFY_TOKEN: '', META_APP_SECRET: '' });
 
@@ -123,6 +124,12 @@ export default function ConfigPage({ toast }) {
         SMTP_USER:   d.email.SMTP_USER  || '',
         EMAIL_FROM:  d.email.EMAIL_FROM || '',
       }));
+      if (d.google) {
+        setGoogle(g => ({
+          ...g,
+          GOOGLE_REDIRECT_URI: d.google.GOOGLE_REDIRECT_URI || '',
+        }));
+      }
       setOpenai(o => ({ ...o, OPENAI_MODEL: d.openai.OPENAI_MODEL || 'gpt-4o-mini' }));
       setFb(f => ({
         ...f,
@@ -163,6 +170,7 @@ export default function ConfigPage({ toast }) {
 
   const chWa = e => setWa(f => ({ ...f, [e.target.name]: e.target.value }));
   const chEm = e => setEmail(f => ({ ...f, [e.target.name]: e.target.value }));
+  const chGo = e => setGoogle(f => ({ ...f, [e.target.name]: e.target.value }));
   const chOp = e => setOpenai(f => ({ ...f, [e.target.name]: e.target.value }));
   const chFb = e => setFb(f => ({ ...f, [e.target.name]: e.target.value }));
 
@@ -333,6 +341,61 @@ export default function ConfigPage({ toast }) {
           <TestButton onTest={() => test('email', { testTo: testEmail })} loading={testLoading.email} />
         </div>
         <ResultBanner result={testResults.email} />
+      </Section>
+
+      {/* ─── GOOGLE OAUTH ─── */}
+      <Section title="Google Suite — Gmail + Calendar + Meet" icon="🔵"
+        desc="Una sola conexión activa Gmail, Google Calendar y Google Meet en el CRM. Requiere crear una app en Google Cloud Console.">
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+          <StatusPill connected={cfg?.google?.configured} saved={cfg?.google?.configured} />
+          <TestButton onTest={() => test('google')} loading={testLoading.google} />
+        </div>
+
+        <div style={{ padding: '12px 14px', background: 'var(--dark3)', borderRadius: 8, fontSize: 12, color: 'var(--text2)', marginBottom: 14 }}>
+          <b style={{ color: 'var(--orange)' }}>📋 Cómo obtener las credenciales (5 min):</b><br />
+          1. Ve a <b>console.cloud.google.com</b> → Crear proyecto → "ACON CRM"<br />
+          2. APIs y servicios → Habilitar: <b>Gmail API</b> + <b>Google Calendar API</b><br />
+          3. Credenciales → Crear credencial → <b>ID de cliente OAuth 2.0</b> → Aplicación web<br />
+          4. URI de redireccionamiento autorizado: <code style={{ color: 'var(--orange)' }}>{(cfg?.webhooks?.base || 'https://tu-backend.railway.app')}/api/oauth/google/callback</code><br />
+          5. Copia el <b>Client ID</b> y <b>Client Secret</b><br />
+          6. Luego ve a <b>Integraciones → Conectar con Google</b> para autorizar tu cuenta
+        </div>
+
+        <div className="form-row">
+          <div className="form-group">
+            <label className="form-label">Client ID (GOOGLE_CLIENT_ID)</label>
+            <input className="form-input" name="GOOGLE_CLIENT_ID" value={google.GOOGLE_CLIENT_ID} onChange={chGo}
+              placeholder="xxxxx.apps.googleusercontent.com" />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Client Secret (GOOGLE_CLIENT_SECRET)</label>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <input className="form-input" type={show.googlesecret ? 'text' : 'password'}
+                name="GOOGLE_CLIENT_SECRET" value={google.GOOGLE_CLIENT_SECRET} onChange={chGo}
+                placeholder="GOCSPX-..." />
+              <button className="btn btn-ghost btn-sm" type="button" onClick={() => toggleShow('googlesecret')}
+                style={{ flexShrink: 0 }}>{show.googlesecret ? '🙈' : '👁'}</button>
+            </div>
+          </div>
+        </div>
+        <Input label="URI de redirección (GOOGLE_REDIRECT_URI) — opcional si está en Railway" name="GOOGLE_REDIRECT_URI"
+          value={google.GOOGLE_REDIRECT_URI} onChange={chGo}
+          placeholder={`${cfg?.webhooks?.base || 'https://tu-backend.railway.app'}/api/oauth/google/callback`} />
+
+        <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+          <button className="btn btn-primary" onClick={() => save('google', google)} disabled={saving.google}>
+            {saving.google ? 'Guardando...' : '💾 Guardar Google'}
+          </button>
+          <TestButton onTest={() => test('google')} loading={testLoading.google} />
+        </div>
+        <ResultBanner result={testResults.google} />
+
+        {cfg?.google?.configured && (
+          <div style={{ marginTop: 10, padding: '10px 14px', background: 'rgba(34,197,94,.08)', border: '1px solid rgba(34,197,94,.2)', borderRadius: 8, fontSize: 12, color: '#16A34A' }}>
+            ✅ Credenciales configuradas. Ve a <b>Integraciones → Conectar con Google</b> para autorizar tu cuenta personal.
+          </div>
+        )}
       </Section>
 
       {/* ─── OPENAI ─── */}
