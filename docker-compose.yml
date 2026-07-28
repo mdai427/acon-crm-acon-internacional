@@ -84,6 +84,9 @@ services:
         # Debe ser la URL pública del backend, sin /api al final.
         REACT_APP_API_URL: ${BACKEND_URL}
     restart: unless-stopped
+    networks:
+      - default
+      - easypanel
     depends_on:
       - backend
 
