@@ -55,9 +55,11 @@ export default function LoginPage() {
 
         {/* Logo */}
         <div className="login-logo-wrap">
-          <div className="login-logo-badge">
-            <span className="llb-a">A</span>
-          </div>
+          <img
+            src="/acon-logo.png"
+            alt="ACON Internacional"
+            style={{ height: 52, width: 'auto', objectFit: 'contain' }}
+          />
           <div>
             <div className="login-logo-text">
               <span className="llo-accent">ACON</span>

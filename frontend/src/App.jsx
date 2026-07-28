@@ -319,7 +319,8 @@ function CRMApp() {
             {sidebarOpen ? <X size={18} /> : <Menu size={18} />}
           </button>
 
-          <div className="logo">
+          <div className="logo" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <img src="/acon-logo.png" alt="ACON" style={{ height: 26, width: 'auto', objectFit: 'contain' }} />
             <span className="logo-accent">ACON</span>
             <span className="logo-full"> Internacional</span>
             <span className="logo-sub">· Worldwide</span>
@@ -354,7 +355,8 @@ function CRMApp() {
         <div ref={sidebarRef} className={`sidebar ${sidebarOpen ? 'sidebar-open' : ''}`}>
           {/* Mobile close */}
           <div className="sidebar-close-row">
-            <div className="sidebar-brand">
+            <div className="sidebar-brand" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <img src="/acon-logo.png" alt="ACON" style={{ height: 24, width: 'auto', objectFit: 'contain' }} />
               <span style={{ color: 'var(--orange-500)', fontWeight: 800 }}>ACON</span>
               <span style={{ color: 'rgba(255,255,255,.7)', fontWeight: 400 }}> CRM</span>
             </div>
