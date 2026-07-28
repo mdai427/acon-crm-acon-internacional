@@ -22,6 +22,8 @@ services:
       ADMIN_NAME: ${ADMIN_NAME:-}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      # true = en cada deploy crea o actualiza el admin con los datos de arriba
+      ADMIN_FORCE_UPDATE: ${ADMIN_FORCE_UPDATE:-false}
 
       # --- Seguridad ---
       JWT_SECRET: ${JWT_SECRET}
