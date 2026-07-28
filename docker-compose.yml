@@ -18,6 +18,11 @@ services:
       # URI del MongoDB de EasyPanel (servicio acon-mg-db)
       MONGODB_URI: ${MONGODB_URI}
 
+      # --- Admin inicial (se crea al arrancar si no existe ninguno) ---
+      ADMIN_NAME: ${ADMIN_NAME:-}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+
       # --- Seguridad ---
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
