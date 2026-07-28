@@ -100,12 +100,20 @@ export const testWhatsApp = () => api.post('/config/whatsapp/test');
 export const saveEmailConfig = (d) => api.post('/config/email', d);
 export const testEmail = (d) => api.post('/config/email/test', d);
 export const testResend = (d) => api.post('/config/resend/test', d);
+export const testTwilio = () => api.post('/config/twilio/test');
 export const saveOpenAIConfig = (d) => api.post('/config/openai', d);
 export const testOpenAI = () => api.post('/config/openai/test');
 // Configuración genérica de integraciones (se guarda cifrada en la base de datos)
 export const getSettings = () => api.get('/config/settings');
 export const saveSettings = (d) => api.post('/config/settings', d);
 export const deleteSetting = (key) => api.delete(`/config/settings/${key}`);
+
+// Llamadas (Twilio Voice)
+export const getVoiceToken   = () => api.get('/calls/token');
+export const getVoiceStatus  = () => api.get('/calls/status-config');
+export const getCalls        = (params) => api.get('/calls', { params });
+export const getCall         = (id) => api.get(`/calls/${id}`);
+export const retryTranscript = (id) => api.post(`/calls/${id}/transcribe`);
 
 // Operations
 export const getOperations = (params) => api.get('/operations', { params });

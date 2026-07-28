@@ -1,7 +1,7 @@
 import {
-  Mail, MessageSquare, Bot, Users, Globe, Zap, HardDrive, TrendingUp, Send,
+  Mail, MessageSquare, Bot, Users, Globe, Zap, HardDrive, TrendingUp, Send, Phone,
 } from 'lucide-react';
-import { testWhatsApp, testEmail, testOpenAI, testResend } from '../../services/api';
+import { testWhatsApp, testEmail, testOpenAI, testResend, testTwilio } from '../../services/api';
 
 // ── Catálogo de integraciones ─────────────────────────────────────────────────
 // Cada campo se guarda cifrado en la base de datos (AES-256-GCM). Los marcados
@@ -39,6 +39,31 @@ export const CATALOG = [
             help: 'Invéntalo tú y pega exactamente el mismo en Meta' },
           { key: 'META_APP_SECRET', label: 'App Secret', secret: true,
             help: 'Valida la firma de los mensajes entrantes' },
+        ],
+      },
+      {
+        id: 'twilio',
+        name: 'Twilio Voice',
+        desc: 'Llama a los clientes desde el CRM, con grabación y transcripción',
+        icon: Phone, color: '#F22F46',
+        docs: 'https://www.twilio.com/docs/voice/sdks/javascript',
+        webhook: '/api/calls/voice',
+        required: ['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 'TWILIO_API_KEY_SID',
+                   'TWILIO_API_KEY_SECRET', 'TWILIO_TWIML_APP_SID', 'TWILIO_CALLER_ID'],
+        test: testTwilio,
+        fields: [
+          { key: 'TWILIO_ACCOUNT_SID', label: 'Account SID', placeholder: 'AC...',
+            help: 'Consola de Twilio → Account Info' },
+          { key: 'TWILIO_AUTH_TOKEN', label: 'Auth Token', secret: true,
+            help: 'Se usa para validar que los webhooks vienen de Twilio' },
+          { key: 'TWILIO_API_KEY_SID', label: 'API Key SID', placeholder: 'SK...',
+            help: 'Consola → Account → API keys & tokens → Create API key (Standard)' },
+          { key: 'TWILIO_API_KEY_SECRET', label: 'API Key Secret', secret: true,
+            help: 'Solo se muestra una vez al crear la API Key' },
+          { key: 'TWILIO_TWIML_APP_SID', label: 'TwiML App SID', placeholder: 'AP...',
+            help: 'Voice → TwiML Apps. Su Voice URL debe ser la de abajo, con método POST' },
+          { key: 'TWILIO_CALLER_ID', label: 'Número saliente (Caller ID)', placeholder: '+528112345678',
+            help: 'Número comprado en Twilio con capacidad de voz, en formato E.164' },
         ],
       },
       {

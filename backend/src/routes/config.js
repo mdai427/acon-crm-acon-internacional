@@ -304,6 +304,63 @@ router.post('/resend/test', auth, checkPerm('integrations.manage'), async (req, 
 });
 
 // ─────────────────────────────────────────
+// POST /api/config/twilio/test — valida credenciales y TwiML App
+// ─────────────────────────────────────────
+router.post('/twilio/test', auth, checkPerm('integrations.manage'), async (req, res) => {
+  const sid   = process.env.TWILIO_ACCOUNT_SID;
+  const token = process.env.TWILIO_AUTH_TOKEN;
+  if (!sid || !token) {
+    return res.status(400).json({ success: false, message: 'Configura TWILIO_ACCOUNT_SID y TWILIO_AUTH_TOKEN primero' });
+  }
+  const api = 'https://api.twilio.com/2010-04-01';
+  const authPair = { username: sid, password: token };
+
+  try {
+    const account = await axios.get(`${api}/Accounts/${sid}.json`, { auth: authPair, timeout: 10000 });
+
+    const faltantes = [];
+    if (!process.env.TWILIO_API_KEY_SID || !process.env.TWILIO_API_KEY_SECRET) faltantes.push('API Key/Secret');
+    if (!process.env.TWILIO_TWIML_APP_SID) faltantes.push('TwiML App SID');
+    if (!process.env.TWILIO_CALLER_ID)     faltantes.push('Caller ID');
+
+    // La TwiML App debe apuntar a nuestro webhook, si no las llamadas no conectan.
+    let twimlAviso = '';
+    if (process.env.TWILIO_TWIML_APP_SID) {
+      const expected = `${PUBLIC_BASE_URL}/api/calls/voice`;
+      try {
+        const app = await axios.get(
+          `${api}/Accounts/${sid}/Applications/${process.env.TWILIO_TWIML_APP_SID}.json`,
+          { auth: authPair, timeout: 10000 }
+        );
+        if (app.data.voice_url !== expected) {
+          twimlAviso = ` ⚠️ La Voice URL de la TwiML App es "${app.data.voice_url || 'vacía'}"; debe ser ${expected} (método POST).`;
+        }
+      } catch {
+        twimlAviso = ' ⚠️ No se pudo leer la TwiML App: revisa que el SID sea correcto.';
+      }
+    }
+
+    if (faltantes.length) {
+      return res.json({
+        success: false,
+        message: `Credenciales válidas, pero falta configurar: ${faltantes.join(', ')}.${twimlAviso}`,
+      });
+    }
+
+    res.json({
+      success: true,
+      message: `✅ Twilio conectado — Cuenta: ${account.data.friendly_name} (${account.data.status}).${twimlAviso}`,
+    });
+  } catch (e) {
+    const detail = e.response?.data?.message || e.message;
+    const msg = e.response?.status === 401
+      ? '❌ Account SID o Auth Token incorrectos'
+      : `❌ ${detail}`;
+    res.json({ success: false, message: msg });
+  }
+});
+
+// ─────────────────────────────────────────
 // POST /api/config/google — guarda credenciales Google OAuth
 // ─────────────────────────────────────────
 router.post('/google', auth, checkPerm('integrations.manage'), async (req, res) => {

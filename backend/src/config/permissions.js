@@ -76,6 +76,10 @@ const PERMISSIONS = {
   'integrations.connect': ['admin'],
   'integrations.manage':  ['admin','gerencia'],
 
+  // ── LLAMADAS (Twilio) ────────────────────────────────────
+  'calls.make':           ['admin','gerencia','executive'],
+  'calls.view':           ['admin','direccion','gerencia','executive'],
+
   // ── WHATSAPP ─────────────────────────────────────────────
   'whatsapp.view':        ['admin','direccion','gerencia','executive','marketing'],
   'whatsapp.send':        ['admin','gerencia','executive','marketing'],

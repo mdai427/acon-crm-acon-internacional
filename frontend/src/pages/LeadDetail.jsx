@@ -9,6 +9,7 @@ import { ScoreBadge, StageBadge, SourceBadge } from '../components/Badges';
 import { Mail, Calendar, FileText, MessageSquare, RefreshCw, Plus, Send, Video, Clock, MapPin, CheckSquare, Square, Building2, Zap, Paperclip, Trash2, Download, Phone } from 'lucide-react';
 import { triggerLeadResearch } from '../services/api';
 import AISuggestionsPanel from '../components/AISuggestionsPanel';
+import CallPanel from '../components/CallPanel';
 import { completeActivity } from '../services/api';
 
 const STAGES = ['new','contacted','qualified','proposal','negotiation','closed_won','closed_lost'];
@@ -20,6 +21,7 @@ const TABS = [
   { id: 'activity',  label: 'Timeline',    Icon: MessageSquare },
   { id: 'archivos',  label: 'Archivos',    Icon: Paperclip },
   { id: 'emails',    label: 'Correos',     Icon: Mail },
+  { id: 'llamadas',  label: 'Llamadas',    Icon: Phone },
   { id: 'calendar',  label: 'Calendario',  Icon: Calendar },
 ];
 
@@ -755,6 +757,9 @@ export default function LeadDetail({ leadId, toast, onBack }) {
           )}
         </div>
       )}
+
+      {/* ── TAB: LLAMADAS ── */}
+      {tab === 'llamadas' && <CallPanel lead={lead} toast={toast} />}
 
       {/* ── TAB: CALENDAR ── */}
       {tab === 'calendar' && (
