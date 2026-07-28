@@ -1,0 +1,100 @@
+version: "3.8"
+
+# ============================================
+# ACON CRM — Compose para EasyPanel
+# Configura las variables en el panel de EasyPanel (Environment),
+# NO las escribas aquí. Ver .env.example para la lista completa.
+# ============================================
+
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
+    volumes:
+      - mongo_data:/data/db
+
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    depends_on:
+      - mongo
+    environment:
+      NODE_ENV: production
+      PORT: 5001
+      MONGODB_URI: mongodb://${MONGO_USER}:${MONGO_PASSWORD}@mongo:27017/acon-crm?authSource=admin
+
+      # --- Seguridad ---
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
+
+      # --- Dominios ---
+      FRONTEND_URL: ${FRONTEND_URL}
+      BACKEND_URL: ${BACKEND_URL}
+      PUBLIC_BASE_URL: ${BACKEND_URL}
+
+      # --- OpenAI (agentes IA) ---
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+
+      # --- Meta / WhatsApp Cloud API ---
+      META_APP_ID: ${META_APP_ID:-}
+      META_APP_SECRET: ${META_APP_SECRET:-}
+      META_ACCESS_TOKEN: ${META_ACCESS_TOKEN:-}
+      META_PAGE_ID: ${META_PAGE_ID:-}
+      META_WA_TOKEN: ${META_WA_TOKEN:-}
+      META_WA_PHONE_ID: ${META_WA_PHONE_ID:-}
+      META_WA_VERIFY_TOKEN: ${META_WA_VERIFY_TOKEN:-}
+      META_WEBHOOK_VERIFY_TOKEN: ${META_WEBHOOK_VERIFY_TOKEN:-}
+      WHATSAPP_TOKEN: ${WHATSAPP_TOKEN:-}
+      WHATSAPP_PHONE_NUMBER_ID: ${WHATSAPP_PHONE_NUMBER_ID:-}
+      WHATSAPP_VERIFY_TOKEN: ${WHATSAPP_VERIFY_TOKEN:-}
+      WHATSAPP_APP_SECRET: ${WHATSAPP_APP_SECRET:-}
+      WHATSAPP_WABA_ID: ${WHATSAPP_WABA_ID:-}
+
+      # --- Email (SMTP) ---
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      EMAIL_FROM: ${EMAIL_FROM:-}
+
+      # --- Google OAuth (Gmail / Calendar) ---
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-}
+
+      # --- LinkedIn ---
+      LINKEDIN_CLIENT_ID: ${LINKEDIN_CLIENT_ID:-}
+      LINKEDIN_CLIENT_SECRET: ${LINKEDIN_CLIENT_SECRET:-}
+      LINKEDIN_ACCESS_TOKEN: ${LINKEDIN_ACCESS_TOKEN:-}
+
+      # --- AWS S3 (archivos adjuntos) ---
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_REGION: ${AWS_REGION:-}
+      S3_BUCKET: ${S3_BUCKET:-}
+
+      # --- Otros ---
+      N8N_API_KEY: ${N8N_API_KEY:-}
+      BANXICO_TOKEN: ${BANXICO_TOKEN:-}
+      DEFAULT_EXCHANGE_RATE: ${DEFAULT_EXCHANGE_RATE:-17.5}
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # OJO: variable de BUILD (CRA la incrusta al compilar).
+        # Debe ser la URL pública del backend, sin /api al final.
+        REACT_APP_API_URL: ${BACKEND_URL}
+    restart: unless-stopped
+    depends_on:
+      - backend
+
+volumes:
+  mongo_data:

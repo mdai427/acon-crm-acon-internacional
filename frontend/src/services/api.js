@@ -1,0 +1,284 @@
+import axios from 'axios';
+
+const api = axios.create({
+  baseURL: process.env.REACT_APP_API_URL ? `${process.env.REACT_APP_API_URL}/api` : '/api',
+  headers: { 'Content-Type': 'application/json' }
+});
+
+api.interceptors.request.use(cfg => {
+  const token = localStorage.getItem('acon_token');
+  if (token) cfg.headers.Authorization = `Bearer ${token}`;
+  return cfg;
+});
+
+api.interceptors.response.use(
+  r => r,
+  err => {
+    if (err.response?.status === 401) {
+      localStorage.removeItem('acon_token');
+      window.location.href = '/login';
+    }
+    return Promise.reject(err);
+  }
+);
+
+export default api;
+
+// Auth
+export const login = (data) => api.post('/auth/login', data);
+export const getMe = () => api.get('/auth/me');
+
+// Leads
+export const getLeads = (params) => api.get('/leads', { params });
+export const getLead = (id) => api.get(`/leads/${id}`);
+export const createLead = (data) => api.post('/leads', data);
+export const updateLead = (id, data) => api.put(`/leads/${id}`, data);
+export const deleteLead = (id) => api.delete(`/leads/${id}`);
+
+// Pipeline
+export const getKanban = () => api.get('/pipeline/kanban');
+export const moveLead = (data) => api.put('/pipeline/move', data);
+
+// Activities
+export const getActivities = (leadId) => api.get(`/activities/lead/${leadId}`);
+export const createActivity = (data) => api.post('/activities', data);
+export const completeActivity = (id) => api.put(`/activities/${id}/complete`);
+export const getMyActivities = (params) => api.get('/activities/mine', { params });
+export const getTeamActivities = (params) => api.get('/activities/team', { params });
+
+// WhatsApp
+export const getConversation = (leadId) => api.get(`/whatsapp/conversations/${leadId}`);
+export const sendWhatsApp = (data) => api.post('/whatsapp/send', data);
+export const sendTemplate = (data) => api.post('/whatsapp/template', data);
+
+// Email (SMTP)
+export const sendEmail = (data) => api.post('/email/send', data);
+export const getTemplates = () => api.get('/email/templates');
+
+// Gmail (OAuth)
+export const getGmailMessages = (contactEmail, maxResults = 20) =>
+  api.get('/gmail/messages', { params: { contactEmail, maxResults } });
+export const sendGmailMessage = (data) => api.post('/gmail/send', data);
+
+// Google Calendar
+export const getCalendarEvents = (q) => api.get('/calendar/events', { params: { q } });
+export const createCalendarEvent = (data) => api.post('/calendar/events', data);
+export const deleteCalendarEvent = (eventId) => api.delete(`/calendar/events/${eventId}`);
+
+// OAuth
+export const getOAuthStatus = () => api.get('/oauth/status');
+export const connectGoogle = () => api.get('/oauth/google/url');
+export const disconnectOAuth = (provider) => api.delete(`/oauth/disconnect/${provider}`);
+
+// Reports
+export const getDashboard = (period = 'month') => api.get('/reports/dashboard', { params: { period } });
+export const getTeamReport = () => api.get('/reports/team');
+export const getConversionReport = () => api.get('/reports/conversion');
+export const rescoreAllLeads = () => api.post('/leads/rescore-all');
+export const getAIInsights = () => api.get('/reports/ai-insights');
+export const exportCSV = () => api.get('/reports/export', { responseType: 'blob' });
+export const exportLeadsXLSX = (params) => api.get('/reports/export/leads', { params, responseType: 'blob' });
+export const exportQuotesXLSX = (params) => api.get('/reports/export/quotes', { params, responseType: 'blob' });
+export const exportCommissionsXLSX = (params) => api.get('/reports/export/commissions', { params, responseType: 'blob' });
+export const getOperationsSummary = () => api.get('/operations/summary');
+export const getOperationsReport = () => api.get('/reports/operations');
+
+// Users
+export const getUsers = () => api.get('/users');
+export const createUser = (data) => api.post('/users', data);
+export const updateUser = (id, data) => api.put(`/users/${id}`, data);
+export const deleteUser = (id) => api.delete(`/users/${id}`);
+export const resetUserPassword = (id, newPassword) => api.put(`/users/${id}/reset-password`, { newPassword });
+
+// Integrations / Config
+export const getIntegrations = () => api.get('/integrations/status');
+export const getConfig = () => api.get('/config');
+export const saveWhatsAppConfig = (d) => api.post('/config/whatsapp', d);
+export const testWhatsApp = () => api.post('/config/whatsapp/test');
+export const saveEmailConfig = (d) => api.post('/config/email', d);
+export const testEmail = (d) => api.post('/config/email/test', d);
+export const saveOpenAIConfig = (d) => api.post('/config/openai', d);
+export const testOpenAI = () => api.post('/config/openai/test');
+
+// Operations
+export const getOperations = (params) => api.get('/operations', { params });
+export const createOperation = (data) => api.post('/operations', data);
+export const updateOperation = (id, data) => api.put(`/operations/${id}`, data);
+export const deleteOperation = (id) => api.delete(`/operations/${id}`);
+export const updateOperationStatus = (id, status) => api.put(`/operations/${id}/status`, { status });
+export const updateOperationDocument = (id, data) => api.put(`/operations/${id}/document`, data);
+
+// Quotes
+export const getQuotes = (params) => api.get('/quotes', { params });
+export const createQuote = (data) => api.post('/quotes', data);
+export const updateQuote = (id, data) => api.put(`/quotes/${id}`, data);
+export const deleteQuote = (id) => api.delete(`/quotes/${id}`);
+export const updateQuoteStatus = (id, status) => api.put(`/quotes/${id}/status`, { status });
+export const getQuoteVersions = (id) => api.get(`/quotes/${id}/versions`);
+export const downloadQuotePDF = (id) => api.get(`/quotes/${id}/pdf`, { responseType: 'blob' });
+export const suggestQuote = (data) => api.post('/quotes/suggest', data);
+
+// Follow-ups
+export const getFollowUps = () => api.get('/followups');
+export const createFollowUp = (data) => api.post('/followups', data);
+export const updateFollowUp = (id, data) => api.put(`/followups/${id}`, data);
+export const deleteFollowUp = (id) => api.delete(`/followups/${id}`);
+
+// Follow-up Rules
+export const getFollowUpRules = () => api.get('/followups/rules');
+export const createFollowUpRule = (data) => api.post('/followups/rules', data);
+export const updateFollowUpRule = (id, data) => api.put(`/followups/rules/${id}`, data);
+export const deleteFollowUpRule = (id) => api.delete(`/followups/rules/${id}`);
+export const getPendingFollowUps = () => api.get('/followups/pending');
+export const executeFollowUpRule = (ruleId) => api.post(`/followups/rules/${ruleId}/execute`);
+
+// AI
+export const draftEmail = (data) => api.post('/agents/draft-email', data);
+export const rescoreLead = (id) => api.post(`/leads/${id}/rescore`);
+export const runCampaign = (data) => api.post('/agents/campaign', data);
+
+// Templates
+export const getTemplates2 = (params) => api.get('/templates', { params });
+export const createTemplate = (data) => api.post('/templates', data);
+export const updateTemplate = (id, data) => api.put(`/templates/${id}`, data);
+export const deleteTemplate = (id) => api.delete(`/templates/${id}`);
+
+// Import
+export const importLeads = (data) => api.post('/leads/import', data);
+
+// Marketing
+export const getCampaigns = () => api.get('/marketing/campaigns');
+export const createCampaign = (data) => api.post('/marketing/campaigns', data);
+export const updateCampaign = (id, data) => api.put(`/marketing/campaigns/${id}`, data);
+export const deleteCampaign = (id) => api.delete(`/marketing/campaigns/${id}`);
+export const launchCampaign = (id) => api.post(`/marketing/campaigns/${id}/launch`);
+export const getAutomations = () => api.get('/marketing/automations');
+export const createAutomation = (data) => api.post('/marketing/automations', data);
+export const updateAutomation = (id, data) => api.put(`/marketing/automations/${id}`, data);
+export const deleteAutomation = (id) => api.delete(`/marketing/automations/${id}`);
+export const getMarketingAnalytics = () => api.get('/marketing/analytics');
+export const previewSegment = (data) => api.post('/marketing/segments/preview', data);
+
+// Copilot IA
+export const chatWithCopilot = (messages, context) => api.post('/copilot/chat', { messages, context });
+export const getCopilotSuggestions = () => api.get('/copilot/suggestions');
+
+// Post-Venta
+export const getPostVenta = () => api.get('/postventa');
+export const getPostVentaSummary = () => api.get('/postventa/summary');
+export const createPostVenta = (data) => api.post('/postventa', data);
+export const updatePostVenta = (id, data) => api.put(`/postventa/${id}`, data);
+export const submitNPS = (id, data) => api.post(`/postventa/${id}/nps`, data);
+export const syncPostVenta = () => api.post('/postventa/auto-sync');
+export const getRenewals = () => api.get('/postventa/renewals');
+
+// Ad Platforms (Meta, LinkedIn, Google Ads)
+export const getAdPlatformStatus = () => api.get('/ads/status');
+export const getMetaAdsUrl = () => api.get('/ads/meta/url');
+export const getLinkedInAdsUrl = () => api.get('/ads/linkedin/url');
+export const getGoogleAdsUrl = () => api.get('/ads/google/url');
+export const disconnectAdPlatform = (provider) => api.delete(`/ads/disconnect/${provider}`);
+export const getMetaAdAccounts = () => api.get('/ads/meta/accounts');
+export const getLinkedInAdAccounts = () => api.get('/ads/linkedin/accounts');
+export const createAdCampaign = (data) => api.post('/ads/campaign', data);
+
+// Background Jobs
+export const getJob = (id) => api.get(`/jobs/${id}`);
+export const getRecentJobs = () => api.get('/jobs');
+
+// AI Stage Tasks & Suggestions
+export const getStageSuggestions = (leadId, stage) => api.get(`/leads/${leadId}/stage-suggestions${stage ? `?stage=${stage}` : ''}`);
+export const createStageTasks = (leadId, stage) => api.post(`/leads/${leadId}/create-stage-tasks`, { stage });
+
+// Playbooks (Option C)
+export const getPlaybooks = () => api.get('/playbooks');
+export const updatePlaybook = (stage, data) => api.put(`/playbooks/${stage}`, data);
+export const seedPlaybooks = () => api.post('/playbooks/seed');
+
+// Commissions
+export const getCommissions = (params) => api.get('/commissions', { params });
+export const getCommissionsSummary = (params) => api.get('/commissions/summary', { params });
+export const getCommissionsConfig = () => api.get('/commissions/config');
+export const createCommission = (data) => api.post('/commissions', data);
+export const updateCommission = (id, data) => api.put(`/commissions/${id}`, data);
+export const deleteCommission = (id) => api.delete(`/commissions/${id}`);
+export const getCommissionRules = (userId) => api.get(`/commissions/rules/${userId}`);
+export const saveCommissionRules = (userId, commissionRules) => api.put(`/commissions/rules/${userId}`, { commissionRules });
+export const getResolvedRules = (userId) => api.get(`/commissions/rules-resolved/${userId}`);
+
+// Lead AI Research
+export const triggerLeadResearch = (leadId) => api.post(`/leads/${leadId}/research`);
+
+// Global Search
+export const globalSearch = (q) => api.get('/search', { params: { q } });
+
+// Notifications
+export const getNotifications = () => api.get('/notifications');
+
+// Exchange Rate (DOF)
+export const getExchangeRate = () => api.get('/exchange-rate/current');
+export const refreshExchangeRate = () => api.post('/exchange-rate/refresh');
+export const setManualExchangeRate = (rate) => api.put('/exchange-rate/manual', { rate });
+export const getExchangeRateHistory = (days = 30) => api.get('/exchange-rate/history', { params: { days } });
+
+// Quote Approval Flow
+export const requestQuoteApproval = (id) => api.post(`/quotes/${id}/request-approval`);
+export const reviewQuote = (id, data) => api.post(`/quotes/${id}/review`, data);
+export const getPendingApprovalQuotes = () => api.get('/quotes/pending-approval/list');
+
+// Catalog
+export const getCatalog = (params) => api.get('/catalog', { params });
+export const getCatalogTypes = () => api.get('/catalog/types');
+export const createCatalogItem = (data) => api.post('/catalog', data);
+export const updateCatalogItem = (id, data) => api.put(`/catalog/${id}`, data);
+export const deleteCatalogItem = (id) => api.delete(`/catalog/${id}`);
+export const seedCatalog = () => api.post('/catalog/seed');
+export const uploadCatalogImage = (id, file) => {
+  const fd = new FormData(); fd.append('image', file);
+  return api.post(`/catalog/${id}/image`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+};
+export const deleteCatalogImage = (id) => api.delete(`/catalog/${id}/image`);
+
+// Lead Attachments
+export const uploadLeadAttachment = (leadId, file) => {
+  const form = new FormData();
+  form.append('file', file);
+  return api.post(`/leads/${leadId}/attachments`, form, { headers: { 'Content-Type': 'multipart/form-data' } });
+};
+export const deleteLeadAttachment = (leadId, attId) => api.delete(`/leads/${leadId}/attachments/${attId}`);
+// Returns presigned URL for S3 files, or triggers direct download for local files
+export const downloadLeadAttachment = async (leadId, attId, originalName) => {
+  const r = await api.get(`/leads/${leadId}/attachments/${attId}/download`);
+  if (r.data?.url) {
+    // S3 presigned URL
+    const a = document.createElement('a');
+    a.href = r.data.url;
+    a.download = r.data.originalName || originalName;
+    a.target = '_blank';
+    a.click();
+  }
+  return r;
+};
+export const getLeadAttachmentUrl = (leadId, attId) => `${api.defaults.baseURL}/leads/${leadId}/attachments/${attId}/download`;
+
+// WhatsApp Sequences
+export const getSequences = () => api.get('/sequences');
+export const createSequence = (data) => api.post('/sequences', data);
+export const updateSequence = (id, data) => api.put(`/sequences/${id}`, data);
+export const deleteSequence = (id) => api.delete(`/sequences/${id}`);
+export const enrollInSequence = (id, data) => api.post(`/sequences/${id}/enroll`, data);
+export const getSequenceEnrollments = (id) => api.get(`/sequences/${id}/enrollments`);
+export const exitSequenceEnrollment = (enrollId, reason) => api.post(`/sequences/enrollments/${enrollId}/exit`, { reason });
+
+// Direccion Dashboard
+export const getDireccionReport = () => api.get('/reports/direccion');
+
+// Audit Log
+export const getAuditLogs = (params) => api.get('/audit', { params });
+export const getAuditEntities = () => api.get('/audit/entities');
+export const getRecordAudit = (entityId) => api.get(`/audit/record/${entityId}`);
+
+// ERP Providers
+export const getERPProviders = () => api.get('/erp/providers');
+export const saveERPProvider = (id, data) => api.put(`/erp/providers/${id}`, data);
+export const testERPProvider = (id) => api.post(`/erp/providers/${id}/test`);
