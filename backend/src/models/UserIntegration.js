@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 
 const userIntegrationSchema = new mongoose.Schema({
   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  provider: { type: String, enum: ['google', 'outlook'], required: true },
+  provider: { type: String, enum: ['google', 'outlook', 'meta_ads', 'linkedin_ads', 'google_ads'], required: true },
   providerEmail: { type: String },
   accessToken: { type: String },
   refreshToken: { type: String },

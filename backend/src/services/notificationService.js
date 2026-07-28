@@ -27,7 +27,8 @@ function getTransporter() {
       // Gmail app passwords have spaces — strip them
       pass: (process.env.SMTP_PASS || '').replace(/\s/g, ''),
     },
-    tls: { rejectUnauthorized: false },
+    // Allow self-signed certs only for Hostinger (port 465 SSL)
+    tls: { rejectUnauthorized: process.env.SMTP_HOST !== 'smtp.hostinger.com' },
   });
   return transporter;
 }
