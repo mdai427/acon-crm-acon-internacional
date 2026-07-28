@@ -21,12 +21,72 @@ async function writeEnv(updates, userId) {
   return settings.setMany(updates, userId);
 }
 
+// Los secretos nunca se devuelven completos: solo una pista para que el usuario
+// reconozca cuál está guardado.
+const MASK = '••••••';
+const mask = v => v ? (v.slice(0, 4) + MASK + v.slice(-3)) : '';
+
+// ─────────────────────────────────────────
+// GET /api/config/settings — qué está configurado (sin exponer secretos)
+// ─────────────────────────────────────────
+router.get('/settings', auth, checkPerm('integrations.manage'), (req, res) => {
+  const e = readEnv();
+  const data = {};
+  for (const key of settings.ALLOWED_KEYS) {
+    const value = e[key];
+    data[key] = { set: !!value, hint: value ? mask(value) : '' };
+  }
+  res.json({ success: true, data });
+});
+
+// ─────────────────────────────────────────
+// POST /api/config/settings — guarda cualquier credencial permitida
+// Body: { CLAVE: 'valor', ... }. Los campos vacíos se ignoran (se deja lo que ya
+// había), igual que los que traen la máscara: significa que el usuario no tocó
+// ese campo y guardarla borraría el secreto real.
+// ─────────────────────────────────────────
+router.post('/settings', auth, checkPerm('integrations.manage'), async (req, res) => {
+  try {
+    const updates = {};
+    for (const [key, raw] of Object.entries(req.body || {})) {
+      if (typeof raw !== 'string' && typeof raw !== 'number') continue;
+      const value = String(raw).trim();
+      if (!value || value.includes(MASK)) continue;
+      updates[key] = value;
+    }
+    const saved = await writeEnv(updates, req.user._id);
+    res.json({
+      success: true,
+      saved,
+      message: saved.length ? `${saved.length} campo(s) guardado(s)` : 'Sin cambios que guardar',
+    });
+  } catch (error) {
+    console.error('[config] settings', error);
+    res.status(500).json({ success: false, message: 'No se pudo guardar la configuración' });
+  }
+});
+
+// ─────────────────────────────────────────
+// DELETE /api/config/settings/:key — borra una credencial guardada
+// ─────────────────────────────────────────
+router.delete('/settings/:key', auth, checkPerm('integrations.manage'), async (req, res) => {
+  try {
+    const removed = await settings.remove([req.params.key]);
+    if (!removed.length) {
+      return res.status(400).json({ success: false, message: 'Clave no administrable' });
+    }
+    res.json({ success: true, message: 'Credencial eliminada' });
+  } catch (error) {
+    console.error('[config] delete setting', error);
+    res.status(500).json({ success: false, message: 'No se pudo eliminar' });
+  }
+});
+
 // ─────────────────────────────────────────
 // GET /api/config — lee estado actual (oculta secretos)
 // ─────────────────────────────────────────
 router.get('/', auth, checkPerm('integrations.manage'), async (req, res) => {
   const e = readEnv();
-  const mask = v => v ? (v.slice(0, 4) + '••••••' + v.slice(-3)) : '';
 
   res.json({
     success: true,

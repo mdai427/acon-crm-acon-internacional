@@ -86,6 +86,9 @@ async function setMany(updates, userId) {
   for (const [key, rawValue] of Object.entries(updates || {})) {
     if (!ALLOWED_KEYS.has(key)) continue;
     const value = String(rawValue).trim();
+    // El panel muestra los secretos enmascarados ("abcd••••••xyz"). Si llega uno
+    // así es que el usuario no tocó ese campo: guardarlo destruiría el valor real.
+    if (!value || value.includes('••')) continue;
     await Setting.findOneAndUpdate(
       { key },
       { key, value: encrypt(value), updatedBy: userId },
@@ -95,6 +98,19 @@ async function setMany(updates, userId) {
     saved.push(key);
   }
   return saved;
+}
+
+// Borra credenciales guardadas. Si la clave también viene del entorno del
+// contenedor, volverá a aparecer en el próximo arranque.
+async function remove(keys) {
+  const removed = [];
+  for (const key of keys || []) {
+    if (!ALLOWED_KEYS.has(key)) continue;
+    await Setting.deleteOne({ key });
+    delete process.env[key];
+    removed.push(key);
+  }
+  return removed;
 }
 
 // Vuelca la configuración guardada en process.env. Se llama al arrancar, después
@@ -117,4 +133,4 @@ function currentEnv() {
   return out;
 }
 
-module.exports = { getAll, setMany, hydrateEnv, currentEnv, ALLOWED_KEYS };
+module.exports = { getAll, setMany, remove, hydrateEnv, currentEnv, ALLOWED_KEYS };
