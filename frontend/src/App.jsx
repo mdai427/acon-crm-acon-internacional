@@ -74,13 +74,16 @@ const PAGE_SLUGS = new Set(NAV.map(n => n.id));
 
 function readLocation() {
   const [first, second] = window.location.pathname.split('/').filter(Boolean);
-  if (first === 'leads' && second) return { page: 'lead_detail', leadId: second };
-  if (first && PAGE_SLUGS.has(first)) return { page: first, leadId: null };
-  return { page: 'dashboard', leadId: null };
+  if (first === 'leads' && second) return { page: 'lead_detail', leadId: second, integrationId: null };
+  // Cada integración tiene su propia pantalla: /integrations/whatsapp, /integrations/resend…
+  if (first === 'integrations') return { page: 'integrations', leadId: null, integrationId: second || null };
+  if (first && PAGE_SLUGS.has(first)) return { page: first, leadId: null, integrationId: null };
+  return { page: 'dashboard', leadId: null, integrationId: null };
 }
 
-function pathFor(page, leadId) {
+function pathFor(page, leadId, integrationId) {
   if (page === 'lead_detail') return leadId ? `/leads/${leadId}` : '/leads';
+  if (page === 'integrations' && integrationId) return `/integrations/${integrationId}`;
   return `/${page}`;
 }
 
@@ -287,21 +290,28 @@ function CRMApp() {
   const { toasts, setToasts, show: toast } = useToast();
   const [page, setPage] = useState(() => readLocation().page);
   const [selectedLeadId, setSelectedLeadId] = useState(() => readLocation().leadId);
+  const [selectedIntegrationId, setSelectedIntegrationId] = useState(() => readLocation().integrationId);
   const [showIdleWarning, setShowIdleWarning] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const sidebarRef = useRef(null);
   const firstUrlSync = useRef(true);
 
+  // Al salir de Integraciones se olvida la integración abierta, para que al
+  // volver desde el menú se vea la lista y no el último detalle.
+  useEffect(() => {
+    if (page !== 'integrations' && selectedIntegrationId) setSelectedIntegrationId(null);
+  }, [page, selectedIntegrationId]);
+
   // Refleja la pantalla actual en la URL (replace la primera vez para no ensuciar
   // el historial, push en los cambios siguientes).
   useEffect(() => {
-    const path = pathFor(page, selectedLeadId);
+    const path = pathFor(page, selectedLeadId, selectedIntegrationId);
     if (window.location.pathname !== path) {
       if (firstUrlSync.current) window.history.replaceState({}, '', path);
       else window.history.pushState({}, '', path);
     }
     firstUrlSync.current = false;
-  }, [page, selectedLeadId]);
+  }, [page, selectedLeadId, selectedIntegrationId]);
 
   // Botones atrás/adelante del navegador
   useEffect(() => {
@@ -309,6 +319,7 @@ function CRMApp() {
       const loc = readLocation();
       setPage(loc.page);
       setSelectedLeadId(loc.leadId);
+      setSelectedIntegrationId(loc.integrationId);
     };
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
@@ -451,7 +462,14 @@ function CRMApp() {
           {page === 'quoter'       && <QuoterPage toast={toast} />}
           {page === 'followups'    && <FollowUpsPage toast={toast} />}
           {page === 'users'        && <UsersPage toast={toast} />}
-          {page === 'integrations' && <IntegrationsPage toast={toast} onNavigate={setPage} />}
+          {page === 'integrations' && (
+            <IntegrationsPage
+              toast={toast}
+              onNavigate={setPage}
+              integrationId={selectedIntegrationId}
+              onSelectIntegration={setSelectedIntegrationId}
+            />
+          )}
           {page === 'templates'    && <TemplatesPage toast={toast} />}
           {page === 'import'       && <ImportPage toast={toast} onNavigate={navigate} />}
           {page === 'marketing'    && <MarketingPage toast={toast} />}

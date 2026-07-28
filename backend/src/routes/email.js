@@ -1,29 +1,10 @@
 const express = require('express');
 const router = express.Router();
-const nodemailer = require('nodemailer');
 const Lead = require('../models/Lead');
 const Activity = require('../models/Activity');
 const { auth } = require('../middleware/auth');
-
-// ============================================
-// CONFIGURACION SMTP
-// ============================================
-let transporter;
-
-const getTransporter = () => {
-  if (!transporter) {
-    transporter = nodemailer.createTransporter({
-      host:   process.env.SMTP_HOST   || 'smtp.gmail.com',
-      port:   Number(process.env.SMTP_PORT || 587),
-      secure: process.env.SMTP_SECURE === 'true',
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS
-      }
-    });
-  }
-  return transporter;
-};
+// El proveedor de correo (Resend o SMTP) se elige en services/mailerService.
+const mailer = require('../services/mailerService');
 
 // ============================================
 // PLANTILLAS DE EMAIL PARA LOGISTICA
@@ -133,13 +114,13 @@ router.post('/send', auth, async (req, res) => {
     }
 
     const mailOptions = {
-      from: process.env.EMAIL_FROM || '"ACON CRM" <crm@aconinternacional.com>',
+      from: mailer.defaultFrom(),
       to:   lead.email,
       ...emailContent,
       attachments: attachments || []
     };
 
-    const info = await getTransporter().sendMail(mailOptions);
+    const info = await mailer.sendMail(mailOptions);
 
     const activity = await Activity.create({
       lead: leadId,
@@ -192,8 +173,8 @@ router.post('/bulk', auth, async (req, res) => {
           emailContent = { subject: customSubject, html: customHtml };
         }
 
-        await getTransporter().sendMail({
-          from: process.env.EMAIL_FROM,
+        await mailer.sendMail({
+          from: mailer.defaultFrom(),
           to: lead.email,
           ...emailContent
         });
@@ -239,8 +220,8 @@ module.exports = router;
 module.exports.sendEmail = async (to, template, data) => {
   if (!emailTemplates[template]) throw new Error(`Template ${template} no existe`);
   const content = emailTemplates[template](data);
-  return getTransporter().sendMail({
-    from: process.env.EMAIL_FROM,
+  return mailer.sendMail({
+    from: mailer.defaultFrom(),
     to,
     ...content
   });

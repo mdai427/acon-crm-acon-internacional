@@ -250,6 +250,60 @@ router.post('/email/test', auth, checkPerm('integrations.manage'), async (req, r
 });
 
 // ─────────────────────────────────────────
+// POST /api/config/resend/test — verifica la API Key y, si se indica
+// destinatario, envía un correo real por Resend.
+// ─────────────────────────────────────────
+router.post('/resend/test', auth, checkPerm('integrations.manage'), async (req, res) => {
+  const { testTo } = req.body;
+  if (!process.env.RESEND_API_KEY) {
+    return res.status(400).json({ success: false, message: 'Configura RESEND_API_KEY primero' });
+  }
+  try {
+    await axios.get('https://api.resend.com/domains', {
+      headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}` },
+      timeout: 10000,
+    });
+
+    if (testTo) {
+      const from = process.env.RESEND_FROM || process.env.EMAIL_FROM;
+      if (!from) {
+        return res.json({
+          success: false,
+          message: 'Falta el remitente: configura RESEND_FROM con un correo de un dominio verificado en Resend',
+        });
+      }
+      await axios.post(
+        'https://api.resend.com/emails',
+        {
+          from,
+          to: [testTo],
+          subject: '✅ ACON CRM — Prueba de Resend',
+          html: '<h2>Resend conectado</h2><p>Este es un correo de prueba del CRM de ACON Worldwide Logística.</p>',
+        },
+        {
+          headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+          timeout: 15000,
+        }
+      );
+    }
+
+    res.json({
+      success: true,
+      message: testTo ? `✅ Correo enviado a ${testTo} vía Resend` : '✅ API Key de Resend válida',
+    });
+  } catch (e) {
+    const detail = e.response?.data?.message || e.response?.data?.error || e.message;
+    let msg = `❌ ${detail}`;
+    if (e.response?.status === 401) {
+      msg = '❌ API Key de Resend inválida. Genera una nueva en resend.com → API Keys.';
+    } else if (String(detail).includes('domain')) {
+      msg = `❌ ${detail}. El remitente debe pertenecer a un dominio verificado en Resend.`;
+    }
+    res.json({ success: false, message: msg });
+  }
+});
+
+// ─────────────────────────────────────────
 // POST /api/config/google — guarda credenciales Google OAuth
 // ─────────────────────────────────────────
 router.post('/google', auth, checkPerm('integrations.manage'), async (req, res) => {

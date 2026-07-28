@@ -2,7 +2,7 @@
  * Notification Service — ACON CRM
  *
  * Sends notifications via:
- *   1. Email (Nodemailer / SMTP)
+ *   1. Email (Resend o SMTP, según la integración configurada)
  *   2. WhatsApp (Meta Cloud API — if configured)
  *   3. Socket.io (in-app, always)
  *
@@ -10,28 +10,10 @@
  * so callers never need to worry about notification failures blocking
  * the main request lifecycle.
  */
-const nodemailer = require('nodemailer');
 const { FRONTEND_URL } = require('../config/urls');
 const axios = require('axios');
-
-// ── Email transporter ────────────────────────────────────────────────────────
-let transporter = null;
-function getTransporter() {
-  if (transporter) return transporter;
-  if (!process.env.SMTP_HOST) return null;
-  transporter = nodemailer.createTransport({
-    host:   process.env.SMTP_HOST,
-    port:   Number(process.env.SMTP_PORT) || 587,
-    secure: process.env.SMTP_SECURE === 'true',
-    auth:   {
-      user: process.env.SMTP_USER,
-      // Gmail app passwords have spaces — strip them
-      pass: (process.env.SMTP_PASS || '').replace(/\s/g, ''),
-    },
-    tls: { rejectUnauthorized: false },
-  });
-  return transporter;
-}
+// Proveedor de correo (Resend o SMTP) centralizado en services/mailerService.
+const mailer = require('./mailerService');
 
 // ── WhatsApp Meta Cloud API ──────────────────────────────────────────────────
 async function sendWhatsAppText(to, message) {
@@ -91,10 +73,9 @@ async function notifyLeadAssigned({ lead, assignee, io }) {
 
   // 2. Email
   try {
-    const t = getTransporter();
-    if (t && assignee.email) {
-      await t.sendMail({
-        from:    process.env.SMTP_FROM || `ACON CRM <noreply@acon.mx>`,
+    if (mailer.isConfigured() && assignee.email) {
+      await mailer.sendMail({
+        from:    mailer.defaultFrom(),
         to:      assignee.email,
         subject: `📋 Nuevo lead asignado: ${leadName}${company}`,
         html: `
@@ -154,10 +135,9 @@ async function notifyQuoteReviewed({ quote, decision, comments, reviewerName, as
   } catch (_) {}
 
   try {
-    const t = getTransporter();
-    if (t && assignee?.email) {
-      await t.sendMail({
-        from:    process.env.SMTP_FROM || `ACON CRM <noreply@acon.mx>`,
+    if (mailer.isConfigured() && assignee?.email) {
+      await mailer.sendMail({
+        from:    mailer.defaultFrom(),
         to:      assignee.email,
         subject: `${emoji} Cotización ${quote.folio} ${status}`,
         html: `

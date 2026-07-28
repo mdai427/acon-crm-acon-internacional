@@ -31,6 +31,8 @@ const ALLOWED_KEYS = new Set([
   'META_APP_ID', 'META_ACCESS_TOKEN', 'META_PAGE_ID', 'META_WEBHOOK_VERIFY_TOKEN',
   // Email SMTP
   'SMTP_HOST', 'SMTP_PORT', 'SMTP_SECURE', 'SMTP_USER', 'SMTP_PASS', 'SMTP_FROM', 'EMAIL_FROM',
+  // Resend (API HTTP de correo) y selector de proveedor de correo saliente
+  'RESEND_API_KEY', 'RESEND_FROM', 'EMAIL_PROVIDER',
   // Google OAuth
   'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'GOOGLE_REDIRECT_URI',
   // OpenAI
