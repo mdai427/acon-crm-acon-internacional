@@ -14,8 +14,7 @@ const auth = (req, res, next) => {
   catch { return res.status(401).json({ success: false, message: 'Token inválido' }); }
 };
 
-const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
-const BACKEND_URL  = process.env.BACKEND_URL  || 'http://localhost:5000';
+const { FRONTEND_URL, BACKEND_URL } = require('../config/urls');
 
 // ─── META (Facebook / Instagram Ads) ───────────────────────
 

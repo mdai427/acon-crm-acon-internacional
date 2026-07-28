@@ -176,7 +176,7 @@ export default function ConfigPage({ toast }) {
 
   if (loading) return <div className="loading"><div className="spinner" />Cargando configuración...</div>;
 
-  const base = cfg?.webhooks?.base || 'http://localhost:5001';
+  const base = (cfg?.webhooks?.base || 'http://localhost:5001').replace(/\/+$/, '');
   const isLocalhost = cfg?.webhooks?.isLocalhost !== false;
 
   return (

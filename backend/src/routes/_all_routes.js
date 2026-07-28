@@ -1,6 +1,7 @@
 // ============================================
 // routes/agents.js
 // ============================================
+const { PUBLIC_BASE_URL } = require('../config/urls');
 const express = require('express');
 const agentsRouter = express.Router();
 const { auth } = require('../middleware/auth');
@@ -403,10 +404,10 @@ integrationsRouter.get('/status', (req, res) => {
         note: 'Requiere configuracion via Zapier/Make para webhooks'
       },
       webhooks: {
-        meta: `${process.env.FRONTEND_URL?.replace('3000','5000') || 'http://localhost:5000'}/api/webhooks/meta`,
-        whatsapp: `${process.env.FRONTEND_URL?.replace('3000','5000') || 'http://localhost:5000'}/api/whatsapp/webhook`,
-        generic: `${process.env.FRONTEND_URL?.replace('3000','5000') || 'http://localhost:5000'}/api/webhooks/generic`,
-        linkedin: `${process.env.FRONTEND_URL?.replace('3000','5000') || 'http://localhost:5000'}/api/webhooks/linkedin`
+        meta:     `${PUBLIC_BASE_URL}/api/webhooks/meta`,
+        whatsapp: `${PUBLIC_BASE_URL}/api/whatsapp/webhook`,
+        generic:  `${PUBLIC_BASE_URL}/api/webhooks/generic`,
+        linkedin: `${PUBLIC_BASE_URL}/api/webhooks/linkedin`
       }
     }
   });

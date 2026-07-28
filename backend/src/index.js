@@ -51,9 +51,9 @@ const app = express();
 // use la IP real del cliente (X-Forwarded-For) y no la del proxy.
 app.set('trust proxy', 1);
 
-// Normaliza FRONTEND_URL (sin barra final) para que CORS coincida con el
+// URLs normalizadas (sin barra final): CORS debe coincidir exactamente con el
 // header Origin del navegador, que nunca lleva "/" al final.
-const FRONTEND_ORIGIN = (process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/+$/, '');
+const { FRONTEND_URL: FRONTEND_ORIGIN } = require('./config/urls');
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {

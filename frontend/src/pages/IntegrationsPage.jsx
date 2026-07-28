@@ -98,6 +98,12 @@ function SectionHeader({ title, subtitle }) {
   );
 }
 
+// El backend ya devuelve los webhooks como URL completa; solo se antepone la base
+// de la API cuando llega una ruta relativa (evita duplicar el dominio).
+const API_BASE = (process.env.REACT_APP_API_URL || window.location.origin).replace(/\/+$/, '');
+const absoluteUrl = (url) =>
+  /^https?:\/\//i.test(url) ? url : `${API_BASE}/${String(url).replace(/^\/+/, '')}`;
+
 export default function IntegrationsPage({ toast, onNavigate }) {
   const [sysData, setSysData] = useState(null);
   const [oauthData, setOauthData] = useState({});
@@ -346,11 +352,11 @@ export default function IntegrationsPage({ toast, onNavigate }) {
             <Link2 size={14} color="#9AA3AE" />
             <span style={{ fontSize: 12, color: '#5A6472', minWidth: 180 }}>{key}</span>
             <code style={{ flex: 1, fontSize: 12, color: '#F2641E', fontFamily: 'monospace', background: '#FFF7F4', padding: '4px 8px', borderRadius: 6 }}>
-              {process.env.REACT_APP_API_URL || window.location.origin}{url}
+              {absoluteUrl(url)}
             </code>
             <button
               className="btn btn-ghost btn-sm"
-              onClick={() => { navigator.clipboard.writeText(`${process.env.REACT_APP_API_URL || window.location.origin}${url}`); toast('URL copiada', 'success'); }}
+              onClick={() => { navigator.clipboard.writeText(absoluteUrl(url)); toast('URL copiada', 'success'); }}
               style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4, fontSize: 11 }}
             >
               <ExternalLink size={12} /> Copiar

@@ -1,4 +1,5 @@
 const express = require('express');
+const { FRONTEND_URL, BACKEND_URL, clean } = require('../config/urls');
 const router = express.Router();
 const { google } = require('googleapis');
 const jwt = require('jsonwebtoken');
@@ -15,7 +16,7 @@ function getOAuth2Client() {
   return new google.auth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,
     process.env.GOOGLE_CLIENT_SECRET,
-    process.env.GOOGLE_REDIRECT_URI || `${process.env.BACKEND_URL || 'http://localhost:5000'}/api/oauth/google/callback`
+    clean(process.env.GOOGLE_REDIRECT_URI) || `${BACKEND_URL}/api/oauth/google/callback`
   );
 }
 
@@ -49,7 +50,7 @@ router.get('/google/url', auth, (req, res) => {
 // GET /api/oauth/google/callback - exchange code for tokens
 router.get('/google/callback', async (req, res) => {
   const { code, state: userId } = req.query;
-  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+  const frontendUrl = FRONTEND_URL;
 
   if (!code || !userId) {
     return res.redirect(`${frontendUrl}/integrations?error=missing_params`);

@@ -3,6 +3,7 @@
 // Permite leer, actualizar y probar credenciales sin reiniciar
 // ============================================
 const express = require('express');
+const { PUBLIC_BASE_URL, isLocalhost } = require('../config/urls');
 const router = express.Router();
 const { auth, adminOnly } = require('../middleware/auth');
 const axios = require('axios');
@@ -106,14 +107,14 @@ router.get('/', auth, adminOnly, (req, res) => {
         connected: !!(e.META_ACCESS_TOKEN && e.META_PAGE_ID),
       },
       webhooks: {
-        base: process.env.PUBLIC_BASE_URL || `http://localhost:${process.env.PORT || 5001}`,
+        base: PUBLIC_BASE_URL,
         whatsapp:  `/api/whatsapp/webhook`,
         meta:      `/api/webhooks/meta`,
         generic:   `/api/webhooks/generic`,
         linkedin:  `/api/webhooks/linkedin`,
         apiKeyHint: process.env.WEBHOOK_API_KEY || process.env.JWT_SECRET?.slice(0, 20) || '',
-        publicBaseUrl: process.env.PUBLIC_BASE_URL || '',
-        isLocalhost: !process.env.PUBLIC_BASE_URL || process.env.PUBLIC_BASE_URL.includes('localhost'),
+        publicBaseUrl: PUBLIC_BASE_URL,
+        isLocalhost,
       }
     }
   });

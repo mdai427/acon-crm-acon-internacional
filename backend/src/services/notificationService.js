@@ -11,6 +11,7 @@
  * the main request lifecycle.
  */
 const nodemailer = require('nodemailer');
+const { FRONTEND_URL } = require('../config/urls');
 const axios = require('axios');
 
 // ── Email transporter ────────────────────────────────────────────────────────
@@ -73,7 +74,7 @@ async function sendWhatsAppText(to, message) {
 async function notifyLeadAssigned({ lead, assignee, io }) {
   const leadName = lead.name || lead.clientName || 'Lead sin nombre';
   const company  = lead.company ? ` (${lead.company})` : '';
-  const url      = process.env.FRONTEND_URL || 'http://localhost:3000';
+  const url      = FRONTEND_URL;
 
   // 1. Socket in-app (real-time)
   try {
@@ -139,7 +140,7 @@ async function notifyLeadAssigned({ lead, assignee, io }) {
 async function notifyQuoteReviewed({ quote, decision, comments, reviewerName, assignee, io }) {
   const emoji  = decision === 'approved' ? '✅' : '❌';
   const status = decision === 'approved' ? 'aprobada' : 'rechazada';
-  const url    = process.env.FRONTEND_URL || 'http://localhost:3000';
+  const url    = FRONTEND_URL;
 
   try {
     if (io && assignee?._id) {
