@@ -81,10 +81,19 @@ h1,h2,h3,h4{font-family:'Inter',sans-serif;font-weight:700;color:var(--gray-900)
 button,input,select,textarea{font-family:'Inter',sans-serif}
 
 /* ── LAYOUT ── */
-.app{display:grid;grid-template-columns:220px 1fr;grid-template-rows:56px 1fr;min-height:100vh}
+/* La pantalla es el marco: el layout nunca crece más que el viewport, así el
+   sidebar mide siempre el alto disponible y hace su propio scroll. */
+.app{display:grid;grid-template-columns:220px 1fr;grid-template-rows:56px 1fr;height:100vh;height:100dvh;overflow:hidden}
 .topbar{grid-column:1/-1;background:var(--navy-900);border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:center;padding:0 20px;gap:16px;z-index:50;position:sticky;top:0}
-.sidebar{background:var(--navy-900);padding:8px 0;display:flex;flex-direction:column;overflow-y:auto;border-right:1px solid rgba(255,255,255,.05)}
-.main{overflow-y:auto;background:var(--gray-50)}
+.sidebar{background:var(--navy-900);padding:8px 0;display:flex;flex-direction:column;min-height:0;overflow-y:auto;overscroll-behavior:contain;border-right:1px solid rgba(255,255,255,.05)}
+/* Barra de scroll mínima: hilo claro sobre el propio navy, sin pista ni fondo. */
+.sidebar{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.16) transparent}
+.sidebar::-webkit-scrollbar{width:3px}
+.sidebar::-webkit-scrollbar-track{background:transparent;border:none;box-shadow:none}
+.sidebar::-webkit-scrollbar-thumb{background:rgba(255,255,255,.16);border-radius:99px}
+.sidebar::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.3)}
+.sidebar::-webkit-scrollbar-corner{background:transparent}
+.main{min-height:0;overflow-y:auto;background:var(--gray-50)}
 
 /* ── TOPBAR ── */
 .logo{font-weight:700;font-size:16px;color:#fff;letter-spacing:-0.3px;margin-right:auto;display:flex;align-items:center;gap:8px}
