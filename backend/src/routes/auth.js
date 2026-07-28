@@ -13,7 +13,7 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Email y contraseña requeridos' });
     }
 
-    const user = await User.findOne({ email, isActive: true });
+    const user = await User.findOne({ email: String(email).toLowerCase().trim(), isActive: true });
     if (!user || !(await user.comparePassword(password))) {
       return res.status(401).json({ success: false, message: 'Credenciales incorrectas' });
     }
