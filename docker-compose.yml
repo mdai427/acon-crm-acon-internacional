@@ -5,27 +5,18 @@
 # ============================================
 
 services:
-  mongo:
-    image: mongo:7
-    restart: unless-stopped
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
-    volumes:
-      - mongo_data:/data/db
-
   backend:
     build:
       context: ./backend
     restart: unless-stopped
-    depends_on:
-      - mongo
+    networks:
+      - default
+      - easypanel
     environment:
       NODE_ENV: production
       PORT: 5001
-      # Si defines MONGODB_URI en EasyPanel (DB externa), se usa esa;
-      # si no, usa el mongo interno del compose.
-      MONGODB_URI: ${MONGODB_URI:-mongodb://${MONGO_USER}:${MONGO_PASSWORD}@mongo:27017/acon-crm?authSource=admin}
+      # URI del MongoDB de EasyPanel (servicio acon-mg-db)
+      MONGODB_URI: ${MONGODB_URI}
 
       # --- Seguridad ---
       JWT_SECRET: ${JWT_SECRET}
@@ -96,5 +87,6 @@ services:
     depends_on:
       - backend
 
-volumes:
-  mongo_data:
+networks:
+  easypanel:
+    external: true
