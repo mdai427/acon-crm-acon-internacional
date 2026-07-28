@@ -23,7 +23,9 @@ services:
     environment:
       NODE_ENV: production
       PORT: 5001
-      MONGODB_URI: mongodb://${MONGO_USER}:${MONGO_PASSWORD}@mongo:27017/acon-crm?authSource=admin
+      # Si defines MONGODB_URI en EasyPanel (DB externa), se usa esa;
+      # si no, usa el mongo interno del compose.
+      MONGODB_URI: ${MONGODB_URI:-mongodb://${MONGO_USER}:${MONGO_PASSWORD}@mongo:27017/acon-crm?authSource=admin}
 
       # --- Seguridad ---
       JWT_SECRET: ${JWT_SECRET}
