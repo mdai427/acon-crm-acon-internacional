@@ -5,66 +5,26 @@
 const express = require('express');
 const { PUBLIC_BASE_URL, isLocalhost } = require('../config/urls');
 const router = express.Router();
-const { auth, adminOnly } = require('../middleware/auth');
+const { auth, checkPerm } = require('../middleware/auth');
+const settings = require('../services/settingsService');
 const axios = require('axios');
 const nodemailer = require('nodemailer');
-const fs = require('fs');
-const path = require('path');
 
-const ENV_PATH = path.resolve(__dirname, '../../.env');
-
-// Lee el .env actual como objeto clave/valor
+// La configuración vive en MongoDB, cifrada (ver services/settingsService).
+// Antes se escribía en un archivo .env dentro del contenedor, que se perdía en
+// cada despliegue y ni siquiera existía en la imagen de Docker.
 function readEnv() {
-  try {
-    const lines = fs.readFileSync(ENV_PATH, 'utf-8').split('\n');
-    const env = {};
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith('#')) continue;
-      const eq = trimmed.indexOf('=');
-      if (eq === -1) continue;
-      const key = trimmed.slice(0, eq).trim();
-      let val = trimmed.slice(eq + 1).trim();
-      // Quitar comillas si el valor está entre comillas simples o dobles
-      if ((val.startsWith('"') && val.endsWith('"')) ||
-          (val.startsWith("'") && val.endsWith("'"))) {
-        val = val.slice(1, -1);
-      }
-      env[key] = val;
-    }
-    return env;
-  } catch { return {}; }
+  return settings.currentEnv();
 }
 
-// Escribe claves en el .env sin borrar comentarios.
-// Los valores se guardan con comillas dobles para soportar espacios y chars especiales.
-function writeEnv(updates) {
-  let content = '';
-  try { content = fs.readFileSync(ENV_PATH, 'utf-8'); } catch {}
-
-  for (const [key, value] of Object.entries(updates)) {
-    // Eliminar espacios del inicio/fin; eliminar espacios internos solo en contraseñas de app
-    const cleanValue = String(value).trim();
-    // Escapar comillas dobles internas
-    const escaped = cleanValue.replace(/"/g, '\\"');
-    const line = `${key}="${escaped}"`;
-    const regex = new RegExp(`^${key}=.*$`, 'm');
-    if (regex.test(content)) {
-      content = content.replace(regex, line);
-    } else {
-      content += `\n${line}`;
-    }
-    // Actualizar también en process.env para efecto inmediato
-    process.env[key] = cleanValue;
-  }
-
-  fs.writeFileSync(ENV_PATH, content);
+async function writeEnv(updates, userId) {
+  return settings.setMany(updates, userId);
 }
 
 // ─────────────────────────────────────────
 // GET /api/config — lee estado actual (oculta secretos)
 // ─────────────────────────────────────────
-router.get('/', auth, adminOnly, (req, res) => {
+router.get('/', auth, checkPerm('integrations.manage'), async (req, res) => {
   const e = readEnv();
   const mask = v => v ? (v.slice(0, 4) + '••••••' + v.slice(-3)) : '';
 
@@ -123,21 +83,21 @@ router.get('/', auth, adminOnly, (req, res) => {
 // ─────────────────────────────────────────
 // POST /api/config/whatsapp — guarda credenciales WA
 // ─────────────────────────────────────────
-router.post('/whatsapp', auth, adminOnly, (req, res) => {
+router.post('/whatsapp', auth, checkPerm('integrations.manage'), async (req, res) => {
   const { META_WA_TOKEN, META_WA_PHONE_ID, META_WA_VERIFY_TOKEN, META_APP_SECRET } = req.body;
   const updates = {};
   if (META_WA_TOKEN)        updates.META_WA_TOKEN        = META_WA_TOKEN;
   if (META_WA_PHONE_ID)     updates.META_WA_PHONE_ID     = META_WA_PHONE_ID;
   if (META_WA_VERIFY_TOKEN) updates.META_WA_VERIFY_TOKEN = META_WA_VERIFY_TOKEN;
   if (META_APP_SECRET)      updates.META_APP_SECRET      = META_APP_SECRET;
-  writeEnv(updates);
+  await writeEnv(updates, req.user._id);
   res.json({ success: true, message: 'Credenciales WhatsApp guardadas' });
 });
 
 // ─────────────────────────────────────────
 // POST /api/config/whatsapp/test — prueba llamada real a Meta API
 // ─────────────────────────────────────────
-router.post('/whatsapp/test', auth, adminOnly, async (req, res) => {
+router.post('/whatsapp/test', auth, checkPerm('integrations.manage'), async (req, res) => {
   const token   = process.env.META_WA_TOKEN;
   const phoneId = process.env.META_WA_PHONE_ID;
   if (!token || !phoneId) {
@@ -149,7 +109,7 @@ router.post('/whatsapp/test', auth, adminOnly, async (req, res) => {
       { params: { access_token: token } }
     );
     // Marcar como verificado en .env para que el badge sea real
-    writeEnv({ WA_VERIFIED: 'true' });
+    await writeEnv({ WA_VERIFIED: 'true' }, req.user._id);
     res.json({
       success: true,
       message: '✅ Conexión exitosa con WhatsApp Business API',
@@ -157,7 +117,7 @@ router.post('/whatsapp/test', auth, adminOnly, async (req, res) => {
     });
   } catch (e) {
     // Si falló, limpiar bandera de verificación
-    writeEnv({ WA_VERIFIED: 'false' });
+    await writeEnv({ WA_VERIFIED: 'false' }, req.user._id);
     res.json({ success: false, message: e.response?.data?.error?.message || e.message });
   }
 });
@@ -165,7 +125,7 @@ router.post('/whatsapp/test', auth, adminOnly, async (req, res) => {
 // ─────────────────────────────────────────
 // POST /api/config/email — guarda credenciales SMTP
 // ─────────────────────────────────────────
-router.post('/email', auth, adminOnly, (req, res) => {
+router.post('/email', auth, checkPerm('integrations.manage'), async (req, res) => {
   const { SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_PASS, EMAIL_FROM } = req.body;
   const updates = {};
   if (SMTP_HOST)   updates.SMTP_HOST   = SMTP_HOST;
@@ -174,14 +134,14 @@ router.post('/email', auth, adminOnly, (req, res) => {
   if (SMTP_USER)   updates.SMTP_USER   = SMTP_USER;
   if (SMTP_PASS)   updates.SMTP_PASS   = SMTP_PASS;
   if (EMAIL_FROM)  updates.EMAIL_FROM  = EMAIL_FROM;
-  writeEnv(updates);
+  await writeEnv(updates, req.user._id);
   res.json({ success: true, message: 'Credenciales Email guardadas' });
 });
 
 // ─────────────────────────────────────────
 // POST /api/config/email/test — envía correo de prueba
 // ─────────────────────────────────────────
-router.post('/email/test', auth, adminOnly, async (req, res) => {
+router.post('/email/test', auth, checkPerm('integrations.manage'), async (req, res) => {
   const { testTo } = req.body;
   if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
     return res.status(400).json({ success: false, message: 'Configura SMTP_USER y SMTP_PASS primero' });
@@ -232,20 +192,20 @@ router.post('/email/test', auth, adminOnly, async (req, res) => {
 // ─────────────────────────────────────────
 // POST /api/config/google — guarda credenciales Google OAuth
 // ─────────────────────────────────────────
-router.post('/google', auth, adminOnly, (req, res) => {
+router.post('/google', auth, checkPerm('integrations.manage'), async (req, res) => {
   const { GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI } = req.body;
   const updates = {};
   if (GOOGLE_CLIENT_ID)     updates.GOOGLE_CLIENT_ID     = GOOGLE_CLIENT_ID;
   if (GOOGLE_CLIENT_SECRET) updates.GOOGLE_CLIENT_SECRET = GOOGLE_CLIENT_SECRET;
   if (GOOGLE_REDIRECT_URI)  updates.GOOGLE_REDIRECT_URI  = GOOGLE_REDIRECT_URI;
-  writeEnv(updates);
+  await writeEnv(updates, req.user._id);
   res.json({ success: true, message: 'Credenciales Google guardadas' });
 });
 
 // ─────────────────────────────────────────
 // POST /api/config/google/test — verifica que los IDs son válidos
 // ─────────────────────────────────────────
-router.post('/google/test', auth, adminOnly, (req, res) => {
+router.post('/google/test', auth, checkPerm('integrations.manage'), async (req, res) => {
   if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
     return res.json({ success: false, message: 'Configura GOOGLE_CLIENT_ID y GOOGLE_CLIENT_SECRET primero' });
   }
@@ -265,19 +225,19 @@ router.post('/google/test', auth, adminOnly, (req, res) => {
 // ─────────────────────────────────────────
 // POST /api/config/openai — guarda API key de OpenAI
 // ─────────────────────────────────────────
-router.post('/openai', auth, adminOnly, (req, res) => {
+router.post('/openai', auth, checkPerm('integrations.manage'), async (req, res) => {
   const { OPENAI_API_KEY, OPENAI_MODEL } = req.body;
   const updates = {};
   if (OPENAI_API_KEY) updates.OPENAI_API_KEY = OPENAI_API_KEY;
   if (OPENAI_MODEL)   updates.OPENAI_MODEL   = OPENAI_MODEL;
-  writeEnv(updates);
+  await writeEnv(updates, req.user._id);
   res.json({ success: true, message: 'OpenAI API Key guardada' });
 });
 
 // ─────────────────────────────────────────
 // POST /api/config/openai/test
 // ─────────────────────────────────────────
-router.post('/openai/test', auth, adminOnly, async (req, res) => {
+router.post('/openai/test', auth, checkPerm('integrations.manage'), async (req, res) => {
   if (!process.env.OPENAI_API_KEY) {
     return res.status(400).json({ success: false, message: 'Configura OPENAI_API_KEY primero' });
   }
@@ -298,21 +258,21 @@ router.post('/openai/test', auth, adminOnly, async (req, res) => {
 // ─────────────────────────────────────────
 // POST /api/config/facebook — guarda credenciales Meta/Facebook
 // ─────────────────────────────────────────
-router.post('/facebook', auth, adminOnly, (req, res) => {
+router.post('/facebook', auth, checkPerm('integrations.manage'), async (req, res) => {
   const { META_ACCESS_TOKEN, META_PAGE_ID, META_WEBHOOK_VERIFY_TOKEN, META_APP_SECRET } = req.body;
   const updates = {};
   if (META_ACCESS_TOKEN)         updates.META_ACCESS_TOKEN         = META_ACCESS_TOKEN;
   if (META_PAGE_ID)              updates.META_PAGE_ID              = META_PAGE_ID;
   if (META_WEBHOOK_VERIFY_TOKEN) updates.META_WEBHOOK_VERIFY_TOKEN = META_WEBHOOK_VERIFY_TOKEN;
   if (META_APP_SECRET)           updates.META_APP_SECRET           = META_APP_SECRET;
-  writeEnv(updates);
+  await writeEnv(updates, req.user._id);
   res.json({ success: true, message: 'Credenciales Facebook/Meta guardadas' });
 });
 
 // ─────────────────────────────────────────
 // POST /api/config/facebook/test
 // ─────────────────────────────────────────
-router.post('/facebook/test', auth, adminOnly, async (req, res) => {
+router.post('/facebook/test', auth, checkPerm('integrations.manage'), async (req, res) => {
   if (!process.env.META_ACCESS_TOKEN) {
     return res.status(400).json({ success: false, message: 'Configura META_ACCESS_TOKEN primero' });
   }

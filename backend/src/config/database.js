@@ -39,6 +39,10 @@ const connectDB = async () => {
     });
     console.log(`✅ MongoDB conectado: ${conn.connection.host}`);
     await seedAdmin().catch(err => console.error(`⚠️ No se pudo crear el admin inicial: ${err.message}`));
+
+    // Carga la configuración de integraciones guardada desde el panel
+    await require('../services/settingsService').hydrateEnv()
+      .catch(err => console.error(`⚠️ No se pudo cargar la configuración guardada: ${err.message}`));
   } catch (error) {
     console.error(`❌ Error MongoDB: ${error.message}`);
     process.exit(1);
