@@ -27,7 +27,9 @@ services:
 
       # --- Seguridad ---
       JWT_SECRET: ${JWT_SECRET}
-      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1d}
+      # API key para el webhook genérico (Zapier/Make/n8n)
+      WEBHOOK_API_KEY: ${WEBHOOK_API_KEY:-}
 
       # --- Dominios ---
       FRONTEND_URL: ${FRONTEND_URL}

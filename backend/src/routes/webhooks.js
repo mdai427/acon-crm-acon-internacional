@@ -117,7 +117,10 @@ async function processFacebookLead(leadData, io) {
 router.post('/generic', express.json(), async (req, res) => {
   try {
     const apiKey = req.headers['x-api-key'];
-    if (apiKey !== process.env.JWT_SECRET?.slice(0, 20)) {
+    // WEBHOOK_API_KEY independiente; el slice del JWT_SECRET queda solo como
+    // compatibilidad con integraciones ya configuradas.
+    const validKey = process.env.WEBHOOK_API_KEY || process.env.JWT_SECRET?.slice(0, 20);
+    if (!apiKey || apiKey !== validKey) {
       return res.status(401).json({ success: false, message: 'API key invalida' });
     }
 

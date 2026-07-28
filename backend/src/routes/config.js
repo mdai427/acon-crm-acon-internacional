@@ -111,7 +111,7 @@ router.get('/', auth, adminOnly, (req, res) => {
         meta:      `/api/webhooks/meta`,
         generic:   `/api/webhooks/generic`,
         linkedin:  `/api/webhooks/linkedin`,
-        apiKeyHint: process.env.JWT_SECRET?.slice(0, 20) || '',
+        apiKeyHint: process.env.WEBHOOK_API_KEY || process.env.JWT_SECRET?.slice(0, 20) || '',
         publicBaseUrl: process.env.PUBLIC_BASE_URL || '',
         isLocalhost: !process.env.PUBLIC_BASE_URL || process.env.PUBLIC_BASE_URL.includes('localhost'),
       }

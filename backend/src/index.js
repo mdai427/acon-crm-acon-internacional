@@ -47,6 +47,9 @@ const playbooksRoutes  = require('./routes/playbooks');
 require('./services/jobHandlers');
 
 const app = express();
+// Detrás del proxy de EasyPanel/Traefik: necesario para que el rate limiting
+// use la IP real del cliente (X-Forwarded-For) y no la del proxy.
+app.set('trust proxy', 1);
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {

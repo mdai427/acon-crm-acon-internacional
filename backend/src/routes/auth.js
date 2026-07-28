@@ -33,7 +33,8 @@ router.post('/login', async (req, res) => {
       user: user.toJSON()
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    console.error("[auth]", error);
+    res.status(500).json({ success: false, message: "Error interno. Intenta de nuevo." });
   }
 });
 
@@ -50,7 +51,8 @@ router.post('/register', auth, adminOnly, async (req, res) => {
     const user = await User.create({ name, email, password, role, phone });
     res.status(201).json({ success: true, user });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    console.error("[auth]", error);
+    res.status(500).json({ success: false, message: "Error interno. Intenta de nuevo." });
   }
 });
 
@@ -69,7 +71,8 @@ router.put('/profile', auth, async (req, res) => {
     const user = await User.findByIdAndUpdate(req.user._id, updates, { new: true });
     res.json({ success: true, user });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    console.error("[auth]", error);
+    res.status(500).json({ success: false, message: "Error interno. Intenta de nuevo." });
   }
 });
 
@@ -87,7 +90,8 @@ router.put('/change-password', auth, async (req, res) => {
     await user.save();
     res.json({ success: true, message: 'Contraseña actualizada' });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    console.error("[auth]", error);
+    res.status(500).json({ success: false, message: "Error interno. Intenta de nuevo." });
   }
 });
 
@@ -115,7 +119,8 @@ router.post('/setup', async (req, res) => {
     console.log(`✅ Admin inicial creado: ${email}`);
     res.status(201).json({ success: true, token, user: admin.toJSON() });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    console.error("[auth]", error);
+    res.status(500).json({ success: false, message: "Error interno. Intenta de nuevo." });
   }
 });
 
