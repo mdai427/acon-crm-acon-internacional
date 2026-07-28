@@ -67,6 +67,23 @@ const NAV = [
 
 const SECTIONS = { ventas: 'Ventas', marketing: 'Marketing', analytics: 'Análisis', config: 'Configuración' };
 
+// ── Sincronización con la URL ───────────────────────────────────────────────────
+// Cada sección tiene su slug (/leads, /pipeline…) para que al recargar o compartir
+// el enlace el usuario siga en la misma pantalla. El detalle de lead es /leads/:id.
+const PAGE_SLUGS = new Set(NAV.map(n => n.id));
+
+function readLocation() {
+  const [first, second] = window.location.pathname.split('/').filter(Boolean);
+  if (first === 'leads' && second) return { page: 'lead_detail', leadId: second };
+  if (first && PAGE_SLUGS.has(first)) return { page: first, leadId: null };
+  return { page: 'dashboard', leadId: null };
+}
+
+function pathFor(page, leadId) {
+  if (page === 'lead_detail') return leadId ? `/leads/${leadId}` : '/leads';
+  return `/${page}`;
+}
+
 // ── Global Search ───────────────────────────────────────────────────────────────
 function GlobalSearch({ onSelectLead, onSelectOperation, onSelectQuote }) {
   const [q, setQ]           = useState('');
@@ -268,11 +285,34 @@ function CRMApp() {
   const { user, logout } = useAuth();
   const { theme, toggle: toggleTheme, isDark } = useTheme();
   const { toasts, setToasts, show: toast } = useToast();
-  const [page, setPage] = useState('dashboard');
-  const [selectedLeadId, setSelectedLeadId] = useState(null);
+  const [page, setPage] = useState(() => readLocation().page);
+  const [selectedLeadId, setSelectedLeadId] = useState(() => readLocation().leadId);
   const [showIdleWarning, setShowIdleWarning] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const sidebarRef = useRef(null);
+  const firstUrlSync = useRef(true);
+
+  // Refleja la pantalla actual en la URL (replace la primera vez para no ensuciar
+  // el historial, push en los cambios siguientes).
+  useEffect(() => {
+    const path = pathFor(page, selectedLeadId);
+    if (window.location.pathname !== path) {
+      if (firstUrlSync.current) window.history.replaceState({}, '', path);
+      else window.history.pushState({}, '', path);
+    }
+    firstUrlSync.current = false;
+  }, [page, selectedLeadId]);
+
+  // Botones atrás/adelante del navegador
+  useEffect(() => {
+    const onPopState = () => {
+      const loc = readLocation();
+      setPage(loc.page);
+      setSelectedLeadId(loc.leadId);
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
 
   const { countdown, stayActive } = useIdleLogout(() => { logout(); }, true);
 
