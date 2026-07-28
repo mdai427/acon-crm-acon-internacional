@@ -50,10 +50,14 @@ const app = express();
 // Detrás del proxy de EasyPanel/Traefik: necesario para que el rate limiting
 // use la IP real del cliente (X-Forwarded-For) y no la del proxy.
 app.set('trust proxy', 1);
+
+// Normaliza FRONTEND_URL (sin barra final) para que CORS coincida con el
+// header Origin del navegador, que nunca lleva "/" al final.
+const FRONTEND_ORIGIN = (process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/+$/, '');
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    origin: FRONTEND_ORIGIN,
     methods: ['GET', 'POST']
   }
 });
@@ -67,13 +71,13 @@ app.use(helmet({
       styleSrc: ["'self'", "'unsafe-inline'"],
       scriptSrc: ["'self'"],
       imgSrc: ["'self'", 'data:', 'https:'],
-      connectSrc: ["'self'", process.env.FRONTEND_URL || 'http://localhost:3000'],
+      connectSrc: ["'self'", FRONTEND_ORIGIN],
     },
   },
   hsts: { maxAge: 31536000, includeSubDomains: true },
 }));
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  origin: FRONTEND_ORIGIN,
   credentials: true
 }));
 app.use(morgan('dev'));
