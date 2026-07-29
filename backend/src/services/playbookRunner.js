@@ -75,15 +75,13 @@ async function buildContent(lead, action, ctx, { channel }) {
 
   const aiClient = require('./aiClient');
   const contact = typeof lead.contact === 'object' ? lead.contact?.name : lead.contact;
-  const formato = channel === 'whatsapp'
-    ? 'Responde SOLO con el texto del mensaje de WhatsApp (máximo 4 líneas, tono cercano y profesional, sin firmas largas).'
-    : 'Responde SOLO con JSON: {"subject": "asunto", "body": "cuerpo del correo en texto plano, máximo 150 palabras"}.';
+  const formato = 'Responde SOLO con JSON: {"subject": "asunto", "body": "cuerpo del correo en texto plano, máximo 150 palabras"}.';
 
   const r = await aiClient.chat({
     feature: 'playbook_agent',
     lead: lead._id,
     messages: [{ role: 'user', content: `Eres el asistente comercial de ACON Worldwide Logística.
-Redacta un ${channel === 'whatsapp' ? 'mensaje de WhatsApp' : 'correo'} para este prospecto.
+Redacta un correo para este prospecto.
 
 INSTRUCCIONES DEL PLAYBOOK: ${action.aiInstructions}
 
@@ -100,7 +98,6 @@ ${formato}` }],
     temperature: 0.5,
   });
 
-  if (channel === 'whatsapp') return { body: (r.content || '').trim() };
   const match = (r.content || '').match(/\{[\s\S]*\}/);
   const parsed = match ? JSON.parse(match[0]) : { subject: render(action.title, ctx), body: r.content };
   return { subject: parsed.subject, body: parsed.body };
@@ -114,27 +111,19 @@ async function runWhatsApp(lead, action, ctx) {
     || (typeof lead.contact === 'object' ? lead.contact?.whatsapp : null);
   if (!phone) throw new Error('El lead no tiene número de WhatsApp');
 
-  // Plantilla aprobada de Meta: la vía segura fuera de la ventana de 24 h.
-  if (action.metaTemplate?.name) {
-    await wa.sendTemplate(phone, action.metaTemplate.name, action.metaTemplate.language || 'es_MX');
-    await Activity.create({
-      lead: lead._id, user: ctx.userId, type: 'whatsapp_out', direction: 'outbound',
-      content: `[Plantilla Meta] ${action.metaTemplate.name}`, isAuto: true,
-      metadata: { source: 'playbook', action: action.title, metaTemplate: action.metaTemplate.name },
-    });
-    return `Plantilla "${action.metaTemplate.name}" enviada a ${phone}`;
+  // Solo plantillas aprobadas de Meta: el texto libre no entrega fuera de la
+  // ventana de 24 h, así que en automatizaciones no tiene sentido.
+  if (!action.metaTemplate?.name) {
+    throw new Error('La acción no tiene plantilla de Meta seleccionada');
   }
 
-  // Texto libre: solo entrega si el cliente escribió en las últimas 24 h.
-  const { body } = await buildContent(lead, action, ctx, { channel: 'whatsapp' });
-  await wa.sendText(phone, body);
-
+  await wa.sendTemplate(phone, action.metaTemplate.name, action.metaTemplate.language || 'es_MX');
   await Activity.create({
     lead: lead._id, user: ctx.userId, type: 'whatsapp_out', direction: 'outbound',
-    content: body, isAuto: true,
-    metadata: { source: 'playbook', action: action.title },
+    content: `[Plantilla Meta] ${action.metaTemplate.name}`, isAuto: true,
+    metadata: { source: 'playbook', action: action.title, metaTemplate: action.metaTemplate.name },
   });
-  return `WhatsApp enviado a ${phone}`;
+  return `Plantilla "${action.metaTemplate.name}" enviada a ${phone}`;
 }
 
 async function runEmail(lead, action, ctx) {

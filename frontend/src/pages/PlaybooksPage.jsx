@@ -16,7 +16,7 @@ const KINDS = [
   { id: 'task',           label: 'Crear tarea',        Icon: CheckSquare,
     hint: 'Deja un pendiente al ejecutivo (no envía nada)' },
   { id: 'whatsapp',       label: 'Enviar WhatsApp',    Icon: MessageSquare,
-    hint: 'Envía el mensaje real al lead por WhatsApp' },
+    hint: 'Envía una plantilla aprobada de Meta al lead' },
   { id: 'email',          label: 'Enviar correo',      Icon: Mail,
     hint: 'Envía el correo real al lead desde el buzón del asesor' },
   { id: 'ai_email_draft', label: 'Borrador IA',        Icon: Bot,
@@ -41,7 +41,7 @@ function ActionEditor({ action, onChange, onRemove, emailTemplates, waTemplates 
   const set = (campo, valor) => onChange({ ...action, [campo]: valor });
   const setCond = (campo, valor) => onChange({ ...action, onlyIf: { ...(action.onlyIf || {}), [campo]: valor } });
 
-  const usesAI = ['whatsapp', 'email'].includes(action.kind);
+  const usesAI = action.kind === 'email';
   const isDraft = action.kind === 'ai_email_draft';
 
   return (
@@ -76,20 +76,20 @@ function ActionEditor({ action, onChange, onRemove, emailTemplates, waTemplates 
             onChange={e => onChange({
               ...action,
               metaTemplate: { ...(action.metaTemplate || {}), name: e.target.value, language: waTemplates.find(t => t.name === e.target.value)?.language || 'es_MX' },
-              // Con plantilla elegida, el texto libre y la IA no aplican.
-              ...(e.target.value ? { aiInstructions: '', _useAi: false } : {}),
+              aiInstructions: '', _useAi: false, message: '',
             })}
           >
-            <option value="">Texto libre (solo llega si el cliente escribió en 24 h)</option>
+            <option value="">Selecciona una plantilla aprobada…</option>
             {waTemplates.map(t => (
               <option key={t.name + t.language} value={t.name}>
-                Plantilla Meta: {t.name} ({t.language})
+                {t.name} ({t.language})
               </option>
             ))}
           </select>
-          {!waTemplates.length && (
-            <span className="pb-tpl-hint">Sin plantillas aprobadas — se crean en Meta Business y aparecen aquí.</span>
-          )}
+          <span className="pb-tpl-hint">
+            WhatsApp automático solo envía plantillas aprobadas de Meta
+            {!waTemplates.length && ' — se crean en Meta Business y aparecen aquí'}.
+          </span>
         </div>
       )}
 
@@ -123,7 +123,7 @@ function ActionEditor({ action, onChange, onRemove, emailTemplates, waTemplates 
         />
       )}
 
-      {(usesAI || isDraft) && !(action.kind === 'whatsapp' && action.metaTemplate?.name) && !(action.kind === 'email' && action.templateId) && (
+      {(usesAI || isDraft) && !(action.kind === 'email' && action.templateId) && (
         <div className="pb-ai-row">
           <label className="pb-ai-toggle">
             <input
@@ -141,7 +141,7 @@ function ActionEditor({ action, onChange, onRemove, emailTemplates, waTemplates 
         </div>
       )}
 
-      {(action.kind === 'whatsapp' && action.metaTemplate?.name) || (action.kind === 'email' && action.templateId) ? null
+      {action.kind === 'whatsapp' || (action.kind === 'email' && action.templateId) ? null
         : (isDraft || action._useAi || action.aiInstructions) && (usesAI || isDraft) ? (
         <textarea
           className="pb-field"

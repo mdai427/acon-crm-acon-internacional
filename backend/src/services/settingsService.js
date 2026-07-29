@@ -75,26 +75,75 @@ function encrypt(plain) {
   return [iv.toString('base64'), cipher.getAuthTag().toString('base64'), data.toString('base64')].join(':');
 }
 
-function decrypt(payload) {
-  const [iv, tag, data] = String(payload).split(':');
-  if (!iv || !tag || !data) return '';
-  const decipher = crypto.createDecipheriv(ALGO, getKey(), Buffer.from(iv, 'base64'));
+// Claves con las que se intenta descifrar, en orden. La segunda es de
+// compatibilidad: hasta ahora ENCRYPTION_KEY caía a JWT_SECRET, así que las
+// instalaciones que nunca la definieron tienen todo cifrado con el secreto de
+// sesión. Sin esta lista, exigir ENCRYPTION_KEY dejaría ilegibles todas las
+// credenciales de integraciones ya guardadas.
+function decryptionKeys() {
+  const keys = [getKey()];
+  const legacy = process.env.JWT_SECRET;
+  if (legacy && legacy !== process.env.ENCRYPTION_KEY) {
+    keys.push(crypto.createHash('sha256').update(legacy).digest());
+  }
+  return keys;
+}
+
+function decryptWith(key, iv, tag, data) {
+  const decipher = crypto.createDecipheriv(ALGO, key, Buffer.from(iv, 'base64'));
   decipher.setAuthTag(Buffer.from(tag, 'base64'));
   return Buffer.concat([decipher.update(Buffer.from(data, 'base64')), decipher.final()]).toString('utf8');
+}
+
+/**
+ * @returns {{ value: string, legacy: boolean }} legacy = venía cifrado con la
+ *          clave antigua y conviene volver a guardarlo con la nueva.
+ */
+function decryptDetailed(payload) {
+  const [iv, tag, data] = String(payload).split(':');
+  if (!iv || !tag || !data) return { value: '', legacy: false };
+
+  const keys = decryptionKeys();
+  for (const [index, key] of keys.entries()) {
+    try {
+      return { value: decryptWith(key, iv, tag, data), legacy: index > 0 };
+    } catch {
+      // GCM falla al validar el tag si la clave no es la correcta: se prueba la
+      // siguiente.
+    }
+  }
+  throw new Error('No se pudo descifrar con ninguna clave conocida');
+}
+
+function decrypt(payload) {
+  return decryptDetailed(payload).value;
 }
 
 // Devuelve todas las claves guardadas, descifradas.
 async function getAll() {
   const docs = await Setting.find().lean();
   const out = {};
+  const toReencrypt = [];
+
   for (const doc of docs) {
     try {
-      out[doc.key] = decrypt(doc.value);
+      const { value, legacy } = decryptDetailed(doc.value);
+      out[doc.key] = value;
+      if (legacy) toReencrypt.push({ key: doc.key, value });
     } catch {
-      // Valor ilegible: normalmente significa que cambió ENCRYPTION_KEY.
       console.error(`⚠️ No se pudo descifrar la configuración "${doc.key}". ¿Cambió ENCRYPTION_KEY?`);
     }
   }
+
+  // Migración silenciosa a la clave nueva. Se hace en segundo plano para no
+  // retrasar la lectura, y si falla no pasa nada: se reintenta a la siguiente.
+  if (toReencrypt.length) {
+    console.log(`🔑 Migrando ${toReencrypt.length} credencial(es) a ENCRYPTION_KEY`);
+    Promise.all(toReencrypt.map(({ key, value }) =>
+      Setting.updateOne({ key }, { $set: { value: encrypt(value) } })
+    )).catch(err => console.error(`⚠️ Migración de credenciales: ${err.message}`));
+  }
+
   return out;
 }
 

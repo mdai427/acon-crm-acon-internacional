@@ -7,6 +7,8 @@
 // con el mismo secreto que firma las sesiones, tokens firmados con una clave
 // adivinable. Es mejor no arrancar que arrancar inseguro.
 
+const crypto = require('crypto');
+
 // 32 caracteres hex = 16 bytes de entropía. Es el mínimo razonable para HS256;
 // el .env.example sugiere `openssl rand -hex 32` (64 caracteres).
 const MIN_SECRET_LENGTH = 32;
@@ -66,7 +68,19 @@ function validateEnv({ exitOnFailure = true } = {}) {
   if (errors.length) {
     console.error('\n❌ Configuración insegura — el servidor no va a arrancar:\n');
     for (const error of errors) console.error(`   • ${error}`);
-    console.error('\n   Revisa .env.example para los valores esperados.\n');
+
+    // Un mensaje que solo dice "revisa .env.example" deja el servicio caído sin
+    // explicar cómo salir de ahí. Aquí van los valores listos para pegar.
+    console.error('\n   Genera los que falten y ponlos en las variables de entorno:\n');
+    for (const name of ['JWT_SECRET', 'ENCRYPTION_KEY', 'WEBHOOK_API_KEY']) {
+      if (errors.some(e => e.startsWith(name)) || (name === 'WEBHOOK_API_KEY' && !process.env[name])) {
+        console.error(`     ${name}=${crypto.randomBytes(32).toString('hex')}`);
+      }
+    }
+    console.error('\n   Ojo al cambiar ENCRYPTION_KEY en una instalación que ya funcionaba:');
+    console.error('   las credenciales de integraciones guardadas se descifran con la clave');
+    console.error('   anterior y se migran solas al primer arranque. No borres JWT_SECRET.\n');
+
     if (exitOnFailure) process.exit(1);
     throw new Error(errors.join('; '));
   }

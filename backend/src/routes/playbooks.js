@@ -85,6 +85,14 @@ router.put('/:stage', checkPerm('playbooks.edit'), async (req, res) => {
         order: i,
       }));
 
+    const sinPlantilla = clean.find(a => a.kind === 'whatsapp' && !a.metaTemplate.name);
+    if (sinPlantilla) {
+      return res.status(400).json({
+        success: false,
+        message: `La acción "${sinPlantilla.title}" necesita una plantilla de Meta: WhatsApp automático solo envía plantillas aprobadas`,
+      });
+    }
+
     const playbook = await Playbook.findOneAndUpdate(
       { stage: req.params.stage },
       { actions: clean, tasks: [], isActive, useAI, updatedBy: req.user._id },
