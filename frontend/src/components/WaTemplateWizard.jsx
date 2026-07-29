@@ -10,13 +10,13 @@ import { sendMetaTemplate } from '../services/api';
 const STEPS = ['Elegir plantilla', 'Llenar variables', 'Vista previa y envío'];
 
 // Variables {{1}}, {{2}}… de un texto de plantilla, en orden y sin duplicar.
-const extractVars = (text) => {
+export const extractVars = (text) => {
   const found = [...String(text || '').matchAll(/\{\{(\d+)\}\}/g)].map(m => Number(m[1]));
   return [...new Set(found)].sort((a, b) => a - b);
 };
 
 // Sustituye {{n}} por los valores capturados (o deja el marcador si falta).
-const fill = (text, values) =>
+export const fill = (text, values) =>
   String(text || '').replace(/\{\{(\d+)\}\}/g, (_, n) => values[n - 1] || `{{${n}}}`);
 
 // Campos del lead que se pueden insertar con un clic en cualquier variable.
@@ -41,8 +41,9 @@ function Stepper({ step }) {
   );
 }
 
-// Vista previa estilo WhatsApp del contenido ya rellenado.
-function PhonePreview({ template, values, headerUrl, contactName }) {
+// Vista previa estilo WhatsApp del contenido ya rellenado. Se exporta para que
+// el creador de plantillas la reutilice.
+export function PhonePreview({ template, values, headerUrl, contactName }) {
   const header = template?.components?.find(c => c.type === 'HEADER');
   const body = template?.components?.find(c => c.type === 'BODY');
   const footer = template?.components?.find(c => c.type === 'FOOTER');

@@ -226,6 +226,7 @@ export const runCampaign = (data) => api.post('/agents/campaign', data);
 export const getTemplates2 = (params) => api.get('/templates', { params });
 export const getMetaWaTemplates = () => api.get('/whatsapp/meta/templates');
 export const sendMetaTemplate = (d) => api.post('/whatsapp/meta/send-template', d);
+export const createMetaWaTemplate = (d) => api.post('/whatsapp/meta/templates', d);
 export const createTemplate = (data) => api.post('/templates', data);
 export const updateTemplate = (id, data) => api.put(`/templates/${id}`, data);
 export const deleteTemplate = (id) => api.delete(`/templates/${id}`);

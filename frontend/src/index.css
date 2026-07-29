@@ -1859,3 +1859,5 @@ textarea.form-input{resize:vertical;min-height:80px}
   .waw-map { grid-template-columns: 1fr }
   .waw-phone { max-width: 290px; margin: 0 auto }
 }
+
+.waw-body-tools { display: flex; align-items: center; gap: 10px; margin-top: 6px; flex-wrap: wrap }

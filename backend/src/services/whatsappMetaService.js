@@ -141,6 +141,35 @@ async function listTemplates() {
 }
 
 /**
+ * Crea una plantilla en Meta (queda PENDING hasta que la aprueben).
+ * @param {object} data { name, language, category, bodyText, headerText, footerText }
+ */
+async function createTemplate({ name, language = 'es_MX', category = 'UTILITY', bodyText, headerText, footerText }) {
+  if (!isConfigured()) throw new Error('WhatsApp no configurado');
+  const wabaId = process.env.WHATSAPP_WABA_ID;
+  if (!wabaId) throw new Error('Falta WHATSAPP_WABA_ID para administrar plantillas');
+  if (!bodyText?.trim()) throw new Error('La plantilla necesita cuerpo');
+
+  // Meta exige nombre en minúsculas con guiones bajos.
+  const cleanName = String(name || '').toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 512);
+  if (!cleanName) throw new Error('La plantilla necesita nombre');
+
+  const components = [];
+  if (headerText?.trim()) components.push({ type: 'HEADER', format: 'TEXT', text: headerText.trim() });
+  components.push({ type: 'BODY', text: bodyText.trim() });
+  if (footerText?.trim()) components.push({ type: 'FOOTER', text: footerText.trim() });
+
+  const r = await axios.post(
+    `${BASE_URL}/${wabaId}/message_templates`,
+    { name: cleanName, language, category, components },
+    { headers: headers(), timeout: 15000 }
+  );
+  return { ...r.data, name: cleanName };
+}
+
+/**
  * Parse an incoming Meta webhook payload.
  * Returns an array of normalized message objects.
  */
@@ -175,6 +204,7 @@ function parseWebhookPayload(body) {
 }
 
 module.exports = {
+  createTemplate,
   isConfigured,
   normalizePhone,
   sendText,

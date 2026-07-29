@@ -380,6 +380,20 @@ router.post('/meta/send-text', auth, checkPerm('whatsapp.send'), async (req, res
   }
 });
 
+// POST /api/whatsapp/meta/templates — crear plantilla (queda a aprobación de Meta)
+router.post('/meta/templates', auth, checkPerm('whatsapp.templates'), async (req, res) => {
+  try {
+    const result = await metaWA.createTemplate(req.body || {});
+    res.json({
+      success: true,
+      data: result,
+      message: `Plantilla "${result.name}" enviada a aprobación de Meta (estado: ${result.status || 'PENDING'})`,
+    });
+  } catch (e) {
+    res.status(400).json({ success: false, message: e.response?.data?.error?.message || e.message });
+  }
+});
+
 // POST /api/whatsapp/meta/send-template — send approved template
 router.post('/meta/send-template', auth, checkPerm('whatsapp.send'), async (req, res) => {
   try {

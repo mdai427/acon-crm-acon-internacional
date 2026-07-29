@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { getTemplates2, createTemplate, updateTemplate, deleteTemplate } from '../services/api';
 import { Plus, Edit2, Trash2, FileText, Copy, Zap, Mail, MessageSquare, Phone, ChevronDown, ChevronUp, CheckCircle, Save, X } from 'lucide-react';
+import WaTemplateCreator from '../components/WaTemplateCreator';
+import { getMetaWaTemplates } from '../services/api';
 
 // ── Stages ──────────────────────────────────────────────────
 const STAGES = ['new', 'contacted', 'qualified', 'proposal', 'negotiation', 'closed_won', 'closed_lost'];
@@ -437,7 +439,7 @@ Quería avisarte que tenemos *nuevas tarifas marítimas* desde/hacia Asia y EE.U
   },
 ];
 
-const emptyForm = { name: '', stage: 'new', channel: 'whatsapp', subject: '', body: '' };
+const emptyForm = { name: '', stage: 'new', channel: 'email', subject: '', body: '' };
 
 export default function TemplatesPage({ toast }) {
   const [templates, setTemplates] = useState([]);
@@ -449,6 +451,15 @@ export default function TemplatesPage({ toast }) {
 
   // Modal state
   const [showModal, setShowModal] = useState(false);
+  const [showWaCreator, setShowWaCreator] = useState(false);
+  const [metaTemplates, setMetaTemplates] = useState([]);
+
+  const loadMeta = useCallback(() => {
+    getMetaWaTemplates()
+      .then(r => setMetaTemplates(r.data.data || []))
+      .catch(() => setMetaTemplates([]));
+  }, []);
+  useEffect(() => { loadMeta(); }, [loadMeta]);
   const [editId, setEditId] = useState(null);
   const [form, setForm] = useState(emptyForm);
 
@@ -543,8 +554,11 @@ export default function TemplatesPage({ toast }) {
               <Zap size={13} /> {seeding ? 'Cargando...' : 'Cargar plantillas ACON'}
             </button>
           )}
-          <button className="btn btn-primary btn-sm" onClick={openCreate} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-            <Plus size={13} /> Nueva Plantilla
+          <button className="btn btn-primary btn-sm" onClick={() => setShowWaCreator(true)} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            <Plus size={13} /> Plantilla WhatsApp
+          </button>
+          <button className="btn btn-ghost btn-sm" onClick={openCreate} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            <Plus size={13} /> Correo / Guion
           </button>
         </div>
       </div>
@@ -584,6 +598,39 @@ export default function TemplatesPage({ toast }) {
           {Object.entries(CHANNEL_META).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
         </select>
       </div>
+
+      {/* Plantillas reales de WhatsApp (viven en Meta, con su estado) */}
+      {(!channelFilter || channelFilter === 'whatsapp') && metaTemplates.length > 0 && (
+        <div className="card" style={{ marginBottom: 24, padding: '16px 18px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+            <span style={{ fontSize: 15 }}>💬</span>
+            <div style={{ fontWeight: 700, fontSize: 14, color: '#0B2545' }}>Plantillas de WhatsApp (Meta)</div>
+          </div>
+          <div style={{ fontSize: 12, color: '#9AA3AE', marginBottom: 12 }}>
+            Viven en Meta: solo las aprobadas se pueden enviar desde el chat y los playbooks.
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 10 }}>
+            {metaTemplates.map(t => {
+              const st = t.status === 'APPROVED'
+                ? { label: 'Aprobada', color: '#16A34A', bg: 'rgba(22,163,74,.1)' }
+                : t.status === 'REJECTED'
+                  ? { label: 'Rechazada', color: '#DC2626', bg: 'rgba(220,38,38,.1)' }
+                  : { label: 'En revisión', color: '#D97706', bg: 'rgba(217,119,6,.1)' };
+              const body = t.components?.find(c => c.type === 'BODY')?.text || '';
+              return (
+                <div key={t.name + t.language} style={{ border: '1px solid #E3E6EA', borderRadius: 10, padding: '11px 13px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <strong style={{ fontSize: 12.5, color: '#0B2545', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</strong>
+                    <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 12, color: st.color, background: st.bg }}>{st.label}</span>
+                  </div>
+                  <div style={{ fontSize: 11, color: '#9AA3AE', margin: '3px 0 5px' }}>{t.language} · {t.category?.toLowerCase()}</div>
+                  <div style={{ fontSize: 11.5, color: '#5A6472', lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{body}</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {loading ? (
         <div className="loading"><div className="spinner" /> Cargando plantillas...</div>
@@ -712,7 +759,16 @@ export default function TemplatesPage({ toast }) {
                 </div>
                 <div className="form-group">
                   <label className="form-label">Canal</label>
-                  <select className="form-select" value={form.channel} onChange={e => setForm(f => ({...f, channel: e.target.value}))}>
+                  <select className="form-select" value={form.channel} onChange={e => {
+                    // Las de WhatsApp son plantillas reales de Meta: tienen su
+                    // propio creador con vista previa y aprobación.
+                    if (e.target.value === 'whatsapp' && !editId) {
+                      setShowModal(false);
+                      setShowWaCreator(true);
+                      return;
+                    }
+                    setForm(f => ({ ...f, channel: e.target.value }));
+                  }}>
                     {Object.entries(CHANNEL_META).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
                   </select>
                 </div>
@@ -745,6 +801,14 @@ export default function TemplatesPage({ toast }) {
             </div>
           </div>
         </div>
+      )}
+
+      {showWaCreator && (
+        <WaTemplateCreator
+          toast={toast}
+          onClose={() => setShowWaCreator(false)}
+          onCreated={loadMeta}
+        />
       )}
 
       {/* Confirm delete */}
