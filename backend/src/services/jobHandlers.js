@@ -8,40 +8,19 @@ const { register } = require('./jobQueue');
 // payload: { campaignId, userId }
 register('campaign_launch', async (payload, updateProgress) => {
   const mongoose = require('mongoose');
-  const Lead = require('../models/Lead');
-  const Activity = require('../models/Activity');
-  const Campaign = mongoose.models.Campaign;
+  const { sendCampaign } = require('./campaignSender');
 
-  const campaign = await Campaign.findById(payload.campaignId);
-  if (!campaign) throw new Error('Campaña no encontrada');
-
-  const filter = { isActive: true };
-  if (campaign.segment?.services?.length) filter.services = { $in: campaign.segment.services };
-  if (campaign.segment?.stages?.length) filter.stage = { $in: campaign.segment.stages };
-  if (campaign.segment?.countries?.length) filter.country = { $in: campaign.segment.countries };
-  if (campaign.segment?.minScore) filter.score = { $gte: campaign.segment.minScore };
-
-  const leads = await Lead.find(filter).select('_id company email').limit(500).lean();
-  const total = leads.length;
-  await Campaign.findByIdAndUpdate(payload.campaignId, { status: 'running', sentCount: total });
-
-  let sent = 0;
-  for (const lead of leads) {
-    try {
-      await Activity.create({
-        lead: lead._id,
-        type: 'email',
-        content: `Campaña "${campaign.name}": ${campaign.subject || campaign.name}`,
-        direction: 'outbound',
-        user: payload.userId,
-      });
-      sent++;
-      if (sent % 10 === 0) await updateProgress(Math.round((sent / total) * 100), total);
-    } catch {}
+  try {
+    return await sendCampaign(payload.campaignId, updateProgress);
+  } catch (error) {
+    // La campaña queda en 'paused' con el motivo a la vista, no en 'running'
+    // para siempre: así se puede corregir y relanzar sin reenviar a quien ya
+    // recibió (los destinatarios ya enviados se saltan).
+    await mongoose.models.Campaign?.findByIdAndUpdate(payload.campaignId, {
+      status: 'paused', lastError: error.message,
+    });
+    throw error;
   }
-
-  await Campaign.findByIdAndUpdate(payload.campaignId, { status: 'completed' });
-  return { sent, total };
 });
 
 // ── Handler: lead_rescore_all ──────────────────────────────────────

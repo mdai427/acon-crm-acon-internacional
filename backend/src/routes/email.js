@@ -2,9 +2,14 @@ const express = require('express');
 const router = express.Router();
 const Lead = require('../models/Lead');
 const Activity = require('../models/Activity');
-const { auth } = require('../middleware/auth');
+const { auth, adminOnly } = require('../middleware/auth');
 // El proveedor de correo (Resend o SMTP) se elige en services/mailerService.
 const mailer = require('../services/mailerService');
+const Mailbox = require('../models/Mailbox');
+const mailboxService = require('../services/mailboxService');
+const suppression = require('../services/suppressionService');
+const EmailSuppression = require('../models/EmailSuppression');
+const campaignSender = require('../services/campaignSender');
 
 // ============================================
 // PLANTILLAS DE EMAIL PARA LOGISTICA
@@ -89,15 +94,47 @@ const emailTemplates = {
 // RUTAS
 // ============================================
 
+/**
+ * Resuelve con qué buzón se envía. Si el usuario eligió uno se valida que tenga
+ * acceso; si no, se toma el suyo por defecto. Devuelve null cuando todavía no
+ * hay buzones creados: en ese caso se sigue usando el remitente global de
+ * siempre, así las instalaciones existentes no se rompen.
+ */
+async function resolveSender(user, mailboxId) {
+  if (mailboxId) {
+    const mailbox = await Mailbox.findById(mailboxId);
+    if (!mailbox) throw new Error('El buzón indicado no existe');
+    if (!mailboxService.canUse(user, mailbox)) throw new Error('Sin acceso a ese buzón');
+    return mailbox;
+  }
+  return mailboxService.defaultFor(user);
+}
+
+/**
+ * Encabezados de hilo para que la respuesta se agrupe con el correo original
+ * en el cliente del contacto (Gmail, Outlook).
+ */
+function threadHeaders(previous) {
+  const parentId = previous?.emailData?.messageId;
+  if (!parentId) return {};
+  const chain = [previous?.metadata?.references, parentId].filter(Boolean).join(' ');
+  return { 'In-Reply-To': parentId, References: chain };
+}
+
 // POST /api/email/send
 router.post('/send', auth, async (req, res) => {
   try {
-    const { leadId, subject, html, text, template, templateData, attachments } = req.body;
+    const {
+      leadId, subject, html, text, template, templateData, attachments,
+      mailboxId, replyToActivityId,
+    } = req.body;
 
     const lead = await Lead.findById(leadId).populate('assignedTo', 'name phone');
     if (!lead?.email) {
       return res.status(400).json({ success: false, message: 'Lead sin email registrado' });
     }
+    // Bloqueado por rebotes: se corta antes de gastar la llamada al proveedor.
+    await suppression.assertSendable(lead.email);
 
     let emailContent = { subject, html, text };
 
@@ -113,9 +150,22 @@ router.post('/send', auth, async (req, res) => {
       emailContent = emailTemplates[template](tmplData);
     }
 
+    const mailbox = await resolveSender(req.user, mailboxId);
+    // La respuesta del contacto vuelve con el lead codificado en la dirección,
+    // así el hilo entra al chat correcto aunque conteste desde otro correo.
+    const replyTo = mailbox ? mailboxService.buildReplyTo(mailbox, leadId) : undefined;
+
+    const previous = replyToActivityId ? await Activity.findById(replyToActivityId) : null;
+
+    if (mailbox?.signature && emailContent.html) {
+      emailContent = { ...emailContent, html: `${emailContent.html}${mailbox.signature}` };
+    }
+
     const mailOptions = {
-      from: mailer.defaultFrom(),
+      from: mailbox ? mailbox.fromHeader() : mailer.defaultFrom(),
       to:   lead.email,
+      replyTo,
+      headers: threadHeaders(previous),
       ...emailContent,
       attachments: attachments || []
     };
@@ -133,6 +183,13 @@ router.post('/send', auth, async (req, res) => {
         messageId: info.messageId,
         from: mailOptions.from,
         to: [lead.email]
+      },
+      metadata: {
+        mailboxId: mailbox?._id || null,
+        mailboxAddress: mailbox?.address || null,
+        references: mailOptions.headers?.References || null,
+        deliveryStatus: 'queued',
+        html: emailContent.html || null,
       }
     });
 
@@ -142,24 +199,28 @@ router.post('/send', auth, async (req, res) => {
     res.json({ success: true, messageId: info.messageId, activity });
   } catch (error) {
     console.error('Email send error:', error);
-    res.status(500).json({ success: false, message: error.message });
+    res.status(error.status || 500).json({ success: false, message: error.message, code: error.code });
   }
 });
 
 // POST /api/email/bulk — envio masivo a multiples leads
 router.post('/bulk', auth, async (req, res) => {
   try {
-    const { leadIds, template, templateData, customSubject, customHtml } = req.body;
+    const { leadIds, template, templateData, customSubject, customHtml, mailboxId } = req.body;
 
     const leads = await Lead.find({
       _id: { $in: leadIds },
-      email: { $exists: true, $ne: '' }
+      email: { $exists: true, $ne: '' },
+      // Los bloqueados por rebote quedan fuera del envío masivo.
+      'emailStatus.canReceive': { $ne: false },
     }).populate('assignedTo', 'name phone');
 
-    const results = { sent: 0, failed: 0, errors: [] };
+    const mailbox = await resolveSender(req.user, mailboxId);
+    const results = { sent: 0, failed: 0, skipped: 0, errors: [] };
 
     for (const lead of leads) {
       try {
+        if (await suppression.isSuppressed(lead.email)) { results.skipped++; continue; }
         let emailContent;
         if (template && emailTemplates[template]) {
           emailContent = emailTemplates[template]({
@@ -174,7 +235,8 @@ router.post('/bulk', auth, async (req, res) => {
         }
 
         await mailer.sendMail({
-          from: mailer.defaultFrom(),
+          from: mailbox ? mailbox.fromHeader() : mailer.defaultFrom(),
+          replyTo: mailbox ? mailboxService.buildReplyTo(mailbox, lead._id) : undefined,
           to: lead.email,
           ...emailContent
         });
@@ -201,6 +263,67 @@ router.post('/bulk', auth, async (req, res) => {
     }
 
     res.json({ success: true, results });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// GET /api/email/unsubscribe — baja desde el pie de una campaña.
+// Es pública a propósito: el contacto no tiene cuenta en el CRM. El token
+// firmado impide dar de baja a un tercero adivinando la URL.
+router.get('/unsubscribe', async (req, res) => {
+  const { email, token } = req.query;
+  const page = (title, message) => `<!doctype html><html lang="es"><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>${title}</title>
+    <div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:80px auto;text-align:center;color:#222">
+      <h1 style="font-size:20px;color:#0B2545">${title}</h1>
+      <p style="color:#5A6472;line-height:1.6">${message}</p>
+    </div>`;
+
+  try {
+    if (!email || !campaignSender.verifyUnsubscribeToken(String(email), String(token))) {
+      return res.status(400).send(page('Enlace inválido', 'El enlace de baja no es válido o expiró.'));
+    }
+    await suppression.suppressManually(String(email), 'Baja solicitada por el contacto');
+    res.send(page('Listo, te diste de baja', `No volveremos a enviar correos a <strong>${String(email)}</strong>.`));
+  } catch (error) {
+    console.error('[unsubscribe]', error);
+    res.status(500).send(page('Algo salió mal', 'Intenta de nuevo en unos minutos.'));
+  }
+});
+
+// ── Salud del correo: rebotes y bloqueos ─────────────────────────
+
+// GET /api/email/suppressions — direcciones que dejaron de recibir
+router.get('/suppressions', auth, async (req, res) => {
+  try {
+    const list = await EmailSuppression.find({ releasedAt: null }).sort({ lastBounceAt: -1 }).limit(500);
+    res.json({ success: true, data: list });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// POST /api/email/suppressions — bloqueo manual (el contacto pidió no recibir)
+router.post('/suppressions', auth, async (req, res) => {
+  try {
+    const { address, detail } = req.body;
+    if (!address) return res.status(400).json({ success: false, message: 'Falta la dirección' });
+    await suppression.suppressManually(address, detail);
+    res.json({ success: true, message: `${address} bloqueado` });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// DELETE /api/email/suppressions/:address — reactivar. Solo admin: liberar una
+// dirección muerta vuelve a subir la tasa de rebote del dominio.
+router.delete('/suppressions/:address', auth, adminOnly, async (req, res) => {
+  try {
+    const record = await suppression.release(req.params.address, req.user._id);
+    if (!record) return res.status(404).json({ success: false, message: 'No estaba bloqueada' });
+    res.json({ success: true, message: `${req.params.address} reactivado` });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

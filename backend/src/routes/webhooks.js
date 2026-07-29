@@ -3,6 +3,10 @@ const router = express.Router();
 const crypto = require('crypto');
 const Lead = require('../models/Lead');
 const { scoreLeadWithAI } = require('../services/aiAgent');
+const { processInbound } = require('../services/inboundEmail');
+const suppression = require('../services/suppressionService');
+const mongoose = require('mongoose');
+const CampaignRecipient = require('../models/CampaignRecipient');
 
 // ============================================
 // WEBHOOK META (Facebook Lead Ads + Instagram)
@@ -254,6 +258,161 @@ router.post('/whatsapp', async (req, res) => {
   } catch (error) {
     console.error('[webhook/whatsapp]', error);
     res.status(200).json({ status: 'ok' }); // always 200 to Meta
+  }
+});
+
+// ============================================
+// WEBHOOK RESEND (correo entrante + eventos de entrega)
+// ============================================
+//
+// Resend firma con Svix: los headers svix-id/svix-timestamp/svix-signature y
+// un secreto whsec_<base64>. La firma se calcula sobre "id.timestamp.body",
+// por eso este router recibe el body crudo (ver express.raw en index.js).
+
+const SVIX_TOLERANCE_SECONDS = 5 * 60;
+
+function verifySvix(req) {
+  const secret = process.env.RESEND_WEBHOOK_SECRET;
+  // Sin secreto configurado no se acepta nada: un webhook de correo abierto
+  // deja que cualquiera inyecte conversaciones falsas en el CRM.
+  if (!secret) return { ok: false, reason: 'RESEND_WEBHOOK_SECRET sin configurar' };
+
+  const id = req.headers['svix-id'];
+  const timestamp = req.headers['svix-timestamp'];
+  const signatureHeader = req.headers['svix-signature'];
+  if (!id || !timestamp || !signatureHeader) return { ok: false, reason: 'faltan headers svix' };
+
+  const age = Math.abs(Math.floor(Date.now() / 1000) - Number(timestamp));
+  if (!Number.isFinite(age) || age > SVIX_TOLERANCE_SECONDS) {
+    return { ok: false, reason: 'timestamp fuera de tolerancia' };
+  }
+
+  const key = Buffer.from(secret.replace(/^whsec_/, ''), 'base64');
+  const body = Buffer.isBuffer(req.body) ? req.body.toString('utf8') : JSON.stringify(req.body);
+  const expected = crypto.createHmac('sha256', key)
+    .update(`${id}.${timestamp}.${body}`)
+    .digest('base64');
+
+  // El header trae una o más firmas ("v1,<sig> v1,<sig>"): basta que una calce.
+  const provided = String(signatureHeader).split(' ')
+    .map(part => part.split(',')[1])
+    .filter(Boolean);
+
+  const expectedBuf = Buffer.from(expected);
+  const ok = provided.some(sig => {
+    const buf = Buffer.from(sig);
+    return buf.length === expectedBuf.length && crypto.timingSafeEqual(buf, expectedBuf);
+  });
+
+  return ok ? { ok: true, body } : { ok: false, reason: 'firma inválida' };
+}
+
+// Los eventos de entrega actualizan el correo saliente ya guardado, para poder
+// mostrar "entregado / rebotado / abierto" en el chat y medir las campañas.
+const DELIVERY_STATUS = {
+  'email.sent':            'sent',
+  'email.delivered':       'delivered',
+  'email.delivery_delayed':'delayed',
+  'email.bounced':         'bounced',
+  'email.complained':      'complained',
+  'email.opened':          'opened',
+  'email.clicked':         'clicked',
+};
+
+// Campos que cada evento actualiza en el destinatario de campaña y el contador
+// que incrementa en la campaña.
+const RECIPIENT_EVENTS = {
+  'email.delivered':  { status: 'delivered',   stamp: 'deliveredAt',  counter: 'deliveredCount' },
+  'email.opened':     { status: 'opened',      stamp: 'firstOpenAt',  counter: 'openCount',  count: 'openCount' },
+  'email.clicked':    { status: 'clicked',     stamp: 'firstClickAt', counter: 'clickCount', count: 'clickCount' },
+  'email.bounced':    { status: 'bounced',     counter: 'bouncedCount' },
+  'email.complained': { status: 'complained',  counter: 'complainedCount' },
+};
+
+// Un correo se abre varias veces; el estado no debe retroceder de 'clicked' a
+// 'opened' ni de 'bounced' a 'delivered'.
+const STATUS_RANK = { pending: 0, sent: 1, delivered: 2, opened: 3, clicked: 4, bounced: 5, complained: 6 };
+
+async function applyCampaignEvent(type, messageId) {
+  const event = RECIPIENT_EVENTS[type];
+  if (!event) return;
+
+  const recipient = await CampaignRecipient.findOne({ messageId });
+  if (!recipient) return;
+
+  const update = { $inc: {} };
+  if ((STATUS_RANK[event.status] ?? 0) > (STATUS_RANK[recipient.status] ?? 0)) {
+    update.$set = { status: event.status };
+    if (event.stamp && !recipient[event.stamp]) {
+      update.$set[event.stamp] = new Date();
+    }
+  }
+  if (event.count) update.$inc[event.count] = 1;
+  if (!Object.keys(update.$inc).length) delete update.$inc;
+
+  await CampaignRecipient.updateOne({ _id: recipient._id }, update);
+
+  // La métrica de la campaña cuenta eventos únicos por destinatario: 40
+  // aperturas de la misma persona no son 40 personas interesadas.
+  const isFirst = !event.stamp || !recipient[event.stamp];
+  if (isFirst) {
+    await mongoose.models.Campaign?.findByIdAndUpdate(recipient.campaign, { $inc: { [event.counter]: 1 } });
+  }
+}
+
+async function applyDeliveryEvent(type, data, io) {
+  const messageId = data?.email_id || data?.id;
+  if (!messageId) return;
+
+  const status = DELIVERY_STATUS[type];
+  await applyCampaignEvent(type, messageId);
+  const activity = await Activity.findOneAndUpdate(
+    { 'emailData.messageId': messageId },
+    {
+      $set: { 'metadata.deliveryStatus': status, [`metadata.deliveryTimes.${status}`]: new Date() },
+      // Un contacto puede abrir el mismo correo varias veces: interesa el conteo.
+      $inc: { [`metadata.deliveryCounts.${status}`]: 1 },
+    },
+    { new: true },
+  );
+  // Un rebote duro o una queja de spam bloquean la dirección para todo el CRM.
+  if (type === 'email.bounced' || type === 'email.complained') {
+    const recipients = Array.isArray(data.to) ? data.to : [data.to].filter(Boolean);
+    const { hard, detail } = suppression.classifyBounce(data);
+    for (const address of recipients) {
+      await suppression.recordBounce(address, {
+        hard, complaint: type === 'email.complained', detail,
+      });
+    }
+    io?.emit('email_suppressed', { addresses: recipients, reason: type, detail });
+  }
+
+  if (activity?.lead) {
+    io?.to(`lead_${activity.lead}`).emit('email_status', { leadId: activity.lead, activityId: activity._id, status });
+  }
+}
+
+// POST /api/webhooks/resend
+router.post('/resend', async (req, res) => {
+  const verification = verifySvix(req);
+  if (!verification.ok) {
+    console.warn(`⚠️ Resend webhook rechazado: ${verification.reason}`);
+    return res.status(401).json({ error: 'Firma inválida' });
+  }
+
+  // Responder rápido: Resend reintenta si el handler tarda, y el procesamiento
+  // (buscar lead, reenviar copia) no debe bloquear la confirmación.
+  res.status(200).json({ status: 'ok' });
+
+  try {
+    const event = JSON.parse(verification.body);
+    if (event.type === 'email.received' || event.type === 'inbound.email.created') {
+      await processInbound(event.data, req.io);
+    } else if (DELIVERY_STATUS[event.type]) {
+      await applyDeliveryEvent(event.type, event.data, req.io);
+    }
+  } catch (error) {
+    console.error('[webhook/resend]', error);
   }
 });
 

@@ -12,6 +12,19 @@ const leadSchema = new mongoose.Schema({
   country:   { type: String, default: 'México' },
   city:      { type: String },
 
+  // ---- Salud del correo ----
+  // Cuando un envío rebota en firme o el contacto marca spam, se bloquea el
+  // envío a este lead. Seguir escribiéndole quema la reputación del dominio y
+  // termina mandando a spam el correo de todos los demás.
+  emailStatus: {
+    canReceive:   { type: Boolean, default: true },
+    blockedReason:{ type: String },   // 'hard_bounce' | 'complaint' | 'soft_bounces' | 'manual'
+    blockedDetail:{ type: String },   // mensaje del proveedor, para que el asesor entienda
+    blockedAt:    { type: Date },
+    bounceCount:  { type: Number, default: 0 },
+    lastBounceAt: { type: Date },
+  },
+
   // ---- Pipeline ----
   stage: {
     type: String,

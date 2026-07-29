@@ -4,6 +4,7 @@ import {
 } from 'recharts';
 import {
   getCampaigns, createCampaign, updateCampaign, deleteCampaign, launchCampaign,
+  testCampaign, getCampaignMetrics, getMailboxes,
   getAutomations, createAutomation, updateAutomation, deleteAutomation,
   getMarketingAnalytics, previewSegment,
   getAdPlatformStatus, getMetaAdsUrl, getLinkedInAdsUrl, getGoogleAdsUrl,
@@ -89,6 +90,81 @@ function StatusBadge({ status }) {
   );
 }
 
+// Resultado real del envío. Los números vienen de los webhooks del proveedor,
+// no de estimaciones nuestras.
+const PROBLEM_LABELS = {
+  failed:     { label: 'No se pudo enviar', color: '#DC2626' },
+  bounced:    { label: 'Rebotó',            color: '#DC2626' },
+  complained: { label: 'Marcó spam',        color: '#B91C1C' },
+  skipped:    { label: 'Omitido (bloqueado)', color: '#9AA3AE' },
+};
+
+function MetricTile({ label, value, suffix, color }) {
+  return (
+    <div style={{ padding: '10px 14px', background: '#F8F9FB', borderRadius: 10, minWidth: 92 }}>
+      <div style={{ fontSize: 19, fontWeight: 700, color: color || '#0B2545', lineHeight: 1.2 }}>
+        {value}{suffix || ''}
+      </div>
+      <div style={{ fontSize: 11, color: '#9AA3AE', marginTop: 2 }}>{label}</div>
+    </div>
+  );
+}
+
+function CampaignMetrics({ metrics }) {
+  if (!metrics) {
+    return <div style={{ padding: 16, fontSize: 12, color: '#9AA3AE' }}>Cargando métricas…</div>;
+  }
+
+  const { totals, rates, problems } = metrics;
+
+  return (
+    <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid #E3E6EA' }}>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        <MetricTile label="Enviados" value={totals.sent} />
+        <MetricTile label="Entregados" value={totals.delivered} color="#0B2545" />
+        <MetricTile label="Abiertos" value={rates.openRate} suffix="%" color="#16A34A" />
+        <MetricTile label="Clics" value={rates.clickRate} suffix="%" color="#2563EB" />
+        <MetricTile label="Rebotes" value={rates.bounceRate} suffix="%" color="#DC2626" />
+        <MetricTile label="Omitidos" value={totals.skipped} color="#9AA3AE" />
+      </div>
+
+      <p style={{ fontSize: 11, color: '#9AA3AE', margin: '10px 0 0', lineHeight: 1.6 }}>
+        Los porcentajes se calculan sobre los correos entregados. La tasa de apertura viene
+        inflada por los clientes que precargan imágenes (Apple Mail): el clic es la señal
+        confiable de interés.
+        {rates.bounceRate > 5 && (
+          <strong style={{ color: '#DC2626', display: 'block', marginTop: 6 }}>
+            Rebote por encima del 5%: revisa la calidad de la lista antes del próximo envío
+            o el dominio empezará a caer en spam.
+          </strong>
+        )}
+      </p>
+
+      {problems?.length > 0 && (
+        <details style={{ marginTop: 12 }}>
+          <summary style={{ cursor: 'pointer', fontSize: 12, fontWeight: 600, color: '#0B2545' }}>
+            {problems.length} destinatario(s) con problema
+          </summary>
+          <div style={{ marginTop: 8, display: 'grid', gap: 5, maxHeight: 240, overflowY: 'auto' }}>
+            {problems.map(p => {
+              const meta = PROBLEM_LABELS[p.status] || { label: p.status, color: '#9AA3AE' };
+              return (
+                <div key={p._id} style={{ display: 'flex', gap: 10, fontSize: 11, alignItems: 'baseline' }}>
+                  <span style={{ color: meta.color, fontWeight: 600, minWidth: 130 }}>{meta.label}</span>
+                  <span style={{ color: '#0B2545' }}>{p.lead?.company || p.email}</span>
+                  <span style={{ color: '#9AA3AE', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {p.email}{p.reason ? ` · ${p.reason}` : ''}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </details>
+      )}
+    </div>
+  );
+}
+
 function ConnectedBadge({ email }) {
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: '#16A34A14', color: '#16A34A' }}>
@@ -119,9 +195,14 @@ export default function MarketingPage({ toast }) {
   const [showAdCampaignForm, setShowAdCampaignForm] = useState(false);
 
   const [campaignForm, setCampaignForm] = useState({
-    name: '', type: 'email', subject: '', body: '',
+    name: '', type: 'email', subject: '', body: '', bodyType: 'text', mailbox: '',
     segment: { services: [], stages: [], countries: [], minScore: 0 }
   });
+  // Buzones disponibles como remitente de la campaña.
+  const [mailboxes, setMailboxes] = useState([]);
+  // Métricas reales del envío, por campaña.
+  const [metrics, setMetrics] = useState(null);
+  const [metricsFor, setMetricsFor] = useState(null);
   const [autoForm, setAutoForm] = useState({
     name: '', trigger: { type: 'stage_entered', stages: [], value: '' },
     actions: [{ type: 'send_email', delay: 0, body: '' }], isActive: true
@@ -217,9 +298,36 @@ export default function MarketingPage({ toast }) {
       await createCampaign(campaignForm);
       toast('Campaña creada', 'success');
       setShowNewCampaign(false);
-      setCampaignForm({ name: '', type: 'email', subject: '', body: '', segment: { services: [], stages: [], countries: [], minScore: 0 } });
+      setCampaignForm({ name: '', type: 'email', subject: '', body: '', bodyType: 'text', mailbox: '', segment: { services: [], stages: [], countries: [], minScore: 0 } });
       setSegmentPreview(null); load();
     } catch { toast('Error al crear campaña', 'error'); }
+  };
+
+  useEffect(() => {
+    getMailboxes().then(r => setMailboxes(r.data.data || [])).catch(() => setMailboxes([]));
+  }, []);
+
+  // Prueba antes de disparar: se ve cómo llega el correo de verdad, con las
+  // variables resueltas, sin tocar a ningún contacto real.
+  const handleTest = async (campaign) => {
+    const to = window.prompt('¿A qué dirección envío la prueba?', '');
+    if (!to) return;
+    try {
+      await testCampaign(campaign._id, to);
+      toast(`Prueba enviada a ${to}`, 'success');
+    } catch (err) {
+      toast(err.response?.data?.message || 'No se pudo enviar la prueba', 'error');
+    }
+  };
+
+  const handleMetrics = async (campaign) => {
+    if (metricsFor === campaign._id) { setMetricsFor(null); setMetrics(null); return; }
+    setMetricsFor(campaign._id);
+    setMetrics(null);
+    try {
+      const r = await getCampaignMetrics(campaign._id);
+      setMetrics(r.data.data);
+    } catch { toast('No se pudieron cargar las métricas', 'error'); }
   };
 
   const handleLaunch = async (id) => {
@@ -396,10 +504,47 @@ export default function MarketingPage({ toast }) {
                   <input className="form-input" placeholder="Tarifas especiales de flete marítimo desde China" value={campaignForm.subject} onChange={e => setCampaignForm(f => ({...f, subject: e.target.value}))} />
                 </div>
               )}
+              {campaignForm.type !== 'whatsapp' && mailboxes.length > 0 && (
+                <div className="form-group">
+                  <label className="form-label">Enviar desde</label>
+                  <select className="form-select" value={campaignForm.mailbox} onChange={e => setCampaignForm(f => ({...f, mailbox: e.target.value}))}>
+                    <option value="">Buzón por defecto</option>
+                    {mailboxes.map(mb => <option key={mb._id} value={mb._id}>{mb.displayName} — {mb.address}</option>)}
+                  </select>
+                </div>
+              )}
+
               <div className="form-group">
-                <label className="form-label">Mensaje</label>
-                <textarea className="form-input" rows={4} placeholder="Hola {contacto}, en ACON Internacional contamos con tarifas competitivas..." value={campaignForm.body} onChange={e => setCampaignForm(f => ({...f, body: e.target.value}))} required />
-                <div style={{ fontSize: 11, color: '#9AA3AE', marginTop: 4 }}>Variables: {'{contacto}'}, {'{empresa}'}, {'{ejecutivo}'}</div>
+                <label className="form-label">Formato del mensaje</label>
+                <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                  {[
+                    { id: 'text', label: '✍️ Correo en blanco', hint: 'Escribes el texto y el CRM lo maqueta' },
+                    { id: 'html', label: '🎨 Plantilla HTML', hint: 'Pegas el HTML completo del diseño' },
+                  ].map(opt => (
+                    <button key={opt.id} type="button" title={opt.hint}
+                      onClick={() => setCampaignForm(f => ({ ...f, bodyType: opt.id }))}
+                      style={{
+                        padding: '6px 12px', borderRadius: 20, border: '1px solid', fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                        background: campaignForm.bodyType === opt.id ? '#F2641E' : '#fff',
+                        color: campaignForm.bodyType === opt.id ? '#fff' : '#5A6472',
+                        borderColor: campaignForm.bodyType === opt.id ? '#F2641E' : '#E3E6EA',
+                      }}>
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+                <textarea
+                  className="form-input"
+                  rows={campaignForm.bodyType === 'html' ? 10 : 5}
+                  style={campaignForm.bodyType === 'html' ? { fontFamily: 'monospace', fontSize: 12 } : undefined}
+                  placeholder={campaignForm.bodyType === 'html'
+                    ? '<div style="max-width:600px;margin:0 auto">…tu plantilla…</div>'
+                    : 'Hola {{contact}}, en ACON Internacional contamos con tarifas competitivas...'}
+                  value={campaignForm.body}
+                  onChange={e => setCampaignForm(f => ({...f, body: e.target.value}))} required />
+                <div style={{ fontSize: 11, color: '#9AA3AE', marginTop: 4 }}>
+                  Variables: {'{{contact}}'}, {'{{company}}'}, {'{{country}}'}, {'{{city}}'} · Se agrega el enlace de baja automáticamente.
+                </div>
               </div>
               <div style={{ fontWeight: 600, fontSize: 13, color: '#0B2545', marginBottom: 10, marginTop: 4 }}>Segmentación de audiencia</div>
               <div className="form-row">
@@ -451,17 +596,39 @@ export default function MarketingPage({ toast }) {
                         <StatusBadge status={c.status} />
                         <span style={{ fontSize: 11, background: '#F4F5F7', color: '#5A6472', padding: '2px 8px', borderRadius: 12, fontWeight: 600 }}>{c.type === 'email' ? '📧 Email' : c.type === 'whatsapp' ? '💬 WhatsApp' : '📧💬 Mixta'}</span>
                       </div>
-                      <div style={{ display: 'flex', gap: 20, fontSize: 12, color: '#9AA3AE' }}>
+                      <div style={{ display: 'flex', gap: 20, fontSize: 12, color: '#9AA3AE', flexWrap: 'wrap' }}>
                         <span>Enviados: <strong style={{ color: '#0B2545' }}>{c.sentCount || 0}</strong></span>
+                        <span>Entregados: <strong style={{ color: '#0B2545' }}>{c.deliveredCount || 0}</strong></span>
                         <span>Abiertos: <strong style={{ color: '#16A34A' }}>{c.openCount || 0}</strong></span>
+                        <span>Clics: <strong style={{ color: '#2563EB' }}>{c.clickCount || 0}</strong></span>
+                        {!!c.bouncedCount && <span>Rebotes: <strong style={{ color: '#DC2626' }}>{c.bouncedCount}</strong></span>}
                         <span>Respuestas: <strong style={{ color: '#F2641E' }}>{c.replyCount || 0}</strong></span>
                       </div>
+                      {c.lastError && (
+                        <div style={{ marginTop: 8, fontSize: 11, color: '#B91C1C' }}>
+                          Se detuvo: {c.lastError} — al relanzar no se reenvía a quien ya recibió.
+                        </div>
+                      )}
                     </div>
                     <div style={{ display: 'flex', gap: 6 }}>
-                      {c.status === 'draft' && <button className="btn btn-primary btn-sm" onClick={() => handleLaunch(c._id)} style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Play size={12} /> Lanzar</button>}
+                      {c.type !== 'whatsapp' && (
+                        <button className="btn btn-ghost btn-sm" onClick={() => handleTest(c)} title="Enviar una prueba">✉️ Prueba</button>
+                      )}
+                      <button className="btn btn-ghost btn-sm" onClick={() => handleMetrics(c)}>
+                        {metricsFor === c._id ? 'Ocultar' : '📊 Métricas'}
+                      </button>
+                      {(c.status === 'draft' || c.status === 'paused') && (
+                        <button className="btn btn-primary btn-sm" onClick={() => handleLaunch(c._id)} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <Play size={12} /> {c.status === 'paused' ? 'Reanudar' : 'Lanzar'}
+                        </button>
+                      )}
                       <button className="btn btn-ghost btn-sm" onClick={() => handleDeleteCampaign(c._id)} style={{ color: '#DC2626' }}><Trash2 size={13} /></button>
                     </div>
                   </div>
+
+                  {metricsFor === c._id && (
+                    <CampaignMetrics metrics={metrics} />
+                  )}
                 </div>
               ))}
             </div>

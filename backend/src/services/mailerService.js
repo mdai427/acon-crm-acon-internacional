@@ -68,7 +68,7 @@ function toResendAttachments(attachments) {
   }));
 }
 
-async function sendWithResend({ from, to, subject, html, text, cc, bcc, replyTo, attachments }) {
+async function sendWithResend({ from, to, subject, html, text, cc, bcc, replyTo, attachments, headers }) {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) throw new Error('Falta RESEND_API_KEY: configura la integración de Resend');
 
@@ -83,6 +83,8 @@ async function sendWithResend({ from, to, subject, html, text, cc, bcc, replyTo,
   if (bcc) payload.bcc = Array.isArray(bcc) ? bcc : [bcc];
   if (replyTo) payload.reply_to = replyTo;
   if (attachments?.length) payload.attachments = toResendAttachments(attachments);
+  // In-Reply-To / References mantienen el hilo agrupado en Gmail y Outlook.
+  if (headers && Object.keys(headers).length) payload.headers = headers;
 
   try {
     const r = await axios.post(RESEND_ENDPOINT, payload, {
@@ -92,7 +94,10 @@ async function sendWithResend({ from, to, subject, html, text, cc, bcc, replyTo,
     return { messageId: r.data?.id, provider: 'resend' };
   } catch (err) {
     const detail = err.response?.data?.message || err.response?.data?.error || err.message;
-    throw new Error(`Resend: ${detail}`);
+    const error = new Error(`Resend: ${detail}`);
+    error.status = err.response?.status;
+    error.code = err.code;
+    throw error;
   }
 }
 
@@ -103,14 +108,53 @@ async function sendWithSmtp(message) {
   return { messageId: info.messageId, provider: 'smtp' };
 }
 
+// ── Reintentos ──────────────────────────────────────────────────────
+//
+// Un envío puede fallar por causas pasajeras (límite de tasa, 5xx del
+// proveedor, corte de red) o definitivas (API key inválida, dirección mal
+// formada). Reintentar las primeras salva el correo; reintentar las segundas
+// solo repite el mismo error, así que se distinguen.
+
+const MAX_ATTEMPTS = 3;
+const RETRY_BASE_DELAY_MS = 500;
+
+const TRANSIENT_NETWORK_CODES = new Set([
+  'ECONNRESET', 'ETIMEDOUT', 'ECONNABORTED', 'ENOTFOUND', 'EAI_AGAIN', 'ESOCKET', 'ECONNECTION',
+]);
+
+function isTransient(error) {
+  const status = error.status || error.responseCode;
+  if (status === 429 || (status >= 500 && status < 600)) return true;
+  if (status >= 400 && status < 500) return false; // 401, 422… no se arreglan solas
+  return TRANSIENT_NETWORK_CODES.has(error.code);
+}
+
+const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
 /**
- * Envía un correo por el proveedor activo.
- * @param {object} message { from, to, subject, html, text, cc, bcc, replyTo, attachments }
- * @returns {Promise<{messageId: string, provider: string}>}
+ * Envía un correo por el proveedor activo, reintentando los fallos pasajeros
+ * con backoff exponencial.
+ * @param {object} message { from, to, subject, html, text, cc, bcc, replyTo, attachments, headers }
+ * @returns {Promise<{messageId: string, provider: string, attempts: number}>}
  */
 async function sendMail(message) {
   if (!message?.to) throw new Error('Falta el destinatario del correo');
-  return activeProvider() === 'resend' ? sendWithResend(message) : sendWithSmtp(message);
+  const send = activeProvider() === 'resend' ? sendWithResend : sendWithSmtp;
+
+  let lastError;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      const info = await send(message);
+      return { ...info, attempts: attempt };
+    } catch (error) {
+      lastError = error;
+      if (attempt === MAX_ATTEMPTS || !isTransient(error)) break;
+      const delay = RETRY_BASE_DELAY_MS * 2 ** (attempt - 1);
+      console.warn(`[mailer] intento ${attempt}/${MAX_ATTEMPTS} falló (${error.message}), reintento en ${delay}ms`);
+      await wait(delay);
+    }
+  }
+  throw lastError;
 }
 
 // ¿Hay algún proveedor listo para enviar? Lo usan las notificaciones para no
@@ -142,4 +186,4 @@ async function verify() {
   return true;
 }
 
-module.exports = { sendMail, verify, isConfigured, activeProvider, defaultFrom };
+module.exports = { sendMail, verify, isConfigured, activeProvider, defaultFrom, isTransient };
