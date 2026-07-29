@@ -1,6 +1,18 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { getConversations, getConversation, sendWhatsApp, markConversationRead } from '../services/api';
-import { Search, MessageSquare, Mail } from 'lucide-react';
+import {
+  getConversations, getConversation, sendWhatsApp, markConversationRead,
+  getMetaWaTemplates, sendMetaTemplate,
+} from '../services/api';
+import { Search, MessageSquare, Mail, Clock, Lock } from 'lucide-react';
+
+// La ventana de 24 h de WhatsApp la dicta el backend (services/waWindow):
+// aquí solo se muestra el conteo y se cambia el compositor cuando cierra.
+const windowLabel = (w) => {
+  if (!w?.open) return null;
+  const min = Math.max(0, Math.floor((new Date(w.expiresAt) - Date.now()) / 60000));
+  if (min >= 60) return `${Math.floor(min / 60)} h ${min % 60} min`;
+  return `${min} min`;
+};
 
 // Bandeja de conversaciones: WhatsApp y correo en la misma lista, porque para
 // el asesor es una sola conversación con el cliente.
@@ -30,7 +42,26 @@ export default function WhatsAppPage({ toast }) {
   const [showTemplates, setShowTemplates] = useState(false);
   const [filtro, setFiltro] = useState('todas');
   const [busqueda, setBusqueda] = useState('');
+  const [waWindow, setWaWindow] = useState(null);
+  const [metaTemplates, setMetaTemplates] = useState([]);
+  const [selectedTpl, setSelectedTpl] = useState('');
   const messagesRef = useRef();
+
+  useEffect(() => {
+    getMetaWaTemplates()
+      .then(r => setMetaTemplates((r.data.data || []).filter(t => t.status === 'APPROVED')))
+      .catch(() => setMetaTemplates([]));
+  }, []);
+
+  // Refresca el estado de la ventana cada minuto: puede cerrarse mientras el
+  // chat está abierto y el compositor debe cambiar solo.
+  useEffect(() => {
+    if (!waWindow?.open || !waWindow.expiresAt) return;
+    const id = setInterval(() => {
+      setWaWindow(w => (w && new Date(w.expiresAt) <= Date.now() ? { ...w, open: false } : { ...w }));
+    }, 60000);
+    return () => clearInterval(id);
+  }, [waWindow?.open, waWindow?.expiresAt]);
 
   const loadConversations = useCallback(async () => {
     try {
@@ -48,8 +79,8 @@ export default function WhatsAppPage({ toast }) {
   useEffect(() => {
     if (!activeId) return;
     getConversation(activeId)
-      .then(r => setMessages(r.data.data || []))
-      .catch(() => setMessages([]));
+      .then(r => { setMessages(r.data.data || []); setWaWindow(r.data.waWindow || null); })
+      .catch(() => { setMessages([]); setWaWindow(null); });
 
     // Abrir la conversación la marca como leída.
     markConversationRead(activeId)
@@ -93,7 +124,28 @@ export default function WhatsAppPage({ toast }) {
       setInput('');
       toast('Mensaje enviado', 'success');
     } catch (e) {
+      if (e.response?.data?.windowClosed) {
+        setWaWindow(w => ({ ...(w || {}), open: false }));
+      }
       toast(e.response?.data?.message || 'Error al enviar', 'error');
+    } finally { setSending(false); }
+  };
+
+  const sendTemplate = async () => {
+    const tpl = metaTemplates.find(t => t.name === selectedTpl);
+    if (!tpl || !activeLead) return;
+    const phone = activeLead.whatsapp || activeLead.contact?.whatsapp || activeLead.phone;
+    if (!phone) return toast('Este lead no tiene WhatsApp', 'error');
+    setSending(true);
+    try {
+      await sendMetaTemplate({ to: phone, templateName: tpl.name, languageCode: tpl.language, leadId: activeId });
+      setMessages(m => [...m, {
+        direction: 'outbound', content: `[Plantilla: ${tpl.name}]`,
+        createdAt: new Date().toISOString(),
+      }]);
+      toast('Plantilla enviada', 'success');
+    } catch (e) {
+      toast(e.response?.data?.message || 'Error al enviar la plantilla', 'error');
     } finally { setSending(false); }
   };
 
@@ -174,10 +226,21 @@ export default function WhatsAppPage({ toast }) {
               <div style={{ fontWeight: 600, fontSize: 14 }}>{activeLead.company}</div>
               <div style={{ fontSize: 11, color: 'var(--text3)' }}>{activeLead.whatsapp || activeLead.contact?.whatsapp || 'Sin número WA'}</div>
             </div>
-            <button className="btn btn-ghost btn-sm" style={{ marginLeft: 'auto' }}
-              onClick={() => setShowTemplates(!showTemplates)}>
-              📋 Plantillas
-            </button>
+            {waWindow?.open ? (
+              <span className="wa-window open" title={`El cliente escribió por última vez ${new Date(waWindow.lastInboundAt).toLocaleString('es-MX')}`}>
+                <Clock size={11} /> Ventana abierta · {windowLabel(waWindow)}
+              </span>
+            ) : (
+              <span className="wa-window closed" title="Fuera de la ventana de 24 h solo se pueden enviar plantillas aprobadas">
+                <Lock size={11} /> Solo plantillas
+              </span>
+            )}
+            {waWindow?.open && (
+              <button className="btn btn-ghost btn-sm"
+                onClick={() => setShowTemplates(!showTemplates)}>
+                📋 Frases
+              </button>
+            )}
           </div>
 
           {showTemplates && (
@@ -208,17 +271,35 @@ export default function WhatsAppPage({ toast }) {
             ))}
           </div>
 
-          <div className="wa-input">
-            <input
-              value={input}
-              onChange={e => setInput(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && !e.shiftKey && send()}
-              placeholder="Escribe un mensaje..."
-            />
-            <button className="btn btn-primary" onClick={send} disabled={sending || !input.trim()}>
-              {sending ? '...' : '➤'}
-            </button>
-          </div>
+          {waWindow?.open ? (
+            <div className="wa-input">
+              <input
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && !e.shiftKey && send()}
+                placeholder="Escribe un mensaje..."
+              />
+              <button className="btn btn-primary" onClick={send} disabled={sending || !input.trim()}>
+                {sending ? '...' : '➤'}
+              </button>
+            </div>
+          ) : (
+            <div className="wa-input wa-input-tpl">
+              <select value={selectedTpl} onChange={e => setSelectedTpl(e.target.value)}>
+                <option value="">
+                  {metaTemplates.length
+                    ? 'Ventana cerrada — elige una plantilla aprobada…'
+                    : 'Sin plantillas aprobadas en Meta'}
+                </option>
+                {metaTemplates.map(t => (
+                  <option key={t.name + t.language} value={t.name}>{t.name} ({t.language})</option>
+                ))}
+              </select>
+              <button className="btn btn-primary" onClick={sendTemplate} disabled={sending || !selectedTpl}>
+                {sending ? '...' : '➤'}
+              </button>
+            </div>
+          )}
         </div>
       ) : (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text3)', fontSize: 14 }}>

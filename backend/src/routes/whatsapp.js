@@ -33,6 +33,9 @@ router.post('/send', auth, checkPerm('whatsapp.send'), async (req, res) => {
       return res.status(400).json({ success: false, message: 'El lead no tiene número de WhatsApp' });
     }
 
+    // Texto libre solo con la ventana de 24 h abierta (fuente única: waWindow).
+    await require('../services/waWindow').assertOpen(leadId);
+
     const to = lead.whatsapp || lead.phone;
     const result = await sendWhatsApp({ to, message, mediaUrl, mediaType });
 
@@ -59,7 +62,11 @@ router.post('/send', auth, checkPerm('whatsapp.send'), async (req, res) => {
     res.json({ success: true, messageId: result.messages?.[0]?.id, activity });
   } catch (error) {
     console.error('WhatsApp send error:', error.response?.data || error.message);
-    res.status(500).json({ success: false, message: error.message });
+    res.status(error.status || 500).json({
+      success: false,
+      message: error.message,
+      windowClosed: !!error.windowClosed,
+    });
   }
 });
 
@@ -147,6 +154,8 @@ router.get('/conversations', auth, checkPerm('whatsapp.view'), async (req, res) 
         lastType: { $first: '$type' },
         lastContent: { $first: '$content' },
         lastSubject: { $first: '$subject' },
+        // Último mensaje del cliente por WhatsApp: define la ventana de 24 h.
+        lastWaIn: { $max: { $cond: [{ $eq: ['$type', 'whatsapp_in'] }, '$createdAt', null] } },
         // Entrante sin marcar como leído; los de WhatsApp antiguos no tienen
         // el campo, así que se cuenta también cuando falta.
         unread: { $sum: { $cond: [
@@ -165,6 +174,7 @@ router.get('/conversations', auth, checkPerm('whatsapp.view'), async (req, res) 
       .lean();
     const leadById = Object.fromEntries(leads.map(l => [String(l._id), l]));
 
+    const { windowFrom } = require('../services/waWindow');
     const data = resumen
       .filter(r => leadById[String(r._id)])
       .map(r => ({
@@ -175,6 +185,7 @@ router.get('/conversations', auth, checkPerm('whatsapp.view'), async (req, res) 
         preview: (r.lastSubject || r.lastContent || '').replace(/<[^>]*>/g, '').slice(0, 120),
         lastAt: r.lastAt,
         unread: r.unread,
+        waWindow: windowFrom(r.lastWaIn),
       }));
 
     res.json({ success: true, data });
@@ -186,14 +197,14 @@ router.get('/conversations', auth, checkPerm('whatsapp.view'), async (req, res) 
 // GET /api/whatsapp/conversations/:leadId — hilo completo (WhatsApp + correo)
 router.get('/conversations/:leadId', auth, checkPerm('whatsapp.view'), async (req, res) => {
   try {
-    const activities = await Activity.find({
-      lead: req.params.leadId,
-      type: { $in: CHAT_TYPES }
-    })
-    .populate('user', 'name avatar')
-    .sort({ createdAt: 1 });
+    const [activities, waWindow] = await Promise.all([
+      Activity.find({ lead: req.params.leadId, type: { $in: CHAT_TYPES } })
+        .populate('user', 'name avatar')
+        .sort({ createdAt: 1 }),
+      require('../services/waWindow').getWindow(req.params.leadId),
+    ]);
 
-    res.json({ success: true, data: activities });
+    res.json({ success: true, data: activities, waWindow });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

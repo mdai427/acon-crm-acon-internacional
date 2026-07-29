@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { login as apiLogin, getMe } from '../services/api';
+import { login as apiLogin, logout as apiLogout, getMe } from '../services/api';
 
 const AuthContext = createContext(null);
 
@@ -7,27 +7,24 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // La sesión vive en una cookie httpOnly que no se puede leer desde aquí, así
+  // que la única forma de saber si sigue abierta es preguntárselo al servidor.
   useEffect(() => {
-    const token = localStorage.getItem('acon_token');
-    if (token) {
-      getMe()
-        .then(r => setUser(r.data.user))
-        .catch(() => localStorage.removeItem('acon_token'))
-        .finally(() => setLoading(false));
-    } else {
-      setLoading(false);
-    }
+    getMe()
+      .then(r => setUser(r.data.user))
+      .catch(() => setUser(null))
+      .finally(() => setLoading(false));
   }, []);
 
   const login = async (email, password) => {
     const r = await apiLogin({ email, password });
-    localStorage.setItem('acon_token', r.data.token);
     setUser(r.data.user);
     return r.data.user;
   };
 
-  const logout = () => {
-    localStorage.removeItem('acon_token');
+  const logout = async () => {
+    // Solo el servidor puede borrar una cookie httpOnly.
+    await apiLogout().catch(() => {});
     setUser(null);
   };
 

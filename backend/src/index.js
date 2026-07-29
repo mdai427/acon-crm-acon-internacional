@@ -13,6 +13,7 @@ const morgan = require('morgan');
 const http = require('http');
 const { Server } = require('socket.io');
 
+const cookieParser = require('cookie-parser');
 const rateLimit = require('express-rate-limit');
 const connectDB = require('./config/database');
 const { setupSocketHandlers } = require('./services/socketService');
@@ -83,8 +84,12 @@ app.use(helmet({
 }));
 app.use(cors({
   origin: FRONTEND_ORIGIN,
-  credentials: true
+  credentials: true,
+  // La cabecera del doble envío de CSRF tiene que estar permitida o el
+  // navegador bloquea la petición en el preflight.
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token'],
 }));
+app.use(cookieParser());
 app.use(morgan('dev'));
 
 const webhookLimiter = rateLimit({ windowMs: 60000, max: 60, standardHeaders: true, legacyHeaders: false });

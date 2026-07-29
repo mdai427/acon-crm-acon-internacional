@@ -1748,3 +1748,14 @@ textarea.form-input{resize:vertical;min-height:80px}
 
 .pb-tpl-row { display: flex; flex-direction: column; gap: 4px }
 .pb-tpl-hint { font-size: 11px; color: var(--gray-400) }
+
+.wa-window {
+  display: inline-flex; align-items: center; gap: 5px; margin-left: auto;
+  font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 20px;
+}
+.wa-window.open  { background: rgba(22,163,74,.1);  color: #16A34A; border: 1px solid rgba(22,163,74,.3) }
+.wa-window.closed { background: var(--gray-100); color: var(--gray-500); border: 1px solid var(--gray-200) }
+.wa-input-tpl select {
+  flex: 1; min-width: 0; padding: 9px 11px; font-size: 13px; font-family: inherit;
+  border: 1px solid var(--gray-200); border-radius: 9px; background: #fff; color: var(--gray-900);
+}

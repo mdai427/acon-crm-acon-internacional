@@ -4,6 +4,7 @@ const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const { auth, adminOnly } = require('../middleware/auth');
 const { audit } = require('../services/auditService');
+const authCookie = require('../services/authCookie');
 const { validatePassword } = require('../utils/passwordPolicy');
 
 // POST /api/auth/login
@@ -28,9 +29,14 @@ router.post('/login', async (req, res) => {
       { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
     );
 
+    // El token va en una cookie httpOnly (inaccesible al JavaScript de la
+    // página) y además en el cuerpo, para los clientes que no son navegador.
+    const csrfToken = authCookie.issue(res, token);
+
     res.json({
       success: true,
       token,
+      csrfToken,
       user: user.toJSON()
     });
   } catch (error) {
@@ -106,11 +112,20 @@ router.put('/change-password', auth, async (req, res) => {
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
     );
-    res.json({ success: true, message: 'Contraseña actualizada', token });
+    const csrfToken = authCookie.issue(res, token);
+    res.json({ success: true, message: 'Contraseña actualizada', token, csrfToken });
   } catch (error) {
     console.error("[auth]", error);
     res.status(500).json({ success: false, message: "Error interno. Intenta de nuevo." });
   }
+});
+
+// POST /api/auth/logout — borra la cookie de sesión.
+// Con el token en localStorage bastaba con que el frontend lo olvidara; con
+// cookie httpOnly solo el servidor puede eliminarla.
+router.post('/logout', (req, res) => {
+  authCookie.clear(res);
+  res.json({ success: true, message: 'Sesión cerrada' });
 });
 
 // POST /api/auth/setup — crea el primer admin si no existe ninguno (solo funciona una vez)
@@ -138,7 +153,8 @@ router.post('/setup', async (req, res) => {
     );
 
     console.log(`✅ Admin inicial creado: ${email}`);
-    res.status(201).json({ success: true, token, user: admin.toJSON() });
+    const csrfToken = authCookie.issue(res, token);
+    res.status(201).json({ success: true, token, csrfToken, user: admin.toJSON() });
   } catch (error) {
     console.error("[auth]", error);
     res.status(500).json({ success: false, message: "Error interno. Intenta de nuevo." });

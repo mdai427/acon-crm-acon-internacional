@@ -4,20 +4,36 @@ const api = axios.create({
   baseURL: process.env.REACT_APP_API_URL
     ? `${process.env.REACT_APP_API_URL.replace(/\/+$/, '')}/api`
     : '/api',
-  headers: { 'Content-Type': 'application/json' }
+  headers: { 'Content-Type': 'application/json' },
+  // La sesión viaja en una cookie httpOnly que el navegador manda sola. Antes
+  // el token estaba en localStorage, donde cualquier XSS podía leerlo.
+  withCredentials: true,
 });
 
+// Lee la cookie de CSRF, que SÍ es legible por la página a propósito: su valor
+// se copia a la cabecera para demostrar que la petición sale de nuestro propio
+// origen y no de una pestaña ajena.
+function readCsrfToken() {
+  const match = document.cookie.match(/(?:^|;\s*)acon_csrf=([^;]+)/);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
 api.interceptors.request.use(cfg => {
-  const token = localStorage.getItem('acon_token');
-  if (token) cfg.headers.Authorization = `Bearer ${token}`;
+  const method = (cfg.method || 'get').toUpperCase();
+  if (!['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+    const csrf = readCsrfToken();
+    if (csrf) cfg.headers['X-CSRF-Token'] = csrf;
+  }
   return cfg;
 });
 
 api.interceptors.response.use(
   r => r,
   err => {
-    if (err.response?.status === 401) {
-      localStorage.removeItem('acon_token');
+    // No redirigir desde la propia pantalla de login: ahí un 401 es
+    // simplemente una contraseña incorrecta.
+    const esLogin = err.config?.url?.includes('/auth/login');
+    if (err.response?.status === 401 && !esLogin) {
       window.location.href = '/login';
     }
     return Promise.reject(err);
@@ -28,6 +44,7 @@ export default api;
 
 // Auth
 export const login = (data) => api.post('/auth/login', data);
+export const logout = () => api.post('/auth/logout');
 export const getMe = () => api.get('/auth/me');
 
 // Leads
@@ -196,6 +213,7 @@ export const runCampaign = (data) => api.post('/agents/campaign', data);
 // Templates
 export const getTemplates2 = (params) => api.get('/templates', { params });
 export const getMetaWaTemplates = () => api.get('/whatsapp/meta/templates');
+export const sendMetaTemplate = (d) => api.post('/whatsapp/meta/send-template', d);
 export const createTemplate = (data) => api.post('/templates', data);
 export const updateTemplate = (id, data) => api.put(`/templates/${id}`, data);
 export const deleteTemplate = (id) => api.delete(`/templates/${id}`);

@@ -1,11 +1,21 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const { can } = require('../config/permissions');
+const authCookie = require('../services/authCookie');
 
 const auth = async (req, res, next) => {
   try {
-    const token = req.headers.authorization?.split(' ')[1];
+    // La sesión viaja en una cookie httpOnly; se acepta también la cabecera
+    // Authorization para clientes que no son el navegador (scripts, n8n).
+    const token = authCookie.readToken(req);
     if (!token) return res.status(401).json({ success: false, message: 'Sin token de autenticación' });
+
+    // Con cookie, el navegador la manda sola: hace falta el token CSRF para
+    // distinguir una petición de nuestra propia página de una provocada por
+    // otro sitio.
+    if (authCookie.needsCsrfCheck(req) && !authCookie.csrfIsValid(req)) {
+      return res.status(403).json({ success: false, message: 'Token CSRF ausente o inválido', code: 'CSRF' });
+    }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ['HS256'] });
     const user = await User.findById(decoded.id).select('-password');

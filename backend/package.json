@@ -13,6 +13,7 @@
     "@aws-sdk/s3-request-presigner": "^3.1092.0",
     "axios": "^1.18.1",
     "bcryptjs": "^2.4.3",
+    "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "cron": "^3.1.6",
     "dotenv": "^16.3.1",
@@ -26,7 +27,7 @@
     "morgan": "^1.10.0",
     "multer": "^1.4.5-lts.1",
     "multer-s3": "^3.0.1",
-    "nodemailer": "^6.9.7",
+    "nodemailer": "^9.0.3",
     "openai": "^4.20.1",
     "pdfkit": "^0.19.1",
     "pdfkit-table": "^0.2.11",
@@ -39,5 +40,13 @@
   },
   "engines": {
     "node": ">=18.0.0"
+  },
+  "overrides": {
+    "brace-expansion": "^5.0.8",
+    "minimatch": "^10.2.6",
+    "readdir-glob": "^3.0.0",
+    "zip-stream": "^7.0.5",
+    "archiver-utils": "^5.0.2",
+    "rimraf": "^6.1.3"
   }
 }

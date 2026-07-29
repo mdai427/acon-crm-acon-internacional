@@ -1,4 +1,5 @@
 const jwt = require('jsonwebtoken');
+const cookie = require('cookie');
 const User = require('../models/User');
 const Lead = require('../models/Lead');
 const { can } = require('../config/permissions');
@@ -18,7 +19,14 @@ async function canWatchLead(user, leadId) {
 const setupSocketHandlers = (io) => {
   // Middleware de autenticación para sockets
   io.use(async (socket, next) => {
-    const token = socket.handshake.auth?.token;
+    // Con la sesión en cookie httpOnly el cliente ya no puede leer el token
+    // para pasarlo en `auth`: el navegador manda la cookie sola en el
+    // handshake. Se sigue aceptando `auth.token` para clientes que no son
+    // navegador.
+    const cookies = socket.handshake.headers?.cookie
+      ? cookie.parse(socket.handshake.headers.cookie)
+      : {};
+    const token = cookies.acon_session || socket.handshake.auth?.token;
     if (!token) return next(new Error('Sin token'));
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ['HS256'] });
