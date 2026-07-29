@@ -557,7 +557,7 @@ pipelineRouter.delete('/stages/:id', _checkPerm('pipeline.stages'), async (req, 
 // ============================================
 const integrationsRouter = express.Router();
 
-integrationsRouter.use(auth, adminOnly);
+integrationsRouter.use(auth, checkPerm('integrations.view'));
 
 integrationsRouter.get('/status', (req, res) => {
   res.json({

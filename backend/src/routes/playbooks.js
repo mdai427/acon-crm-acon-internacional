@@ -69,6 +69,11 @@ router.put('/:stage', checkPerm('playbooks.edit'), async (req, res) => {
         title: String(a.title).trim(),
         message: a.message || '',
         aiInstructions: a.aiInstructions || '',
+        templateId: a.templateId || null,
+        metaTemplate: {
+          name: a.metaTemplate?.name || '',
+          language: a.metaTemplate?.language || 'es_MX',
+        },
         subject: a.subject || '',
         dueInDays: Math.max(0, Number(a.dueInDays) || 2),
         delayDays: Math.max(0, Number(a.delayDays) || 0),

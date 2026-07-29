@@ -7,6 +7,17 @@ const seedAdmin = async () => {
   if (!ADMIN_EMAIL || !ADMIN_PASSWORD) return;
 
   const User = require('../models/User');
+
+  // Se avisa si la contraseña del entorno no cumple la política, pero NO se
+  // bloquea la siembra: dejar al administrador fuera de su propio CRM es peor
+  // que una contraseña floja, y un fallo aquí antes pasaba desapercibido en un
+  // log mientras el login rechazaba credenciales que "deberían" funcionar.
+  const { validatePassword } = require('../utils/passwordPolicy');
+  const check = validatePassword(ADMIN_PASSWORD, { email: ADMIN_EMAIL, name: ADMIN_NAME });
+  if (!check.ok) {
+    console.warn(`\n⚠️  ADMIN_PASSWORD no cumple la política: ${check.message}`);
+    console.warn('   La cuenta se crea igualmente, pero cámbiala desde el CRM en cuanto entres.\n');
+  }
   const forceUpdate = String(ADMIN_FORCE_UPDATE).toLowerCase() === 'true';
 
   const existing = await User.findOne({ email: ADMIN_EMAIL.toLowerCase() }).select('+password');
@@ -38,7 +49,14 @@ const connectDB = async () => {
       serverSelectionTimeoutMS: 5000,
     });
     console.log(`✅ MongoDB conectado: ${conn.connection.host}`);
-    await seedAdmin().catch(err => console.error(`⚠️ No se pudo crear el admin inicial: ${err.message}`));
+      // Un fallo aquí deja a alguien sin poder entrar: se registra de forma
+    // visible, con el motivo concreto, no como una línea más del arranque.
+    await seedAdmin().catch(err => {
+      console.error('\n❌ NO SE PUDO CREAR NI ACTUALIZAR EL ADMIN INICIAL');
+      console.error(`   Motivo: ${err.message}`);
+      console.error('   Revisa ADMIN_EMAIL y ADMIN_PASSWORD. Si ya no puedes entrar,');
+      console.error('   usa: node src/scripts/resetPassword.js <correo> <contraseña-nueva>\n');
+    });
 
     // Cuenta del dueño de la plataforma, definida en el entorno
     await require('../services/superAdmin').ensureSuperAdmin()

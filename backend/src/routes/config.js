@@ -29,7 +29,7 @@ const mask = v => v ? (v.slice(0, 4) + MASK + v.slice(-3)) : '';
 // ─────────────────────────────────────────
 // GET /api/config/settings — qué está configurado (sin exponer secretos)
 // ─────────────────────────────────────────
-router.get('/settings', auth, checkPerm('integrations.manage'), (req, res) => {
+router.get('/settings', auth, checkPerm('config.view'), (req, res) => {
   const e = readEnv();
   const data = {};
   // Las claves de IA no se listan: el proveedor y el modelo los define el dueño
@@ -48,7 +48,7 @@ router.get('/settings', auth, checkPerm('integrations.manage'), (req, res) => {
 // había), igual que los que traen la máscara: significa que el usuario no tocó
 // ese campo y guardarla borraría el secreto real.
 // ─────────────────────────────────────────
-router.post('/settings', auth, checkPerm('integrations.manage'), async (req, res) => {
+router.post('/settings', auth, checkPerm('config.edit'), async (req, res) => {
   try {
     const updates = {};
     for (const [key, raw] of Object.entries(req.body || {})) {
@@ -72,7 +72,7 @@ router.post('/settings', auth, checkPerm('integrations.manage'), async (req, res
 // ─────────────────────────────────────────
 // DELETE /api/config/settings/:key — borra una credencial guardada
 // ─────────────────────────────────────────
-router.delete('/settings/:key', auth, checkPerm('integrations.manage'), async (req, res) => {
+router.delete('/settings/:key', auth, checkPerm('config.edit'), async (req, res) => {
   try {
     if (settings.SUPERADMIN_ONLY_KEYS.has(req.params.key)) {
       return res.status(403).json({
@@ -94,7 +94,7 @@ router.delete('/settings/:key', auth, checkPerm('integrations.manage'), async (r
 // ─────────────────────────────────────────
 // GET /api/config — lee estado actual (oculta secretos)
 // ─────────────────────────────────────────
-router.get('/', auth, checkPerm('integrations.manage'), async (req, res) => {
+router.get('/', auth, checkPerm('config.view'), async (req, res) => {
   const e = readEnv();
 
   res.json({
@@ -151,7 +151,7 @@ router.get('/', auth, checkPerm('integrations.manage'), async (req, res) => {
 // ─────────────────────────────────────────
 // POST /api/config/whatsapp — guarda credenciales WA
 // ─────────────────────────────────────────
-router.post('/whatsapp', auth, checkPerm('integrations.manage'), async (req, res) => {
+router.post('/whatsapp', auth, checkPerm('config.edit'), async (req, res) => {
   const { META_WA_TOKEN, META_WA_PHONE_ID, META_WA_VERIFY_TOKEN, META_APP_SECRET } = req.body;
   const updates = {};
   if (META_WA_TOKEN)        updates.META_WA_TOKEN        = META_WA_TOKEN;
@@ -165,7 +165,7 @@ router.post('/whatsapp', auth, checkPerm('integrations.manage'), async (req, res
 // ─────────────────────────────────────────
 // POST /api/config/whatsapp/test — prueba llamada real a Meta API
 // ─────────────────────────────────────────
-router.post('/whatsapp/test', auth, checkPerm('integrations.manage'), async (req, res) => {
+router.post('/whatsapp/test', auth, checkPerm('config.edit'), async (req, res) => {
   const token   = process.env.META_WA_TOKEN;
   const phoneId = process.env.META_WA_PHONE_ID;
   if (!token || !phoneId) {
@@ -193,7 +193,7 @@ router.post('/whatsapp/test', auth, checkPerm('integrations.manage'), async (req
 // ─────────────────────────────────────────
 // POST /api/config/email — guarda credenciales SMTP
 // ─────────────────────────────────────────
-router.post('/email', auth, checkPerm('integrations.manage'), async (req, res) => {
+router.post('/email', auth, checkPerm('config.edit'), async (req, res) => {
   const { SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_PASS, EMAIL_FROM } = req.body;
   const updates = {};
   if (SMTP_HOST)   updates.SMTP_HOST   = SMTP_HOST;
@@ -209,7 +209,7 @@ router.post('/email', auth, checkPerm('integrations.manage'), async (req, res) =
 // ─────────────────────────────────────────
 // POST /api/config/email/test — envía correo de prueba
 // ─────────────────────────────────────────
-router.post('/email/test', auth, checkPerm('integrations.manage'), async (req, res) => {
+router.post('/email/test', auth, checkPerm('config.edit'), async (req, res) => {
   const { testTo } = req.body;
   if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
     return res.status(400).json({ success: false, message: 'Configura SMTP_USER y SMTP_PASS primero' });
@@ -261,7 +261,7 @@ router.post('/email/test', auth, checkPerm('integrations.manage'), async (req, r
 // POST /api/config/resend/test — verifica la API Key y, si se indica
 // destinatario, envía un correo real por Resend.
 // ─────────────────────────────────────────
-router.post('/resend/test', auth, checkPerm('integrations.manage'), async (req, res) => {
+router.post('/resend/test', auth, checkPerm('config.edit'), async (req, res) => {
   const { testTo } = req.body;
   if (!process.env.RESEND_API_KEY) {
     return res.status(400).json({ success: false, message: 'Configura RESEND_API_KEY primero' });
@@ -314,7 +314,7 @@ router.post('/resend/test', auth, checkPerm('integrations.manage'), async (req, 
 // ─────────────────────────────────────────
 // POST /api/config/twilio/test — valida credenciales y TwiML App
 // ─────────────────────────────────────────
-router.post('/twilio/test', auth, checkPerm('integrations.manage'), async (req, res) => {
+router.post('/twilio/test', auth, checkPerm('config.edit'), async (req, res) => {
   const sid   = process.env.TWILIO_ACCOUNT_SID;
   const token = process.env.TWILIO_AUTH_TOKEN;
   if (!sid || !token) {
@@ -371,7 +371,7 @@ router.post('/twilio/test', auth, checkPerm('integrations.manage'), async (req, 
 // ─────────────────────────────────────────
 // POST /api/config/google — guarda credenciales Google OAuth
 // ─────────────────────────────────────────
-router.post('/google', auth, checkPerm('integrations.manage'), async (req, res) => {
+router.post('/google', auth, checkPerm('config.edit'), async (req, res) => {
   const { GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI } = req.body;
   const updates = {};
   if (GOOGLE_CLIENT_ID)     updates.GOOGLE_CLIENT_ID     = GOOGLE_CLIENT_ID;
@@ -384,7 +384,7 @@ router.post('/google', auth, checkPerm('integrations.manage'), async (req, res) 
 // ─────────────────────────────────────────
 // POST /api/config/google/test — verifica que los IDs son válidos
 // ─────────────────────────────────────────
-router.post('/google/test', auth, checkPerm('integrations.manage'), async (req, res) => {
+router.post('/google/test', auth, checkPerm('config.edit'), async (req, res) => {
   if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
     return res.json({ success: false, message: 'Configura GOOGLE_CLIENT_ID y GOOGLE_CLIENT_SECRET primero' });
   }
@@ -408,7 +408,7 @@ router.post('/google/test', auth, checkPerm('integrations.manage'), async (req, 
 // ─────────────────────────────────────────
 // POST /api/config/facebook — guarda credenciales Meta/Facebook
 // ─────────────────────────────────────────
-router.post('/facebook', auth, checkPerm('integrations.manage'), async (req, res) => {
+router.post('/facebook', auth, checkPerm('config.edit'), async (req, res) => {
   const { META_ACCESS_TOKEN, META_PAGE_ID, META_WEBHOOK_VERIFY_TOKEN, META_APP_SECRET } = req.body;
   const updates = {};
   if (META_ACCESS_TOKEN)         updates.META_ACCESS_TOKEN         = META_ACCESS_TOKEN;
@@ -422,7 +422,7 @@ router.post('/facebook', auth, checkPerm('integrations.manage'), async (req, res
 // ─────────────────────────────────────────
 // POST /api/config/facebook/test
 // ─────────────────────────────────────────
-router.post('/facebook/test', auth, checkPerm('integrations.manage'), async (req, res) => {
+router.post('/facebook/test', auth, checkPerm('config.edit'), async (req, res) => {
   if (!process.env.META_ACCESS_TOKEN) {
     return res.status(400).json({ success: false, message: 'Configura META_ACCESS_TOKEN primero' });
   }

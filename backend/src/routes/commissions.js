@@ -2,6 +2,7 @@ const express = require('express');
 const router  = express.Router();
 const Commission = require('../models/Commission');
 const { auth, adminOnly, checkPerm } = require('../middleware/auth');
+const { can } = require('../config/permissions');
 
 router.use(auth);
 
@@ -11,8 +12,10 @@ router.get('/', checkPerm('commissions.view'), async (req, res) => {
     const { period, status, userId } = req.query;
     const filter = {};
 
-    // Ejecutivos solo ven las suyas; admins ven todas
-    if (req.user.role !== 'admin') {
+    // Sin 'commissions.view_all' solo se ven las propias. Antes era un
+    // `role !== 'admin'`, que dejaba fuera a dirección y finanzas pese a que la
+    // matriz sí les da acceso.
+    if (!can(req.user.role, 'commissions.view_all')) {
       filter.user = req.user._id;
     } else if (userId) {
       filter.user = userId;

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { getPlaybooks, updatePlaybook } from '../services/api';
+import { getPlaybooks, updatePlaybook, getTemplates2, getMetaWaTemplates } from '../services/api';
 import {
   Sparkles, Plus, Trash2, Save, ChevronDown, Zap, MessageSquare,
   Mail, Bell, CheckSquare, Bot, Clock, Filter,
@@ -33,7 +33,7 @@ const EMPTY_ACTION = {
 };
 
 // ── Editor de una acción ─────────────────────────────────────────────────────
-function ActionEditor({ action, onChange, onRemove }) {
+function ActionEditor({ action, onChange, onRemove, emailTemplates, waTemplates }) {
   const [showConditions, setShowConditions] = useState(
     action.onlyIf && (action.onlyIf.minScore ?? '') !== '' && action.onlyIf.minScore !== null
   );
@@ -67,8 +67,54 @@ function ActionEditor({ action, onChange, onRemove }) {
 
       <div className="pb-kind-hint">{kind.hint}</div>
 
-      {/* Contenido según el tipo */}
+      {/* WhatsApp: plantilla aprobada de Meta o texto libre (ventana 24 h) */}
+      {action.kind === 'whatsapp' && (
+        <div className="pb-tpl-row">
+          <select
+            className="pb-field"
+            value={action.metaTemplate?.name || ''}
+            onChange={e => onChange({
+              ...action,
+              metaTemplate: { ...(action.metaTemplate || {}), name: e.target.value, language: waTemplates.find(t => t.name === e.target.value)?.language || 'es_MX' },
+              // Con plantilla elegida, el texto libre y la IA no aplican.
+              ...(e.target.value ? { aiInstructions: '', _useAi: false } : {}),
+            })}
+          >
+            <option value="">Texto libre (solo llega si el cliente escribió en 24 h)</option>
+            {waTemplates.map(t => (
+              <option key={t.name + t.language} value={t.name}>
+                Plantilla Meta: {t.name} ({t.language})
+              </option>
+            ))}
+          </select>
+          {!waTemplates.length && (
+            <span className="pb-tpl-hint">Sin plantillas aprobadas — se crean en Meta Business y aparecen aquí.</span>
+          )}
+        </div>
+      )}
+
+      {/* Correo: plantilla de la sección Plantillas o contenido propio */}
       {action.kind === 'email' && (
+        <div className="pb-tpl-row">
+          <select
+            className="pb-field"
+            value={action.templateId || ''}
+            onChange={e => onChange({
+              ...action,
+              templateId: e.target.value || null,
+              ...(e.target.value ? { aiInstructions: '', _useAi: false } : {}),
+            })}
+          >
+            <option value="">Contenido propio (o redactado por la IA)</option>
+            {emailTemplates.map(t => (
+              <option key={t._id} value={t._id}>Plantilla: {t.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {/* Contenido según el tipo */}
+      {action.kind === 'email' && !action.templateId && (
         <input
           className="pb-field"
           placeholder="Asunto del correo — admite {empresa} {contacto} {etapa} {ejecutivo}"
@@ -77,7 +123,7 @@ function ActionEditor({ action, onChange, onRemove }) {
         />
       )}
 
-      {(usesAI || isDraft) && (
+      {(usesAI || isDraft) && !(action.kind === 'whatsapp' && action.metaTemplate?.name) && !(action.kind === 'email' && action.templateId) && (
         <div className="pb-ai-row">
           <label className="pb-ai-toggle">
             <input
@@ -95,7 +141,8 @@ function ActionEditor({ action, onChange, onRemove }) {
         </div>
       )}
 
-      {(isDraft || action._useAi || action.aiInstructions) && (usesAI || isDraft) ? (
+      {(action.kind === 'whatsapp' && action.metaTemplate?.name) || (action.kind === 'email' && action.templateId) ? null
+        : (isDraft || action._useAi || action.aiInstructions) && (usesAI || isDraft) ? (
         <textarea
           className="pb-field"
           rows={2}
@@ -153,7 +200,7 @@ function ActionEditor({ action, onChange, onRemove }) {
 }
 
 // ── Tarjeta por etapa ────────────────────────────────────────────────────────
-function PlaybookCard({ playbook, onSave, toast }) {
+function PlaybookCard({ playbook, onSave, toast, emailTemplates, waTemplates }) {
   const [open, setOpen] = useState(false);
   const [pb, setPb] = useState(playbook);
   const [dirty, setDirty] = useState(false);
@@ -213,6 +260,8 @@ function PlaybookCard({ playbook, onSave, toast }) {
               <ActionEditor
                 key={i}
                 action={action}
+                emailTemplates={emailTemplates}
+                waTemplates={waTemplates}
                 onChange={next => setAction(i, next)}
                 onRemove={() => patch({ actions: pb.actions.filter((_, idx) => idx !== i) })}
               />
@@ -246,6 +295,8 @@ function PlaybookCard({ playbook, onSave, toast }) {
 
 export default function PlaybooksPage({ toast }) {
   const [playbooks, setPlaybooks] = useState([]);
+  const [emailTemplates, setEmailTemplates] = useState([]);
+  const [waTemplates, setWaTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const load = async () => {
@@ -257,7 +308,17 @@ export default function PlaybooksPage({ toast }) {
     finally { setLoading(false); }
   };
 
-  useEffect(() => { load(); }, []); // eslint-disable-line
+  useEffect(() => {
+    load();
+    // Catálogos para los selectores; si fallan, el editor sigue funcionando
+    // con contenido propio.
+    getTemplates2({ channel: 'email' })
+      .then(r => setEmailTemplates(r.data.data || []))
+      .catch(() => setEmailTemplates([]));
+    getMetaWaTemplates()
+      .then(r => setWaTemplates((r.data.data || []).filter(t => t.status === 'APPROVED')))
+      .catch(() => setWaTemplates([]));
+  }, []); // eslint-disable-line
 
   const handleSave = async (stage, data) => {
     await updatePlaybook(stage, data);
@@ -293,7 +354,8 @@ export default function PlaybooksPage({ toast }) {
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {playbooks.map(pb => (
-          <PlaybookCard key={pb.stage} playbook={pb} onSave={handleSave} toast={toast} />
+          <PlaybookCard key={pb.stage} playbook={pb} onSave={handleSave} toast={toast}
+            emailTemplates={emailTemplates} waTemplates={waTemplates} />
         ))}
       </div>
     </div>

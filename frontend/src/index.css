@@ -1745,3 +1745,6 @@ textarea.form-input{resize:vertical;min-height:80px}
   border: 1px solid var(--gray-200); border-radius: 7px;
 }
 .pb-conds-hint { font-size: 11px; color: var(--gray-400); padding-bottom: 6px }
+
+.pb-tpl-row { display: flex; flex-direction: column; gap: 4px }
+.pb-tpl-hint { font-size: 11px; color: var(--gray-400) }

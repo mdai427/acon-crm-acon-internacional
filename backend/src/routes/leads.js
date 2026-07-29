@@ -11,6 +11,7 @@ const { generateStageTasks, DEFAULT_PLAYBOOKS } = require('../services/aiTasks')
 const Playbook = require('../models/Playbook');
 const User = require('../models/User');
 const { notifyLeadAssigned } = require('../services/notificationService');
+const { can } = require('../config/permissions');
 
 // Todos los endpoints requieren autenticación
 router.use(auth);
@@ -26,8 +27,9 @@ router.get('/', checkPerm('leads.view'), async (req, res) => {
 
     const filter = { isActive: true };
 
-    // Ejecutivos solo ven sus propios leads
-    if (req.user.role === 'executive') {
+    // Sin 'leads.view_all' solo se ven los propios. El permiso vive en la
+    // matriz de config/permissions, no en una condición suelta por rol.
+    if (!can(req.user.role, 'leads.view_all')) {
       filter.assignedTo = req.user._id;
     } else if (assignedTo) {
       filter.assignedTo = assignedTo;
@@ -82,7 +84,7 @@ router.get('/', checkPerm('leads.view'), async (req, res) => {
 router.get('/pipeline', checkPerm('pipeline.view'), async (req, res) => {
   try {
     const filter = { isActive: true };
-    if (req.user.role === 'executive') filter.assignedTo = req.user._id;
+    if (!can(req.user.role, 'leads.view_all')) filter.assignedTo = req.user._id;
 
     const pipeline = await Lead.aggregate([
       { $match: filter },
@@ -119,8 +121,8 @@ router.get('/:id', checkPerm('leads.view'), async (req, res) => {
 
     if (!lead) return res.status(404).json({ success: false, message: 'Lead no encontrado' });
     
-    // Ejecutivo solo puede ver sus propios leads
-    if (req.user.role === 'executive' && 
+    // Sin 'leads.view_all', solo los propios.
+    if (!can(req.user.role, 'leads.view_all') &&
         lead.assignedTo?._id.toString() !== req.user._id.toString()) {
       return res.status(403).json({ success: false, message: 'Acceso denegado' });
     }

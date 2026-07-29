@@ -7,19 +7,18 @@ const jwt = require('jsonwebtoken');
 const axios = require('axios');
 const UserIntegration = require('../models/UserIntegration');
 
-const auth = (req, res, next) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  if (!token) return res.status(401).json({ success: false, message: 'No autorizado' });
-  try { req.user = jwt.verify(token, process.env.JWT_SECRET); next(); }
-  catch { return res.status(401).json({ success: false, message: 'Token inválido' }); }
-};
+// Se usa el middleware compartido: estas rutas tenían su propia verificación
+// que solo comprobaba la firma del token. No miraba si la cuenta seguía activa
+// ni si la sesión había sido revocada, así que un usuario dado de baja seguía
+// leyendo su Gmail y gastando IA desde aquí.
 
 const { FRONTEND_URL, BACKEND_URL } = require('../config/urls');
 const oauthState = require('../services/oauthState');
+const { auth, checkPerm } = require('../middleware/auth');
 
 // ─── META (Facebook / Instagram Ads) ───────────────────────
 
-router.get('/meta/url', auth, (req, res) => {
+router.get('/meta/url', auth, checkPerm('integrations.connect'), (req, res) => {
   const state = oauthState.issue(req.user.id, 'meta_ads');
   const params = new URLSearchParams({
     client_id:     process.env.META_APP_ID || '',
@@ -73,7 +72,7 @@ router.get('/meta/callback', async (req, res) => {
 
 // ─── LINKEDIN ADS ───────────────────────────────────────────
 
-router.get('/linkedin/url', auth, (req, res) => {
+router.get('/linkedin/url', auth, checkPerm('integrations.connect'), (req, res) => {
   const state = oauthState.issue(req.user.id, 'linkedin_ads');
   const params = new URLSearchParams({
     response_type: 'code',
@@ -129,7 +128,7 @@ router.get('/linkedin/callback', async (req, res) => {
 // ─── GOOGLE ADS ─────────────────────────────────────────────
 // Reuses existing Google OAuth — just adds googleads scope
 
-router.get('/google/url', auth, (req, res) => {
+router.get('/google/url', auth, checkPerm('integrations.connect'), (req, res) => {
   const { google } = require('googleapis');
   const oauth2Client = new google.auth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,

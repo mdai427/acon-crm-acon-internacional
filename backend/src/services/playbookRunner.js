@@ -114,6 +114,18 @@ async function runWhatsApp(lead, action, ctx) {
     || (typeof lead.contact === 'object' ? lead.contact?.whatsapp : null);
   if (!phone) throw new Error('El lead no tiene número de WhatsApp');
 
+  // Plantilla aprobada de Meta: la vía segura fuera de la ventana de 24 h.
+  if (action.metaTemplate?.name) {
+    await wa.sendTemplate(phone, action.metaTemplate.name, action.metaTemplate.language || 'es_MX');
+    await Activity.create({
+      lead: lead._id, user: ctx.userId, type: 'whatsapp_out', direction: 'outbound',
+      content: `[Plantilla Meta] ${action.metaTemplate.name}`, isAuto: true,
+      metadata: { source: 'playbook', action: action.title, metaTemplate: action.metaTemplate.name },
+    });
+    return `Plantilla "${action.metaTemplate.name}" enviada a ${phone}`;
+  }
+
+  // Texto libre: solo entrega si el cliente escribió en las últimas 24 h.
   const { body } = await buildContent(lead, action, ctx, { channel: 'whatsapp' });
   await wa.sendText(phone, body);
 
@@ -135,7 +147,19 @@ async function runEmail(lead, action, ctx) {
 
   // Se envía desde el buzón del ejecutivo asignado si existe; si no, el global.
   const mailbox = ctx.executive ? await mailboxService.defaultFor(ctx.executive) : null;
-  const { subject, body } = await buildContent(lead, action, ctx, { channel: 'email' });
+
+  // Con plantilla elegida, el contenido sale de la sección Plantillas (con las
+  // mismas variables); si no, plantilla inline o redacción de la IA.
+  let subject, body;
+  if (action.templateId) {
+    const Template = require('../models/Template');
+    const tpl = await Template.findById(action.templateId).lean();
+    if (!tpl) throw new Error('La plantilla del playbook ya no existe');
+    subject = render(tpl.subject || action.title, ctx);
+    body = render(tpl.body || '', ctx);
+  } else {
+    ({ subject, body } = await buildContent(lead, action, ctx, { channel: 'email' }));
+  }
 
   const info = await mailer.sendMail({
     from: mailbox ? mailbox.fromHeader() : undefined,

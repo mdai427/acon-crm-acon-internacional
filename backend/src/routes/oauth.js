@@ -5,6 +5,7 @@ const { google } = require('googleapis');
 const jwt = require('jsonwebtoken');
 const UserIntegration = require('../models/UserIntegration');
 const oauthState = require('../services/oauthState');
+const { auth, checkPerm } = require('../middleware/auth');
 
 const SCOPES = [
   'https://www.googleapis.com/auth/gmail.readonly',
@@ -21,20 +22,13 @@ function getOAuth2Client() {
   );
 }
 
-// Middleware auth
-const auth = (req, res, next) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  if (!token) return res.status(401).json({ success: false, message: 'No autorizado' });
-  try {
-    req.user = jwt.verify(token, process.env.JWT_SECRET);
-    next();
-  } catch {
-    return res.status(401).json({ success: false, message: 'Token inválido' });
-  }
-};
+// Se usa el middleware compartido: estas rutas tenían su propia verificación
+// que solo comprobaba la firma del token. No miraba si la cuenta seguía activa
+// ni si la sesión había sido revocada, así que un usuario dado de baja seguía
+// leyendo su Gmail y gastando IA desde aquí.
 
 // GET /api/oauth/google/url - generate OAuth URL
-router.get('/google/url', auth, (req, res) => {
+router.get('/google/url', auth, checkPerm('integrations.connect'), (req, res) => {
   if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
     return res.status(400).json({ success: false, message: 'Google OAuth no configurado. Agrega GOOGLE_CLIENT_ID y GOOGLE_CLIENT_SECRET.' });
   }

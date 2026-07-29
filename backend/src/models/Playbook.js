@@ -24,6 +24,14 @@ const actionSchema = new mongoose.Schema({
   // Si se llena, la IA redacta el contenido siguiendo estas instrucciones y el
   // contexto del lead, en lugar de usar `message` como plantilla fija.
   aiInstructions: { type: String },
+  // Correo: plantilla de la sección Plantillas (asunto y cuerpo del doc).
+  templateId: { type: mongoose.Schema.Types.ObjectId, ref: 'Template', default: null },
+  // WhatsApp: plantilla APROBADA de Meta — es lo único que llega con seguridad
+  // fuera de la ventana de 24 h. name/language tal como están en Meta.
+  metaTemplate: {
+    name:     { type: String, default: '' },
+    language: { type: String, default: 'es_MX' },
+  },
   subject:   { type: String },                   // asunto (correo)
   dueInDays: { type: Number, default: 2 },       // vencimiento si es tarea
   // 0 = al entrar a la etapa; >0 = días de espera antes de ejecutar.

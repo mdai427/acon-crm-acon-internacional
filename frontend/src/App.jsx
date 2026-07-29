@@ -82,11 +82,11 @@ const NAV = [
   { id: 'audit',       label: 'Auditoría',          Icon: FileSearch,      section: 'config',    mobile: false,
     roles: ['admin', 'direccion'] },
   { id: 'config',       label: 'Configuración',     Icon: Settings,        section: 'config',    mobile: false,
-    roles: ['admin', 'gerencia'] },
+    roles: ['admin'] },
   { id: 'calendar',     label: 'Calendario',        Icon: CalendarDays,    section: 'ventas',    mobile: false },
   { id: 'erp',          label: 'ERP',               Icon: Database,        section: 'config',    mobile: false },
   { id: 'integrations', label: 'Integraciones',     Icon: Plug,            section: 'config',    mobile: false,
-    roles: ['admin', 'direccion', 'gerencia'] },
+    roles: ['admin', 'direccion'] },
 ];
 
 const SECTIONS = { ventas: 'Ventas', marketing: 'Marketing', analytics: 'Análisis', config: 'Configuración' };

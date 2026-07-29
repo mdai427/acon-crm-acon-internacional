@@ -7,13 +7,12 @@ const Lead = require('../models/Lead');
 const Activity = require('../models/Activity');
 const { cacheMiddleware } = require('../middleware/cacheMiddleware');
 const { TTL } = require('../services/cache');
+const { auth, checkPerm } = require('../middleware/auth');
 
-const auth = (req, res, next) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  if (!token) return res.status(401).json({ success: false, message: 'No autorizado' });
-  try { req.user = jwt.verify(token, process.env.JWT_SECRET); next(); }
-  catch { return res.status(401).json({ success: false, message: 'Token inválido' }); }
-};
+// Se usa el middleware compartido: estas rutas tenían su propia verificación
+// que solo comprobaba la firma del token. No miraba si la cuenta seguía activa
+// ni si la sesión había sido revocada, así que un usuario dado de baja seguía
+// leyendo su Gmail y gastando IA desde aquí.
 
 const SYSTEM_PROMPT = `Eres el Copilot de ACON Internacional, asistente de IA integrado en el CRM de una empresa de Freight Forwarding con base en México.
 

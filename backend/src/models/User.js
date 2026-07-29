@@ -4,10 +4,15 @@ const bcrypt = require('bcryptjs');
 const userSchema = new mongoose.Schema({
   name:     { type: String, required: true, trim: true },
   email:    { type: String, required: true, unique: true, lowercase: true },
-  // La política real (longitud, contraseñas filtradas, no contener el nombre)
-  // vive en utils/passwordPolicy y se aplica en las rutas, donde hay contexto
-  // del usuario. Aquí queda el mínimo estructural.
-  password: { type: String, required: true, minlength: 12 },
+  // La política real (longitud mínima, contraseñas filtradas, no contener el
+  // nombre) vive en utils/passwordPolicy y se aplica en las rutas, donde hay
+  // contexto del usuario y se puede explicar el motivo del rechazo.
+  //
+  // Aquí NO se pone un mínimo alto a propósito: la validación de esquema corta
+  // también la siembra del admin desde el entorno y las vías de recuperación,
+  // y lo hace lanzando un error genérico que acaba en un log en vez de en la
+  // pantalla de quien lo puede corregir.
+  password: { type: String, required: true },
   role: {
     type: String,
     // 'superadmin' es el dueño de la plataforma (panel de costos de IA), no un

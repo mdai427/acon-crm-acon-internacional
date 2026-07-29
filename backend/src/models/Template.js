@@ -1,11 +1,9 @@
 const mongoose = require('mongoose');
 
 const templateSchema = new mongoose.Schema({
-  stage: {
-    type: String,
-    enum: ['new','contacted','qualified','proposal','negotiation','closed_won','closed_lost','general'],
-    required: true,
-  },
+  // Clave de etapa del pipeline (configurable) o 'general'. Sin enum: las
+  // etapas se crean desde el tablero.
+  stage: { type: String, required: true, default: 'general' },
   channel: {
     type: String,
     enum: ['whatsapp','email','call_script'],
