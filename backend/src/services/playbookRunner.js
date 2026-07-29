@@ -117,7 +117,12 @@ async function runWhatsApp(lead, action, ctx) {
     throw new Error('La acción no tiene plantilla de Meta seleccionada');
   }
 
-  await wa.sendTemplate(phone, action.metaTemplate.name, action.metaTemplate.language || 'es_MX');
+  // Variables del cuerpo ({{1}}, {{2}}…): se renderizan con los datos del lead.
+  const params = (action.metaTemplate.params || []).map(v => render(v, ctx));
+  const components = params.length
+    ? [{ type: 'body', parameters: params.map(text => ({ type: 'text', text })) }]
+    : [];
+  await wa.sendTemplate(phone, action.metaTemplate.name, action.metaTemplate.language || 'es_MX', components);
   await Activity.create({
     lead: lead._id, user: ctx.userId, type: 'whatsapp_out', direction: 'outbound',
     content: `[Plantilla Meta] ${action.metaTemplate.name}`, isAuto: true,

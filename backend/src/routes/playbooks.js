@@ -73,6 +73,9 @@ router.put('/:stage', checkPerm('playbooks.edit'), async (req, res) => {
         metaTemplate: {
           name: a.metaTemplate?.name || '',
           language: a.metaTemplate?.language || 'es_MX',
+          params: Array.isArray(a.metaTemplate?.params)
+            ? a.metaTemplate.params.map(v => String(v || ''))
+            : [],
         },
         subject: a.subject || '',
         dueInDays: Math.max(0, Number(a.dueInDays) || 2),

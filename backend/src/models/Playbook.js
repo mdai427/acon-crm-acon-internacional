@@ -31,6 +31,9 @@ const actionSchema = new mongoose.Schema({
   metaTemplate: {
     name:     { type: String, default: '' },
     language: { type: String, default: 'es_MX' },
+    // Valores para las variables {{1}}, {{2}}… del cuerpo, en orden. Admiten
+    // {empresa} {contacto} {etapa} {ejecutivo}: se renderizan al ejecutar.
+    params:   { type: [String], default: [] },
   },
   subject:   { type: String },                   // asunto (correo)
   dueInDays: { type: Number, default: 2 },       // vencimiento si es tarea

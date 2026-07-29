@@ -4,6 +4,7 @@ import {
   getMetaWaTemplates, sendMetaTemplate,
 } from '../services/api';
 import { Search, MessageSquare, Mail, Clock, Lock } from 'lucide-react';
+import WaTemplateWizard from '../components/WaTemplateWizard';
 
 // La ventana de 24 h de WhatsApp la dicta el backend (services/waWindow):
 // aquí solo se muestra el conteo y se cambia el compositor cuando cierra.
@@ -44,7 +45,7 @@ export default function WhatsAppPage({ toast }) {
   const [busqueda, setBusqueda] = useState('');
   const [waWindow, setWaWindow] = useState(null);
   const [metaTemplates, setMetaTemplates] = useState([]);
-  const [selectedTpl, setSelectedTpl] = useState('');
+  const [showWizard, setShowWizard] = useState(false);
   const messagesRef = useRef();
 
   useEffect(() => {
@@ -131,23 +132,6 @@ export default function WhatsAppPage({ toast }) {
     } finally { setSending(false); }
   };
 
-  const sendTemplate = async () => {
-    const tpl = metaTemplates.find(t => t.name === selectedTpl);
-    if (!tpl || !activeLead) return;
-    const phone = activeLead.whatsapp || activeLead.contact?.whatsapp || activeLead.phone;
-    if (!phone) return toast('Este lead no tiene WhatsApp', 'error');
-    setSending(true);
-    try {
-      await sendMetaTemplate({ to: phone, templateName: tpl.name, languageCode: tpl.language, leadId: activeId });
-      setMessages(m => [...m, {
-        direction: 'outbound', content: `[Plantilla: ${tpl.name}]`,
-        createdAt: new Date().toISOString(),
-      }]);
-      toast('Plantilla enviada', 'success');
-    } catch (e) {
-      toast(e.response?.data?.message || 'Error al enviar la plantilla', 'error');
-    } finally { setSending(false); }
-  };
 
   const TEMPLATES = [
     { id: 'intro', label: 'Presentación', text: '¡Hola! Soy de ACON Worldwide Logística Internacional. Vi tu interés en nuestros servicios de logística. ¿Tienes un momento para platicar?' },
@@ -285,18 +269,11 @@ export default function WhatsAppPage({ toast }) {
             </div>
           ) : (
             <div className="wa-input wa-input-tpl">
-              <select value={selectedTpl} onChange={e => setSelectedTpl(e.target.value)}>
-                <option value="">
-                  {metaTemplates.length
-                    ? 'Ventana cerrada — elige una plantilla aprobada…'
-                    : 'Sin plantillas aprobadas en Meta'}
-                </option>
-                {metaTemplates.map(t => (
-                  <option key={t.name + t.language} value={t.name}>{t.name} ({t.language})</option>
-                ))}
-              </select>
-              <button className="btn btn-primary" onClick={sendTemplate} disabled={sending || !selectedTpl}>
-                {sending ? '...' : '➤'}
+              <div className="wa-tpl-note">
+                <Lock size={13} /> Ventana de 24 h cerrada — solo plantillas aprobadas
+              </div>
+              <button className="btn btn-primary" onClick={() => setShowWizard(true)}>
+                Enviar plantilla
               </button>
             </div>
           )}
@@ -305,6 +282,23 @@ export default function WhatsAppPage({ toast }) {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text3)', fontSize: 14 }}>
           Selecciona un lead para chatear
         </div>
+      )}
+
+      {showWizard && activeLead && (
+        <WaTemplateWizard
+          templates={metaTemplates}
+          lead={activeLead}
+          phone={activeLead.whatsapp || activeLead.contact?.whatsapp || activeLead.phone}
+          toast={toast}
+          onClose={() => setShowWizard(false)}
+          onSent={({ template, preview }) => {
+            setMessages(m => [...m, {
+              direction: 'outbound',
+              content: preview || `[Plantilla: ${template.name}]`,
+              createdAt: new Date().toISOString(),
+            }]);
+          }}
+        />
       )}
     </div>
   );

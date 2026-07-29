@@ -27,6 +27,13 @@ const KINDS = [
 
 const kindOf = (id) => KINDS.find(k => k.id === id) || KINDS[0];
 
+// Variables {{1}}, {{2}}… del cuerpo de una plantilla de Meta.
+const tplVars = (tpl) => {
+  const body = tpl?.components?.find(c => c.type === 'BODY');
+  const found = [...String(body?.text || '').matchAll(/\{\{(\d+)\}\}/g)].map(m => Number(m[1]));
+  return [...new Set(found)].sort((a, b) => a - b);
+};
+
 const EMPTY_ACTION = {
   kind: 'task', title: '', message: '', subject: '', aiInstructions: '',
   dueInDays: 2, delayDays: 0, onlyIf: { minScore: '', maxScore: '', minValue: '' },
@@ -90,6 +97,31 @@ function ActionEditor({ action, onChange, onRemove, emailTemplates, waTemplates 
             WhatsApp automático solo envía plantillas aprobadas de Meta
             {!waTemplates.length && ' — se crean en Meta Business y aparecen aquí'}.
           </span>
+          {(() => {
+            const tpl = waTemplates.find(t => t.name === action.metaTemplate?.name);
+            const vars = tplVars(tpl);
+            if (!vars.length) return null;
+            const params = action.metaTemplate?.params || [];
+            return (
+              <div className="pb-tpl-vars">
+                {vars.map((n, i) => (
+                  <input
+                    key={n}
+                    className="pb-field"
+                    placeholder={`{{${n}}} — admite {empresa} {contacto} {etapa} {ejecutivo}`}
+                    value={params[i] || ''}
+                    onChange={e => onChange({
+                      ...action,
+                      metaTemplate: {
+                        ...action.metaTemplate,
+                        params: vars.map((_, idx) => (idx === i ? e.target.value : (params[idx] || ''))),
+                      },
+                    })}
+                  />
+                ))}
+              </div>
+            );
+          })()}
         </div>
       )}
 
