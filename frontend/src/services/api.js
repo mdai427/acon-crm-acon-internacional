@@ -57,7 +57,9 @@ export const getMyActivities = (params) => api.get('/activities/mine', { params 
 export const getTeamActivities = (params) => api.get('/activities/team', { params });
 
 // WhatsApp
+export const getConversations = () => api.get('/whatsapp/conversations');
 export const getConversation = (leadId) => api.get(`/whatsapp/conversations/${leadId}`);
+export const markConversationRead = (leadId) => api.post(`/whatsapp/conversations/${leadId}/read`);
 export const sendWhatsApp = (data) => api.post('/whatsapp/send', data);
 export const sendTemplate = (data) => api.post('/whatsapp/template', data);
 

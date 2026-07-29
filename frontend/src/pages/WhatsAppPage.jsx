@@ -1,28 +1,61 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { getLeads, getConversation, sendWhatsApp } from '../services/api';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { getConversations, getConversation, sendWhatsApp, markConversationRead } from '../services/api';
+import { Search, MessageSquare, Mail } from 'lucide-react';
+
+// Bandeja de conversaciones: WhatsApp y correo en la misma lista, porque para
+// el asesor es una sola conversación con el cliente.
+const FILTROS = [
+  { id: 'todas',   label: 'Todas' },
+  { id: 'unread',  label: 'Sin leer' },
+  { id: 'read',    label: 'Leídas' },
+];
+
+const relativo = (iso) => {
+  if (!iso) return '';
+  const minutos = Math.floor((Date.now() - new Date(iso)) / 60000);
+  if (minutos < 1) return 'ahora';
+  if (minutos < 60) return `${minutos} min`;
+  if (minutos < 1440) return `${Math.floor(minutos / 60)} h`;
+  const dias = Math.floor(minutos / 1440);
+  if (dias < 7) return `${dias} d`;
+  return new Date(iso).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' });
+};
 
 export default function WhatsAppPage({ toast }) {
-  const [leads, setLeads] = useState([]);
+  const [conversations, setConversations] = useState([]);
   const [activeId, setActiveId] = useState(null);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
+  const [filtro, setFiltro] = useState('todas');
+  const [busqueda, setBusqueda] = useState('');
   const messagesRef = useRef();
 
-  useEffect(() => {
-    getLeads({ limit: 50 }).then(r => {
+  const loadConversations = useCallback(async () => {
+    try {
+      const r = await getConversations();
       const list = r.data.data || [];
-      setLeads(list);
-      if (list.length > 0) setActiveId(list[0]._id);
-    }).catch(() => {});
+      setConversations(list);
+      setActiveId(prev => prev || list[0]?.leadId || null);
+    } catch {
+      setConversations([]);
+    }
   }, []);
+
+  useEffect(() => { loadConversations(); }, [loadConversations]);
 
   useEffect(() => {
     if (!activeId) return;
     getConversation(activeId)
       .then(r => setMessages(r.data.data || []))
       .catch(() => setMessages([]));
+
+    // Abrir la conversación la marca como leída.
+    markConversationRead(activeId)
+      .then(() => setConversations(list =>
+        list.map(c => (c.leadId === activeId ? { ...c, unread: 0 } : c))))
+      .catch(() => {});
   }, [activeId]);
 
   useEffect(() => {
@@ -31,7 +64,20 @@ export default function WhatsAppPage({ toast }) {
     }
   }, [messages]);
 
-  const activeLead = leads.find(l => l._id === activeId);
+  const activeConv = conversations.find(c => c.leadId === activeId);
+  const activeLead = activeConv?.lead;
+
+  const visibles = conversations.filter(c => {
+    if (filtro === 'unread' && !c.unread) return false;
+    if (filtro === 'read' && c.unread) return false;
+    if (busqueda.trim()) {
+      const texto = `${c.lead?.company || ''} ${c.lead?.contact?.name || c.lead?.contact || ''}`.toLowerCase();
+      if (!texto.includes(busqueda.toLowerCase())) return false;
+    }
+    return true;
+  });
+
+  const sinLeer = conversations.reduce((n, c) => n + (c.unread ? 1 : 0), 0);
 
   const send = async () => {
     if (!input.trim() || !activeLead) return;
@@ -61,31 +107,62 @@ export default function WhatsAppPage({ toast }) {
     <div className="wa-layout">
       {/* Lista de chats */}
       <div className="wa-list">
-        <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border)', fontWeight: 700, fontSize: 15 }}>
-          💬 WhatsApp CRM
+        <div className="wa-list-head">
+          <div className="wa-search">
+            <Search size={13} />
+            <input
+              placeholder="Buscar conversación…"
+              value={busqueda}
+              onChange={e => setBusqueda(e.target.value)}
+            />
+          </div>
+          <div className="wa-filters">
+            {FILTROS.map(f => (
+              <button
+                key={f.id}
+                className={`wa-filter${filtro === f.id ? ' is-active' : ''}`}
+                onClick={() => setFiltro(f.id)}
+              >
+                {f.label}
+                {f.id === 'unread' && sinLeer > 0 && <span className="wa-filter-count">{sinLeer}</span>}
+              </button>
+            ))}
+          </div>
         </div>
-        {leads.length === 0 && (
+
+        {visibles.length === 0 && (
           <div style={{ padding: 20, color: 'var(--text3)', fontSize: 13, textAlign: 'center' }}>
-            No hay leads con WhatsApp
+            {conversations.length === 0
+              ? 'Todavía no hay conversaciones'
+              : 'Ninguna conversación con ese filtro'}
           </div>
         )}
-        {leads.map(l => (
-          <div key={l._id} className={`wa-item ${activeId === l._id ? 'active' : ''}`}
-            onClick={() => setActiveId(l._id)}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div className="avatar" style={{ flexShrink: 0 }}>
-                {l.company?.slice(0,2).toUpperCase() || 'LE'}
-              </div>
-              <div style={{ flex: 1, overflow: 'hidden' }}>
-                <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.company}</div>
-                <div style={{ fontSize: 11, color: 'var(--text3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {l.contact?.name || l.contact}
+
+        {visibles.map(c => {
+          const CanalIcon = c.channel === 'email' ? Mail : MessageSquare;
+          return (
+            <div key={c.leadId} className={`wa-item ${activeId === c.leadId ? 'active' : ''}`}
+              onClick={() => setActiveId(c.leadId)}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                <div className="avatar" style={{ flexShrink: 0 }}>
+                  {c.lead?.company?.slice(0,2).toUpperCase() || 'LE'}
                 </div>
+                <div style={{ flex: 1, overflow: 'hidden' }}>
+                  <div className="wa-item-top">
+                    <span className={`wa-item-name${c.unread ? ' is-unread' : ''}`}>{c.lead?.company}</span>
+                    <span className="wa-item-time">{relativo(c.lastAt)}</span>
+                  </div>
+                  <div className="wa-item-preview">
+                    <CanalIcon size={11} className="wa-item-channel" />
+                    {c.direction === 'outbound' && <span className="wa-item-you">Tú: </span>}
+                    {c.preview || 'Sin mensajes'}
+                  </div>
+                </div>
+                {c.unread > 0 && <span className="wa-unread">{c.unread}</span>}
               </div>
-              {l.whatsapp && <span style={{ fontSize: 10, color: 'var(--green)' }}>●</span>}
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Chat */}

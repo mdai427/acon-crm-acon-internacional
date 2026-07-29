@@ -123,17 +123,90 @@ router.get('/templates', auth, async (req, res) => {
   res.json({ success: true, data: templates });
 });
 
-// GET /api/whatsapp/conversations/:leadId
+// La bandeja mezcla los dos canales: la conversación con un cliente es una
+// sola, aunque unos mensajes lleguen por WhatsApp y otros por correo.
+const CHAT_TYPES = ['whatsapp_in', 'whatsapp_out', 'email_in', 'email_out'];
+const INBOUND_TYPES = ['whatsapp_in', 'email_in'];
+
+// GET /api/whatsapp/conversations — bandeja con último mensaje y no leídos
+router.get('/conversations', auth, async (req, res) => {
+  try {
+    const Lead = require('../models/Lead');
+
+    // Un ejecutivo solo ve las conversaciones de sus leads.
+    const leadFilter = { isActive: true };
+    if (req.user.role === 'executive') leadFilter.assignedTo = req.user._id;
+    const leadIds = await Lead.find(leadFilter).distinct('_id');
+
+    const resumen = await Activity.aggregate([
+      { $match: { lead: { $in: leadIds }, type: { $in: CHAT_TYPES } } },
+      { $sort: { createdAt: -1 } },
+      { $group: {
+        _id: '$lead',
+        lastAt: { $first: '$createdAt' },
+        lastType: { $first: '$type' },
+        lastContent: { $first: '$content' },
+        lastSubject: { $first: '$subject' },
+        // Entrante sin marcar como leído; los de WhatsApp antiguos no tienen
+        // el campo, así que se cuenta también cuando falta.
+        unread: { $sum: { $cond: [
+          { $and: [
+            { $in: ['$type', INBOUND_TYPES] },
+            { $ne: ['$metadata.isRead', true] },
+          ] }, 1, 0,
+        ] } },
+      } },
+      { $sort: { lastAt: -1 } },
+      { $limit: 100 },
+    ]);
+
+    const leads = await Lead.find({ _id: { $in: resumen.map(r => r._id) } })
+      .select('company contact whatsapp email assignedTo')
+      .lean();
+    const leadById = Object.fromEntries(leads.map(l => [String(l._id), l]));
+
+    const data = resumen
+      .filter(r => leadById[String(r._id)])
+      .map(r => ({
+        leadId: r._id,
+        lead: leadById[String(r._id)],
+        channel: r.lastType.startsWith('email') ? 'email' : 'whatsapp',
+        direction: r.lastType.endsWith('_in') ? 'inbound' : 'outbound',
+        preview: (r.lastSubject || r.lastContent || '').replace(/<[^>]*>/g, '').slice(0, 120),
+        lastAt: r.lastAt,
+        unread: r.unread,
+      }));
+
+    res.json({ success: true, data });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// GET /api/whatsapp/conversations/:leadId — hilo completo (WhatsApp + correo)
 router.get('/conversations/:leadId', auth, async (req, res) => {
   try {
     const activities = await Activity.find({
       lead: req.params.leadId,
-      type: { $in: ['whatsapp_in', 'whatsapp_out'] }
+      type: { $in: CHAT_TYPES }
     })
     .populate('user', 'name avatar')
     .sort({ createdAt: 1 });
 
     res.json({ success: true, data: activities });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// POST /api/whatsapp/conversations/:leadId/read — marcar la conversación leída
+router.post('/conversations/:leadId/read', auth, async (req, res) => {
+  try {
+    const r = await Activity.updateMany(
+      { lead: req.params.leadId, type: { $in: INBOUND_TYPES }, 'metadata.isRead': { $ne: true } },
+      { $set: { 'metadata.isRead': true } }
+    );
+    res.json({ success: true, updated: r.modifiedCount });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
