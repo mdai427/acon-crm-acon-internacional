@@ -32,7 +32,7 @@ function ColorPicker({ value, onChange }) {
 export default function StageManager({ onClose, onSaved, toast }) {
   const [stages, setStages] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [nuevo, setNuevo] = useState({ label: '', color: COLORES[0] });
+  const [nuevo, setNuevo] = useState({ label: '', color: COLORES[0], emoji: '' });
   const [guardando, setGuardando] = useState(null);
   const [borrando, setBorrando] = useState(null); // { stage, destino }
 
@@ -57,7 +57,7 @@ export default function StageManager({ onClose, onSaved, toast }) {
     try {
       const r = await createPipelineStage(nuevo);
       toast(r.data.message, 'success');
-      setNuevo({ label: '', color: COLORES[0] });
+      setNuevo({ label: '', color: COLORES[0], emoji: '' });
       await load();
       onSaved?.();
     } catch (err) {
@@ -69,7 +69,7 @@ export default function StageManager({ onClose, onSaved, toast }) {
     setGuardando(stage._id);
     try {
       await updatePipelineStage(stage._id, {
-        label: stage.label, color: stage.color, description: stage.description,
+        label: stage.label, color: stage.color, emoji: stage.emoji, description: stage.description,
       });
       toast('Etapa actualizada', 'success');
       await load();
@@ -147,11 +147,21 @@ export default function StageManager({ onClose, onSaved, toast }) {
                   <GripVertical size={14} className="stage-grip" />
 
                   <div className="stage-main">
-                    <input
-                      className="stage-input"
-                      value={stage.label}
-                      onChange={e => setField(stage._id, 'label', e.target.value)}
-                    />
+                    <div className="stage-name-row">
+                      <input
+                        className="stage-input stage-emoji"
+                        value={stage.emoji || ''}
+                        placeholder="🙂"
+                        maxLength={4}
+                        title="Emoji de la etapa"
+                        onChange={e => setField(stage._id, 'emoji', e.target.value)}
+                      />
+                      <input
+                        className="stage-input"
+                        value={stage.label}
+                        onChange={e => setField(stage._id, 'label', e.target.value)}
+                      />
+                    </div>
                     <ColorPicker value={stage.color} onChange={c => setField(stage._id, 'color', c)} />
                   </div>
 
@@ -224,6 +234,14 @@ export default function StageManager({ onClose, onSaved, toast }) {
             <div className="stage-new">
               <div className="stage-new-title">Añadir etapa</div>
               <div className="stage-new-row">
+                <input
+                  className="stage-input stage-emoji"
+                  placeholder="🙂"
+                  maxLength={4}
+                  title="Emoji (opcional)"
+                  value={nuevo.emoji}
+                  onChange={e => setNuevo(n => ({ ...n, emoji: e.target.value }))}
+                />
                 <input
                   className="stage-input"
                   placeholder="Nombre de la etapa"

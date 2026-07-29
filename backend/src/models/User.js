@@ -4,7 +4,10 @@ const bcrypt = require('bcryptjs');
 const userSchema = new mongoose.Schema({
   name:     { type: String, required: true, trim: true },
   email:    { type: String, required: true, unique: true, lowercase: true },
-  password: { type: String, required: true, minlength: 6 },
+  // La política real (longitud, contraseñas filtradas, no contener el nombre)
+  // vive en utils/passwordPolicy y se aplica en las rutas, donde hay contexto
+  // del usuario. Aquí queda el mínimo estructural.
+  password: { type: String, required: true, minlength: 12 },
   role: {
     type: String,
     // 'superadmin' es el dueño de la plataforma (panel de costos de IA), no un
@@ -70,6 +73,12 @@ const userSchema = new mongoose.Schema({
     },
   },
   lastLogin: { type: Date },
+
+  // Momento a partir del cual un token es válido. Al cambiar la contraseña, el
+  // rol o al desactivar la cuenta se adelanta a "ahora", lo que invalida todas
+  // las sesiones abiertas. Sin esto, un token robado seguía sirviendo hasta su
+  // expiración aunque la víctima cambiara la contraseña.
+  sessionsValidFrom: { type: Date, default: Date.now },
 }, { timestamps: true });
 
 // Hash password antes de guardar

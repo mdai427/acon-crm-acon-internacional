@@ -3,6 +3,7 @@
 // Todos los flujos de automatización pasan por aquí
 // ============================================
 const express = require('express');
+const { secureCompare } = require('../utils/secureCompare');
 const router = express.Router();
 const Lead = require('../models/Lead');
 const Activity = require('../models/Activity');
@@ -17,7 +18,7 @@ const n8nAuth = (req, res, next) => {
   if (!process.env.N8N_API_KEY) {
     return res.status(500).json({ success: false, message: 'N8N_API_KEY no configurada en .env' });
   }
-  if (key !== process.env.N8N_API_KEY) {
+  if (!secureCompare(key, process.env.N8N_API_KEY)) {
     return res.status(401).json({ success: false, message: 'API key inválida' });
   }
   next();

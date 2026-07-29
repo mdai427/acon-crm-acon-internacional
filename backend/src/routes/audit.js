@@ -1,15 +1,11 @@
 const express = require('express');
 const router = express.Router();
 const AuditLog = require('../models/AuditLog');
-const { auth } = require('../middleware/auth');
+const { auth, checkPerm } = require('../middleware/auth');
 
-// Only admin/direccion/gerencia can view audit logs
-router.use(auth, (req, res, next) => {
-  if (!['admin', 'direccion', 'gerencia'].includes(req.user?.role)) {
-    return res.status(403).json({ success: false, message: 'Acceso denegado' });
-  }
-  next();
-});
+// Los roles con acceso viven en config/permissions (audit.view), no aquí:
+// una lista en línea se desincroniza de la matriz que ve el administrador.
+router.use(auth, checkPerm('audit.view'));
 
 // GET /api/audit
 router.get('/', async (req, res) => {

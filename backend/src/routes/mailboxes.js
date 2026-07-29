@@ -13,7 +13,7 @@ const POPULATE = [
 
 // GET /api/mailboxes — buzones que el usuario puede usar como remitente.
 // Los admin ven todos; el resto solo los propios y los compartidos con él.
-router.get('/', async (req, res) => {
+router.get('/', checkPerm('mailboxes.view'), async (req, res) => {
   try {
     const mailboxes = await Mailbox.find(mailboxService.visibleFilter(req.user))
       .populate(POPULATE)

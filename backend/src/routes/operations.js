@@ -1,22 +1,31 @@
 const express = require('express');
 const router = express.Router();
 const Operation = require('../models/Operation');
-const { auth } = require('../middleware/auth');
+const { auth, checkPerm } = require('../middleware/auth');
+const { safeRegex } = require('../utils/scope');
+// Campos escribibles por el cliente, tomados del esquema de Operation.
+// 'assignedTo' queda fuera: reasignar una operación es una acción aparte, no
+// algo que deba colarse en una edición normal.
+const OPERATION_FIELDS = ['bookingNumber', 'blAwbCartaPorte', 'lead', 'clientName',
+  'serviceType', 'origin', 'destination', 'carrier', 'containerType', 'weight',
+  'volume', 'units', 'etd', 'eta', 'actualDelivery', 'status', 'documents',
+  'notes', 'isActive'];
+const { pick } = require('../utils/pick');
 
 // GET /api/operations
-router.get('/', auth, async (req, res) => {
+router.get('/', auth, checkPerm('operations.view'), async (req, res) => {
   try {
     const { status, serviceType, search, limit = 100 } = req.query;
     const filter = { isActive: true };
     if (status) filter.status = status;
     if (serviceType) filter.serviceType = serviceType;
-    if (search) filter.$or = [
-      { bookingNumber: { $regex: search, $options: 'i' } },
-      { clientName: { $regex: search, $options: 'i' } },
-      { blAwbCartaPorte: { $regex: search, $options: 'i' } },
-      { origin: { $regex: search, $options: 'i' } },
-      { destination: { $regex: search, $options: 'i' } },
-    ];
+    if (search) {
+      const rx = safeRegex(search);
+      filter.$or = [
+        { bookingNumber: rx }, { clientName: rx }, { blAwbCartaPorte: rx },
+        { origin: rx }, { destination: rx },
+      ];
+    }
     const safeLimit = Math.min(Number(limit) || 50, 100);
     const page = Math.max(1, Number(req.query.page) || 1);
     const [ops, total] = await Promise.all([
@@ -36,7 +45,7 @@ router.get('/', auth, async (req, res) => {
 });
 
 // POST /api/operations
-router.post('/', auth, async (req, res) => {
+router.post('/', auth, checkPerm('operations.create'), async (req, res) => {
   try {
     const op = await Operation.create({ ...req.body, assignedTo: req.user._id });
     res.status(201).json({ success: true, data: op });
@@ -46,7 +55,7 @@ router.post('/', auth, async (req, res) => {
 });
 
 // GET /api/operations/:id
-router.get('/:id', auth, async (req, res) => {
+router.get('/:id', auth, checkPerm('operations.view'), async (req, res) => {
   try {
     const op = await Operation.findById(req.params.id)
       .populate('lead', 'company contact email phone')
@@ -59,9 +68,9 @@ router.get('/:id', auth, async (req, res) => {
 });
 
 // PUT /api/operations/:id
-router.put('/:id', auth, async (req, res) => {
+router.put('/:id', auth, checkPerm('operations.edit'), async (req, res) => {
   try {
-    const op = await Operation.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true })
+    const op = await Operation.findByIdAndUpdate(req.params.id, pick(req.body, OPERATION_FIELDS), { new: true, runValidators: true })
       .populate('lead', 'company')
       .populate('assignedTo', 'name');
     if (!op) return res.status(404).json({ success: false, message: 'Operación no encontrada' });
@@ -72,7 +81,7 @@ router.put('/:id', auth, async (req, res) => {
 });
 
 // PUT /api/operations/:id/status — cambio rápido de estado
-router.put('/:id/status', auth, async (req, res) => {
+router.put('/:id/status', auth, checkPerm('operations.edit'), async (req, res) => {
   try {
     const { status } = req.body;
     const op = await Operation.findByIdAndUpdate(
@@ -88,7 +97,7 @@ router.put('/:id/status', auth, async (req, res) => {
 });
 
 // PUT /api/operations/:id/document — actualizar estado de documento
-router.put('/:id/document', auth, async (req, res) => {
+router.put('/:id/document', auth, checkPerm('operations.edit'), async (req, res) => {
   try {
     const { type, status, deadline, notes } = req.body;
     const op = await Operation.findById(req.params.id);
@@ -110,7 +119,7 @@ router.put('/:id/document', auth, async (req, res) => {
 });
 
 // DELETE /api/operations/:id (soft)
-router.delete('/:id', auth, async (req, res) => {
+router.delete('/:id', auth, checkPerm('operations.delete'), async (req, res) => {
   try {
     await Operation.findByIdAndUpdate(req.params.id, { isActive: false });
     res.json({ success: true, message: 'Operación eliminada' });

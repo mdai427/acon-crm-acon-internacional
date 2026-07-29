@@ -6,10 +6,11 @@ const User = require('../models/User');
 const Commission = require('../models/Commission');
 const Quote = require('../models/Quote');
 const Operation = require('../models/Operation');
-const { auth, adminOnly } = require('../middleware/auth');
+const { auth, checkPerm } = require('../middleware/auth');
 const { analyzePipeline } = require('../services/aiAgent');
 const { cacheMiddleware } = require('../middleware/cacheMiddleware');
 const { TTL } = require('../services/cache');
+const { rowsToXlsxBuffer } = require('../utils/xlsxExport');
 
 router.use(auth);
 
@@ -63,6 +64,7 @@ function kpi(current, previous) {
 
 // ── GET /api/reports/dashboard — KPIs enterprise con filtro de periodo ─────────
 router.get('/dashboard',
+  checkPerm('reports.view'),
   cacheMiddleware(TTL.COMPUTED, req => `dashboard_v2:${req.user.id}:${req.user.role}:${req.query.period || 'month'}`),
   async (req, res) => {
   try {
@@ -381,7 +383,7 @@ router.get('/dashboard',
 });
 
 // GET /api/reports/conversion — tasa de conversión por etapa (funnel)
-router.get('/conversion', adminOnly,
+router.get('/conversion', checkPerm('reports.team'),
   cacheMiddleware(TTL.COMPUTED, () => 'reports:conversion'),
   async (req, res) => {
   try {
@@ -460,7 +462,7 @@ router.get('/conversion', adminOnly,
 });
 
 // GET /api/reports/team — solo admin
-router.get('/team', adminOnly,
+router.get('/team', checkPerm('reports.team'),
   cacheMiddleware(TTL.COMPUTED, () => 'reports:team'),
   async (req, res) => {
   try {
@@ -524,7 +526,7 @@ router.get('/team', adminOnly,
 });
 
 // GET /api/reports/ai-insights
-router.get('/ai-insights', async (req, res) => {
+router.get('/ai-insights', checkPerm('reports.view'), async (req, res) => {
   try {
     const insights = await analyzePipeline(req.user._id, req.user.role);
     res.json({ success: true, data: insights });
@@ -534,7 +536,7 @@ router.get('/ai-insights', async (req, res) => {
 });
 
 // GET /api/reports/export — exportar CSV
-router.get('/export', async (req, res) => {
+router.get('/export', checkPerm('reports.export'), async (req, res) => {
   try {
     const filter = { isActive: true };
     if (req.user.role === 'executive') filter.assignedTo = req.user._id;
@@ -563,7 +565,7 @@ router.get('/export', async (req, res) => {
 });
 
 // GET /api/reports/operations — operations summary
-router.get('/operations', async (req, res) => {
+router.get('/operations', checkPerm('reports.view'), async (req, res) => {
   try {
     const summary = await Operation.aggregate([
       { $group: { _id: '$status', count: { $sum: 1 } } }
@@ -575,7 +577,7 @@ router.get('/operations', async (req, res) => {
 });
 
 // GET /api/reports/direccion — Dashboard Dirección estratégico
-router.get('/direccion', async (req, res) => {
+router.get('/direccion', checkPerm('reports.view'), async (req, res) => {
   if (!['admin', 'direccion', 'gerencia'].includes(req.user?.role)) {
     return res.status(403).json({ success: false, message: 'Acceso denegado' });
   }
@@ -753,9 +755,8 @@ router.get('/direccion', async (req, res) => {
 // ── Excel Export ───────────────────────────────────────────────────────────────
 
 // GET /api/reports/export/leads — export leads as XLSX
-router.get('/export/leads', async (req, res) => {
+router.get('/export/leads', checkPerm('leads.export'), async (req, res) => {
   try {
-    const XLSX = require('xlsx');
     const { from, to, stage, assignedTo } = req.query;
     const filter = {};
     if (stage) filter.stage = stage;
@@ -780,10 +781,7 @@ router.get('/export/leads', async (req, res) => {
       'Creado': l.createdAt ? new Date(l.createdAt).toLocaleDateString('es-MX') : '',
       'Último contacto': l.lastContactDate ? new Date(l.lastContactDate).toLocaleDateString('es-MX') : '',
     }));
-    const ws = XLSX.utils.json_to_sheet(rows);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Leads');
-    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    const buf = await rowsToXlsxBuffer(rows, 'Leads');
     res.setHeader('Content-Disposition', `attachment; filename="leads_${Date.now()}.xlsx"`);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.send(buf);
@@ -791,9 +789,8 @@ router.get('/export/leads', async (req, res) => {
 });
 
 // GET /api/reports/export/quotes — export quotes as XLSX
-router.get('/export/quotes', async (req, res) => {
+router.get('/export/quotes', checkPerm('reports.export'), async (req, res) => {
   try {
-    const XLSX = require('xlsx');
     const { from, to, status } = req.query;
     const filter = {};
     if (status) filter.status = status;
@@ -817,10 +814,7 @@ router.get('/export/quotes', async (req, res) => {
       'Creado': q.createdAt ? new Date(q.createdAt).toLocaleDateString('es-MX') : '',
       'Válido hasta': q.validUntil ? new Date(q.validUntil).toLocaleDateString('es-MX') : '',
     }));
-    const ws = XLSX.utils.json_to_sheet(rows);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Cotizaciones');
-    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    const buf = await rowsToXlsxBuffer(rows, 'Cotizaciones');
     res.setHeader('Content-Disposition', `attachment; filename="cotizaciones_${Date.now()}.xlsx"`);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.send(buf);
@@ -828,9 +822,8 @@ router.get('/export/quotes', async (req, res) => {
 });
 
 // GET /api/reports/export/commissions — export commissions as XLSX
-router.get('/export/commissions', async (req, res) => {
+router.get('/export/commissions', checkPerm('reports.export'), async (req, res) => {
   try {
-    const XLSX = require('xlsx');
     const Commission = require('../models/Commission');
     const { from, to, userId, status } = req.query;
     const filter = {};
@@ -850,10 +843,7 @@ router.get('/export/commissions', async (req, res) => {
       'Período': c.period || '',
       'Creado': c.createdAt ? new Date(c.createdAt).toLocaleDateString('es-MX') : '',
     }));
-    const ws = XLSX.utils.json_to_sheet(rows);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Comisiones');
-    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    const buf = await rowsToXlsxBuffer(rows, 'Comisiones');
     res.setHeader('Content-Disposition', `attachment; filename="comisiones_${Date.now()}.xlsx"`);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.send(buf);

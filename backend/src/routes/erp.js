@@ -1,8 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const ERPConfig = require('../models/ERPConfig');
-const { auth } = require('../middleware/auth');
-const { checkPerm } = require('../middleware/auth');
+const { auth, checkPerm } = require('../middleware/auth');
 
 const ERP_PROVIDERS = [
   {

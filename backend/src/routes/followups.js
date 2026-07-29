@@ -3,10 +3,16 @@ const router = express.Router();
 const FollowUpRule = require('../models/FollowUpRule');
 const Activity = require('../models/Activity');
 const Lead = require('../models/Lead');
-const { auth, adminOnly } = require('../middleware/auth');
+const { auth, adminOnly, checkPerm } = require('../middleware/auth');
+const { pick } = require('../utils/pick');
+// Sin 'executionCount' ni 'lastRun': son el registro de lo que hizo el sistema,
+// no algo que el cliente deba poder reescribir.
+const RULE_FIELDS = ['name', 'description', 'isActive', 'trigger', 'action',
+  'cooldownDays', 'maxExecutions', 'order', 'delayHours', 'channel', 'message',
+  'subject', 'taskTitle', 'skipIf'];
 
 // GET /api/followups/rules
-router.get('/rules', auth, async (req, res) => {
+router.get('/rules', auth, checkPerm('followups.view'), async (req, res) => {
   try {
     const rules = await FollowUpRule.find().populate('createdBy', 'name').sort({ createdAt: -1 });
     res.json({ success: true, data: rules });
@@ -14,23 +20,23 @@ router.get('/rules', auth, async (req, res) => {
 });
 
 // POST /api/followups/rules
-router.post('/rules', auth, adminOnly, async (req, res) => {
+router.post('/rules', auth, checkPerm('followups.edit'), async (req, res) => {
   try {
-    const rule = await FollowUpRule.create({ ...req.body, createdBy: req.user._id });
+    const rule = await FollowUpRule.create({ ...pick(req.body, RULE_FIELDS), createdBy: req.user._id });
     res.status(201).json({ success: true, data: rule });
   } catch (e) { res.status(400).json({ success: false, message: e.message }); }
 });
 
 // PUT /api/followups/rules/:id
-router.put('/rules/:id', auth, adminOnly, async (req, res) => {
+router.put('/rules/:id', auth, checkPerm('followups.edit'), async (req, res) => {
   try {
-    const rule = await FollowUpRule.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    const rule = await FollowUpRule.findByIdAndUpdate(req.params.id, pick(req.body, RULE_FIELDS), { new: true });
     res.json({ success: true, data: rule });
   } catch (e) { res.status(400).json({ success: false, message: e.message }); }
 });
 
 // DELETE /api/followups/rules/:id
-router.delete('/rules/:id', auth, adminOnly, async (req, res) => {
+router.delete('/rules/:id', auth, checkPerm('followups.edit'), async (req, res) => {
   try {
     await FollowUpRule.findByIdAndDelete(req.params.id);
     res.json({ success: true });
@@ -39,7 +45,7 @@ router.delete('/rules/:id', auth, adminOnly, async (req, res) => {
 
 // GET /api/followups/pending — leads que cumplen alguna regla activa
 // Optimizado: agrupa reglas por tipo y lanza 1 query por tipo (max 2) en lugar de N queries
-router.get('/pending', auth, async (req, res) => {
+router.get('/pending', auth, checkPerm('followups.view'), async (req, res) => {
   try {
     const rules = await FollowUpRule.find({ isActive: true }).lean();
     if (!rules.length) return res.json({ success: true, data: [] });
@@ -124,7 +130,7 @@ router.get('/pending', auth, async (req, res) => {
 });
 
 // POST /api/followups/execute/:ruleId — ejecutar manualmente una regla
-router.post('/execute/:ruleId', auth, adminOnly, async (req, res) => {
+router.post('/execute/:ruleId', auth, checkPerm('followups.edit'), async (req, res) => {
   try {
     const rule = await FollowUpRule.findById(req.params.ruleId);
     if (!rule) return res.status(404).json({ success: false, message: 'Regla no encontrada' });

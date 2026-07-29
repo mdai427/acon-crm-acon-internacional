@@ -1,9 +1,14 @@
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
-const { auth } = require('../middleware/auth');
+const { auth, checkPerm } = require('../middleware/auth');
 const Lead = require('../models/Lead');
 const Activity = require('../models/Activity');
+// Campos del esquema de PostVenta que el cliente puede escribir. 'assignedTo'
+// se resuelve en el servidor al crear, no se acepta en las ediciones.
+const POSTVENTA_FIELDS = ['lead', 'status', 'npsScore', 'npsComment', 'shipmentCount',
+  'totalRevenue', 'lastShipmentDate', 'nextRenewalDate', 'services', 'notes', 'tags'];
+const { pick } = require('../utils/pick');
 
 // PostVenta schema
 const postVentaSchema = new mongoose.Schema({
@@ -26,7 +31,7 @@ const PostVenta = mongoose.models.PostVenta || mongoose.model('PostVenta', postV
 router.use(auth);
 
 // GET /api/postventa — list all post-venta records
-router.get('/', async (req, res) => {
+router.get('/', checkPerm('postventa.view'), async (req, res) => {
   try {
     const records = await PostVenta.find()
       .populate('lead', 'company contact email country')
@@ -37,7 +42,7 @@ router.get('/', async (req, res) => {
 });
 
 // GET /api/postventa/summary
-router.get('/summary', async (req, res) => {
+router.get('/summary', checkPerm('postventa.view'), async (req, res) => {
   try {
     const [total, atRisk, avgNPS, records] = await Promise.all([
       PostVenta.countDocuments(),
@@ -54,7 +59,7 @@ router.get('/summary', async (req, res) => {
 });
 
 // POST /api/postventa — create record from closed_won lead
-router.post('/', async (req, res) => {
+router.post('/', checkPerm('postventa.edit'), async (req, res) => {
   try {
     const record = await PostVenta.create({ ...req.body, assignedTo: req.body.assignedTo || req.user._id });
     const populated = await PostVenta.findById(record._id).populate('lead', 'company contact email').populate('assignedTo', 'name');
@@ -63,16 +68,16 @@ router.post('/', async (req, res) => {
 });
 
 // PUT /api/postventa/:id
-router.put('/:id', async (req, res) => {
+router.put('/:id', checkPerm('postventa.edit'), async (req, res) => {
   try {
-    const record = await PostVenta.findByIdAndUpdate(req.params.id, req.body, { new: true })
+    const record = await PostVenta.findByIdAndUpdate(req.params.id, pick(req.body, POSTVENTA_FIELDS), { new: true })
       .populate('lead', 'company contact email').populate('assignedTo', 'name');
     res.json({ success: true, data: record });
   } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 
 // POST /api/postventa/:id/nps — submit NPS
-router.post('/:id/nps', async (req, res) => {
+router.post('/:id/nps', checkPerm('postventa.edit'), async (req, res) => {
   try {
     const { score, comment } = req.body;
     const record = await PostVenta.findByIdAndUpdate(req.params.id, { npsScore: score, npsComment: comment }, { new: true })
@@ -85,7 +90,7 @@ router.post('/:id/nps', async (req, res) => {
 });
 
 // GET /api/postventa/renewals — upcoming renewals
-router.get('/renewals', async (req, res) => {
+router.get('/renewals', checkPerm('postventa.view'), async (req, res) => {
   try {
     const in30days = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
     const renewals = await PostVenta.find({ nextRenewalDate: { $lte: in30days, $gte: new Date() } })
@@ -96,7 +101,7 @@ router.get('/renewals', async (req, res) => {
 });
 
 // GET /api/postventa/auto-sync — auto-create records for closed_won leads without postventa
-router.post('/auto-sync', async (req, res) => {
+router.post('/auto-sync', checkPerm('postventa.edit'), async (req, res) => {
   try {
     const wonLeads = await Lead.find({ stage: 'closed_won', isActive: true });
     const existingLeadIds = (await PostVenta.find().select('lead')).map(r => r.lead.toString());

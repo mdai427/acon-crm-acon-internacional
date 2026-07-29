@@ -2,6 +2,10 @@
 // ACON CRM - Servidor Principal
 // ============================================
 require('dotenv').config();
+
+// Antes que nada: si los secretos no son seguros, no se arranca.
+require('./config/validateEnv').validateEnv();
+
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -86,6 +90,34 @@ app.use(morgan('dev'));
 const webhookLimiter = rateLimit({ windowMs: 60000, max: 60, standardHeaders: true, legacyHeaders: false });
 const authLimiter = rateLimit({ windowMs: 15 * 60000, max: 10, standardHeaders: true, legacyHeaders: false, skipSuccessfulRequests: true });
 const setupLimiter = rateLimit({ windowMs: 60 * 60000, max: 3, standardHeaders: true, legacyHeaders: false });
+
+// Límite general: hasta ahora solo el login y los webhooks tenían tope, así que
+// un token robado podía volcar toda la base de leads sin resistencia. El límite
+// se cuenta por usuario autenticado cuando lo hay, no por IP: detrás de una
+// oficina con IP única, contar por IP castigaría a todo el equipo junto.
+// El limitador corre antes del middleware de auth, así que req.user todavía no
+// existe: se cuenta por token (hasheado, nunca en claro en memoria del
+// limitador) y se cae a la IP para las rutas anónimas.
+const crypto = require('crypto');
+function rateLimitKey(req) {
+  const token = req.headers.authorization?.split(' ')[1];
+  if (token) return 'tk:' + crypto.createHash('sha256').update(token).digest('hex').slice(0, 32);
+  return 'ip:' + (req.ip || 'desconocida');
+}
+
+const apiLimiter = rateLimit({
+  windowMs: 60000, max: 300, standardHeaders: true, legacyHeaders: false,
+  keyGenerator: rateLimitKey,
+  message: { success: false, message: 'Demasiadas peticiones, espera un momento' },
+});
+
+// Los endpoints de IA cuestan dinero por llamada: van mucho más apretados.
+const aiLimiter = rateLimit({
+  windowMs: 60000, max: 20, standardHeaders: true, legacyHeaders: false,
+  keyGenerator: rateLimitKey,
+  message: { success: false, message: 'Límite de peticiones de IA alcanzado, espera un minuto' },
+});
+
 app.use('/api/webhooks', webhookLimiter);
 app.use('/api/n8n',      webhookLimiter);
 app.use('/api/auth/login', authLimiter);
@@ -96,6 +128,14 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 app.use((req, res, next) => { req.io = io; next(); });
+
+// Se aplica después del body parser y antes de las rutas. Los webhooks quedan
+// fuera: ya tienen su propio límite y no deben competir con el tráfico del CRM.
+app.use('/api', (req, res, next) => {
+  if (req.path.startsWith('/webhooks') || req.path.startsWith('/n8n')) return next();
+  return apiLimiter(req, res, next);
+});
+app.use(['/api/agents', '/api/copilot', '/api/playbooks'], aiLimiter);
 
 // ============================================
 // RUTAS API

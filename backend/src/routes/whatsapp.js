@@ -3,7 +3,7 @@ const router = express.Router();
 const axios = require('axios');
 const Lead = require('../models/Lead');
 const Activity = require('../models/Activity');
-const { auth } = require('../middleware/auth');
+const { auth, checkPerm } = require('../middleware/auth');
 const { processInboundMessage } = require('../services/aiAgent');
 const metaWA = require('../services/whatsappMetaService');
 
@@ -23,7 +23,7 @@ const sendWhatsApp = async ({ to, message, templateName, templateParams, mediaUr
 // ============================================
 
 // POST /api/whatsapp/send — envio manual desde el CRM
-router.post('/send', auth, async (req, res) => {
+router.post('/send', auth, checkPerm('whatsapp.send'), async (req, res) => {
   try {
     const { leadId, message, mediaUrl, mediaType } = req.body;
     
@@ -64,7 +64,7 @@ router.post('/send', auth, async (req, res) => {
 });
 
 // POST /api/whatsapp/template — envio de plantilla aprobada
-router.post('/template', auth, async (req, res) => {
+router.post('/template', auth, checkPerm('whatsapp.send'), async (req, res) => {
   try {
     const { leadId, templateName, templateParams } = req.body;
     
@@ -92,7 +92,7 @@ router.post('/template', auth, async (req, res) => {
 });
 
 // GET /api/whatsapp/templates — lista de plantillas aprobadas
-router.get('/templates', auth, async (req, res) => {
+router.get('/templates', auth, checkPerm('whatsapp.view'), async (req, res) => {
   // Plantillas predefinidas para ACON
   const templates = [
     {
@@ -129,7 +129,7 @@ const CHAT_TYPES = ['whatsapp_in', 'whatsapp_out', 'email_in', 'email_out'];
 const INBOUND_TYPES = ['whatsapp_in', 'email_in'];
 
 // GET /api/whatsapp/conversations — bandeja con último mensaje y no leídos
-router.get('/conversations', auth, async (req, res) => {
+router.get('/conversations', auth, checkPerm('whatsapp.view'), async (req, res) => {
   try {
     const Lead = require('../models/Lead');
 
@@ -184,7 +184,7 @@ router.get('/conversations', auth, async (req, res) => {
 });
 
 // GET /api/whatsapp/conversations/:leadId — hilo completo (WhatsApp + correo)
-router.get('/conversations/:leadId', auth, async (req, res) => {
+router.get('/conversations/:leadId', auth, checkPerm('whatsapp.view'), async (req, res) => {
   try {
     const activities = await Activity.find({
       lead: req.params.leadId,
@@ -200,7 +200,7 @@ router.get('/conversations/:leadId', auth, async (req, res) => {
 });
 
 // POST /api/whatsapp/conversations/:leadId/read — marcar la conversación leída
-router.post('/conversations/:leadId/read', auth, async (req, res) => {
+router.post('/conversations/:leadId/read', auth, checkPerm('whatsapp.view'), async (req, res) => {
   try {
     const r = await Activity.updateMany(
       { lead: req.params.leadId, type: { $in: INBOUND_TYPES }, 'metadata.isRead': { $ne: true } },
@@ -324,7 +324,7 @@ async function handleIncomingMessage(msg, contact, io) {
 }
 
 // GET /api/whatsapp/meta/status — check if Meta Cloud API is configured
-router.get('/meta/status', auth, (req, res) => {
+router.get('/meta/status', auth, checkPerm('whatsapp.view'), (req, res) => {
   res.json({
     success: true,
     data: {
@@ -335,7 +335,7 @@ router.get('/meta/status', auth, (req, res) => {
 });
 
 // GET /api/whatsapp/meta/templates — list approved templates from Meta
-router.get('/meta/templates', auth, async (req, res) => {
+router.get('/meta/templates', auth, checkPerm('whatsapp.templates'), async (req, res) => {
   try {
     const templates = await metaWA.listTemplates();
     res.json({ success: true, data: templates });
@@ -345,7 +345,7 @@ router.get('/meta/templates', auth, async (req, res) => {
 });
 
 // POST /api/whatsapp/meta/send-text — send text via Meta Cloud API
-router.post('/meta/send-text', auth, async (req, res) => {
+router.post('/meta/send-text', auth, checkPerm('whatsapp.send'), async (req, res) => {
   try {
     const { to, message, leadId } = req.body;
     if (!to || !message) return res.status(400).json({ success: false, message: 'Falta teléfono o mensaje' });
@@ -370,7 +370,7 @@ router.post('/meta/send-text', auth, async (req, res) => {
 });
 
 // POST /api/whatsapp/meta/send-template — send approved template
-router.post('/meta/send-template', auth, async (req, res) => {
+router.post('/meta/send-template', auth, checkPerm('whatsapp.send'), async (req, res) => {
   try {
     const { to, templateName, languageCode, components, leadId } = req.body;
     if (!to || !templateName) return res.status(400).json({ success: false, message: 'Falta teléfono o template' });

@@ -149,6 +149,15 @@ const startCronJobs = (io) => {
   // ============================================
   // JOB 5: Ejecutar reglas de seguimiento auto — cada día 9:30am L-V
   // ============================================
+  // Acciones de playbook con retraso (delayDays): se ejecutan al vencer.
+  new CronJob('*/10 * * * *', async () => {
+    try {
+      await require('./playbookRunner').processDue(io);
+    } catch (err) {
+      console.error('[cron] playbook diferido:', err.message);
+    }
+  }, null, true, 'America/Mexico_City');
+
   new CronJob('30 9 * * 1-5', async () => {
     console.log('⏰ Cron: Ejecutando reglas de seguimiento automático...');
     try {

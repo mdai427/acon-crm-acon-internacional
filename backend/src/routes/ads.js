@@ -15,11 +15,12 @@ const auth = (req, res, next) => {
 };
 
 const { FRONTEND_URL, BACKEND_URL } = require('../config/urls');
+const oauthState = require('../services/oauthState');
 
 // ─── META (Facebook / Instagram Ads) ───────────────────────
 
 router.get('/meta/url', auth, (req, res) => {
-  const state = Buffer.from(JSON.stringify({ userId: req.user.id, ts: Date.now() })).toString('base64');
+  const state = oauthState.issue(req.user.id, 'meta_ads');
   const params = new URLSearchParams({
     client_id:     process.env.META_APP_ID || '',
     redirect_uri:  `${BACKEND_URL}/api/ads/meta/callback`,
@@ -34,7 +35,9 @@ router.get('/meta/callback', async (req, res) => {
   const { code, state, error } = req.query;
   if (error) return res.redirect(`${FRONTEND_URL}/marketing?tab=ads&error=meta_denied`);
   try {
-    const { userId } = JSON.parse(Buffer.from(state, 'base64').toString());
+    const claim = oauthState.consume(state, 'meta_ads');
+    if (!claim) return res.redirect(`${FRONTEND_URL}/marketing?tab=ads&error=invalid_state`);
+    const userId = claim.userId;
     // Exchange code for token
     const tokenRes = await axios.get('https://graph.facebook.com/v19.0/oauth/access_token', {
       params: {
@@ -71,7 +74,7 @@ router.get('/meta/callback', async (req, res) => {
 // ─── LINKEDIN ADS ───────────────────────────────────────────
 
 router.get('/linkedin/url', auth, (req, res) => {
-  const state = Buffer.from(JSON.stringify({ userId: req.user.id, ts: Date.now() })).toString('base64');
+  const state = oauthState.issue(req.user.id, 'linkedin_ads');
   const params = new URLSearchParams({
     response_type: 'code',
     client_id:     process.env.LINKEDIN_CLIENT_ID || '',
@@ -86,7 +89,9 @@ router.get('/linkedin/callback', async (req, res) => {
   const { code, state, error } = req.query;
   if (error) return res.redirect(`${FRONTEND_URL}/marketing?tab=ads&error=linkedin_denied`);
   try {
-    const { userId } = JSON.parse(Buffer.from(state, 'base64').toString());
+    const claim = oauthState.consume(state, 'linkedin_ads');
+    if (!claim) return res.redirect(`${FRONTEND_URL}/marketing?tab=ads&error=invalid_state`);
+    const userId = claim.userId;
     const tokenRes = await axios.post(
       'https://www.linkedin.com/oauth/v2/accessToken',
       new URLSearchParams({
@@ -131,7 +136,7 @@ router.get('/google/url', auth, (req, res) => {
     process.env.GOOGLE_CLIENT_SECRET,
     `${BACKEND_URL}/api/ads/google/callback`
   );
-  const state = Buffer.from(JSON.stringify({ userId: req.user.id, ts: Date.now() })).toString('base64');
+  const state = oauthState.issue(req.user.id, 'google_ads');
   const url = oauth2Client.generateAuthUrl({
     access_type: 'offline',
     prompt: 'consent',
@@ -149,7 +154,9 @@ router.get('/google/callback', async (req, res) => {
   if (error) return res.redirect(`${FRONTEND_URL}/marketing?tab=ads&error=google_ads_denied`);
   try {
     const { google } = require('googleapis');
-    const { userId } = JSON.parse(Buffer.from(state, 'base64').toString());
+    const claim = oauthState.consume(state, 'google_ads');
+    if (!claim) return res.redirect(`${FRONTEND_URL}/marketing?tab=ads&error=invalid_state`);
+    const userId = claim.userId;
     const oauth2Client = new google.auth.OAuth2(
       process.env.GOOGLE_CLIENT_ID,
       process.env.GOOGLE_CLIENT_SECRET,

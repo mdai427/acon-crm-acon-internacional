@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const Lead = require('../models/Lead');
 const Activity = require('../models/Activity');
-const { auth, adminOnly } = require('../middleware/auth');
+const { auth, adminOnly, checkPerm } = require('../middleware/auth');
 // El proveedor de correo (Resend o SMTP) se elige en services/mailerService.
 const mailer = require('../services/mailerService');
 const Mailbox = require('../models/Mailbox');
@@ -122,7 +122,7 @@ function threadHeaders(previous) {
 }
 
 // POST /api/email/send
-router.post('/send', auth, async (req, res) => {
+router.post('/send', auth, checkPerm('email.send'), async (req, res) => {
   try {
     const {
       leadId, subject, html, text, template, templateData, attachments,
@@ -204,7 +204,7 @@ router.post('/send', auth, async (req, res) => {
 });
 
 // POST /api/email/bulk — envio masivo a multiples leads
-router.post('/bulk', auth, async (req, res) => {
+router.post('/bulk', auth, checkPerm('marketing.launch'), async (req, res) => {
   try {
     const { leadIds, template, templateData, customSubject, customHtml, mailboxId } = req.body;
 
@@ -296,7 +296,7 @@ router.get('/unsubscribe', async (req, res) => {
 // ── Salud del correo: rebotes y bloqueos ─────────────────────────
 
 // GET /api/email/suppressions — direcciones que dejaron de recibir
-router.get('/suppressions', auth, async (req, res) => {
+router.get('/suppressions', auth, checkPerm('email.blocklist_view'), async (req, res) => {
   try {
     const list = await EmailSuppression.find({ releasedAt: null }).sort({ lastBounceAt: -1 }).limit(500);
     res.json({ success: true, data: list });
@@ -306,7 +306,7 @@ router.get('/suppressions', auth, async (req, res) => {
 });
 
 // POST /api/email/suppressions — bloqueo manual (el contacto pidió no recibir)
-router.post('/suppressions', auth, async (req, res) => {
+router.post('/suppressions', auth, checkPerm('email.blocklist_edit'), async (req, res) => {
   try {
     const { address, detail } = req.body;
     if (!address) return res.status(400).json({ success: false, message: 'Falta la dirección' });
@@ -330,7 +330,7 @@ router.delete('/suppressions/:address', auth, adminOnly, async (req, res) => {
 });
 
 // GET /api/email/templates
-router.get('/templates', auth, (req, res) => {
+router.get('/templates', auth, checkPerm('templates.view'), (req, res) => {
   const list = Object.keys(emailTemplates).map(key => ({
     id: key,
     name: key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),

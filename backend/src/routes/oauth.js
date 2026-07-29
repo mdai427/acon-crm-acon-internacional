@@ -4,6 +4,7 @@ const router = express.Router();
 const { google } = require('googleapis');
 const jwt = require('jsonwebtoken');
 const UserIntegration = require('../models/UserIntegration');
+const oauthState = require('../services/oauthState');
 
 const SCOPES = [
   'https://www.googleapis.com/auth/gmail.readonly',
@@ -42,19 +43,27 @@ router.get('/google/url', auth, (req, res) => {
     access_type: 'offline',
     prompt: 'consent',
     scope: SCOPES,
-    state: req.user.id,
+    state: oauthState.issue(req.user.id, 'google'),
   });
   res.json({ success: true, url });
 });
 
 // GET /api/oauth/google/callback - exchange code for tokens
 router.get('/google/callback', async (req, res) => {
-  const { code, state: userId } = req.query;
+  const { code, state } = req.query;
   const frontendUrl = FRONTEND_URL;
 
-  if (!code || !userId) {
+  if (!code || !state) {
     return res.redirect(`${frontendUrl}/integrations?error=missing_params`);
   }
+
+  // El state es de un solo uso y caduca: si no se canjea, el callback no viene
+  // del flujo que este servidor inició.
+  const claim = oauthState.consume(state, 'google');
+  if (!claim) {
+    return res.redirect(`${frontendUrl}/integrations?error=invalid_state`);
+  }
+  const userId = claim.userId;
 
   try {
     const oauth2Client = getOAuth2Client();

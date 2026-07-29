@@ -2,8 +2,7 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const Catalog = require('../models/Catalog');
-const { auth } = require('../middleware/auth');
-const { checkPerm } = require('../middleware/auth');
+const { auth, checkPerm } = require('../middleware/auth');
 const { USE_S3, uploadBuffer, getPresignedUrl, deleteObject } = require('../services/s3Service');
 const path = require('path');
 const fs = require('fs');
@@ -21,7 +20,7 @@ const imgUpload = multer({
 const VALID_TYPES = ['puerto', 'aduana', 'aeropuerto', 'naviera', 'aerolinea', 'transportista', 'incoterm', 'contenedor', 'ruta_frecuente', 'pais', 'ciudad'];
 
 // GET /api/catalog — todos los registros (con filtro por tipo)
-router.get('/', auth, async (req, res) => {
+router.get('/', auth, checkPerm('catalog.view'), async (req, res) => {
   try {
     const { type, search, active = 'true' } = req.query;
     const filter = {};
@@ -35,7 +34,7 @@ router.get('/', auth, async (req, res) => {
 });
 
 // GET /api/catalog/types — lista de tipos disponibles
-router.get('/types', auth, (req, res) => {
+router.get('/types', auth, checkPerm('catalog.view'), (req, res) => {
   res.json({ success: true, data: VALID_TYPES });
 });
 
@@ -121,7 +120,7 @@ router.delete('/:id/image', auth, checkPerm('catalog.edit'), async (req, res) =>
 });
 
 // POST /api/catalog/seed — sembrar datos iniciales (solo admin)
-router.post('/seed', auth, async (req, res) => {
+router.post('/seed', auth, checkPerm('catalog.edit'), async (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ success: false });
   try {
     const existing = await Catalog.countDocuments();

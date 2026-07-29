@@ -4,9 +4,10 @@
 const { PUBLIC_BASE_URL } = require('../config/urls');
 const express = require('express');
 const agentsRouter = express.Router();
-const { auth } = require('../middleware/auth');
+const { auth, checkPerm } = require('../middleware/auth');
 const { generateEmailDraft, scoreLeadWithAI } = require('../services/aiAgent');
 const Lead = require('../models/Lead');
+const { validatePassword } = require('../utils/passwordPolicy');
 
 agentsRouter.use(auth);
 
@@ -105,7 +106,7 @@ const User = require('../models/User');
 usersRouter.use(auth);
 
 // GET /api/users — todos (admin ve todos; executive/viewer se ve solo a sí mismo)
-usersRouter.get('/', async (req, res) => {
+usersRouter.get('/', checkPerm('users.view'), async (req, res) => {
   try {
     const filter = req.user.role === 'admin' ? {} : { _id: req.user._id };
     const users = await User.find(filter).select('-password').sort({ createdAt: 1 });
@@ -115,13 +116,28 @@ usersRouter.get('/', async (req, res) => {
   }
 });
 
+// Roles que el administrador del CRM NO puede asignar. 'superadmin' es el dueño
+// de la plataforma: ve el costo real de la IA y define el margen de reventa, y
+// su cuenta se crea solo desde el entorno (ver services/superAdmin). Sin este
+// filtro, cualquier admin se promovía a sí mismo con un PUT.
+const UNASSIGNABLE_ROLES = new Set(['superadmin']);
+
+function rejectPrivilegedRole(role) {
+  return role && UNASSIGNABLE_ROLES.has(String(role));
+}
+
 // POST /api/users — crear usuario (solo admin)
-usersRouter.post('/', adminOnly, async (req, res) => {
+usersRouter.post('/', checkPerm('users.create'), async (req, res) => {
   try {
     const { name, email, password, role, phone } = req.body;
+    if (rejectPrivilegedRole(role)) {
+      return res.status(403).json({ success: false, message: 'El rol superadmin solo se configura desde el entorno del servidor' });
+    }
     if (!name || !email || !password) {
       return res.status(400).json({ success: false, message: 'Nombre, email y contraseña son requeridos' });
     }
+    const check = validatePassword(password, { email, name });
+    if (!check.ok) return res.status(400).json({ success: false, message: check.message });
     const exists = await User.findOne({ email: email.toLowerCase() });
     if (exists) {
       return res.status(400).json({ success: false, message: 'El email ya está registrado' });
@@ -140,11 +156,26 @@ usersRouter.put('/:id', async (req, res) => {
     const isAdmin = req.user.role === 'admin';
     if (!isAdmin && !isSelf) return res.status(403).json({ success: false, message: 'Sin permiso' });
 
+    if (rejectPrivilegedRole(req.body.role)) {
+      return res.status(403).json({ success: false, message: 'El rol superadmin solo se configura desde el entorno del servidor' });
+    }
+    // Tampoco se edita al superadmin desde el CRM, ni siquiera para desactivarlo.
+    const target = await User.findById(req.params.id).select('role');
+    if (target?.role === 'superadmin' && !isSelf) {
+      return res.status(403).json({ success: false, message: 'La cuenta de superadmin no se administra desde el CRM' });
+    }
+
     const allowed = isAdmin
       ? ['name', 'role', 'phone', 'isActive', 'notifications']
       : ['name', 'phone', 'notifications'];
     const updates = {};
     allowed.forEach(k => { if (req.body[k] !== undefined) updates[k] = req.body[k]; });
+    // Degradar un rol debe cerrar las sesiones: si no, el usuario sigue
+    // operando con su rol anterior hasta que expire el token.
+    if (updates.role || updates.isActive === false) {
+      updates.sessionsValidFrom = new Date();
+    }
+
     const user = await User.findByIdAndUpdate(req.params.id, updates, { new: true }).select('-password');
     res.json({ success: true, data: user });
   } catch (error) {
@@ -153,15 +184,18 @@ usersRouter.put('/:id', async (req, res) => {
 });
 
 // PUT /api/users/:id/reset-password — admin resetea contraseña
-usersRouter.put('/:id/reset-password', adminOnly, async (req, res) => {
+usersRouter.put('/:id/reset-password', checkPerm('users.edit'), async (req, res) => {
   try {
-    const { newPassword } = req.body;
-    if (!newPassword || newPassword.length < 6) {
-      return res.status(400).json({ success: false, message: 'La contraseña debe tener al menos 6 caracteres' });
-    }
     const user = await User.findById(req.params.id);
     if (!user) return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
+
+    const { newPassword } = req.body;
+    const check = validatePassword(newPassword, { email: user.email, name: user.name });
+    if (!check.ok) return res.status(400).json({ success: false, message: check.message });
     user.password = newPassword;
+    // Un reset hecho por el administrador implica que el usuario perdió el
+    // control de la cuenta: las sesiones abiertas se cierran.
+    user.sessionsValidFrom = new Date();
     await user.save();
     res.json({ success: true, message: 'Contraseña actualizada' });
   } catch (error) {
@@ -170,12 +204,18 @@ usersRouter.put('/:id/reset-password', adminOnly, async (req, res) => {
 });
 
 // DELETE /api/users/:id — desactivar (solo admin, no puede desactivarse a sí mismo)
-usersRouter.delete('/:id', adminOnly, async (req, res) => {
+usersRouter.delete('/:id', checkPerm('users.delete'), async (req, res) => {
   try {
+    const target = await User.findById(req.params.id).select('role');
+    if (target?.role === 'superadmin') {
+      return res.status(403).json({ success: false, message: 'La cuenta de superadmin no se administra desde el CRM' });
+    }
     if (req.params.id === String(req.user._id)) {
       return res.status(400).json({ success: false, message: 'No puedes desactivar tu propia cuenta' });
     }
-    await User.findByIdAndUpdate(req.params.id, { isActive: false });
+    // El middleware de auth ya rechaza a los usuarios inactivos, pero se
+    // revocan las sesiones igual para cortar también las de socket abiertas.
+    await User.findByIdAndUpdate(req.params.id, { isActive: false, sessionsValidFrom: new Date() });
     res.json({ success: true, message: 'Usuario desactivado' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -300,6 +340,7 @@ pipelineRouter.use(auth);
 
 // Kanban: cache 30 seg por usuario (dato "vivo", se refresca con WS events)
 pipelineRouter.get('/kanban',
+  _checkPerm('pipeline.view'),
   _cacheMw(_TTL.HOT, req => `kanban:${req.user.id}:${req.user.role}`),
   async (req, res) => {
   try {
@@ -356,7 +397,7 @@ pipelineRouter.get('/kanban',
   }
 });
 
-pipelineRouter.put('/move', async (req, res) => {
+pipelineRouter.put('/move', _checkPerm('pipeline.move'), async (req, res) => {
   try {
     const { leadId, newStage } = req.body;
     if (!(await _stages.exists(newStage))) {
@@ -384,7 +425,7 @@ pipelineRouter.put('/move', async (req, res) => {
 // ── Etapas del pipeline ──────────────────────────────────────────────────────
 // Verlas puede cualquiera (el tablero las necesita); editarlas requiere permiso.
 
-pipelineRouter.get('/stages', async (req, res) => {
+pipelineRouter.get('/stages', _checkPerm('pipeline.view'), async (req, res) => {
   try {
     res.json({ success: true, data: await _stages.getStages() });
   } catch (error) {
@@ -395,7 +436,7 @@ pipelineRouter.get('/stages', async (req, res) => {
 // Crea una etapa nueva al final del tablero.
 pipelineRouter.post('/stages', _checkPerm('pipeline.stages'), async (req, res) => {
   try {
-    const { label, color, description } = req.body;
+    const { label, color, description, emoji } = req.body;
     if (!String(label || '').trim()) {
       return res.status(400).json({ success: false, message: 'La etapa necesita un nombre' });
     }
@@ -410,6 +451,7 @@ pipelineRouter.post('/stages', _checkPerm('pipeline.stages'), async (req, res) =
       key: await _stages.buildKey(label),
       label: String(label).trim(),
       color: color || '#6B7280',
+      emoji: String(emoji || '').slice(0, 4),
       description,
       type: 'open',
       order,
@@ -428,25 +470,9 @@ pipelineRouter.post('/stages', _checkPerm('pipeline.stages'), async (req, res) =
   }
 });
 
-// Renombrar, recolorear o describir. La clave y el tipo no se tocan: hay leads
-// y lógica de negocio apuntando a ellos.
-pipelineRouter.put('/stages/:id', _checkPerm('pipeline.stages'), async (req, res) => {
-  try {
-    const updates = {};
-    for (const campo of ['label', 'color', 'description']) {
-      if (req.body[campo] !== undefined) updates[campo] = req.body[campo];
-    }
-    const stage = await PipelineStage.findByIdAndUpdate(req.params.id, updates, { new: true });
-    if (!stage) return res.status(404).json({ success: false, message: 'Etapa no encontrada' });
-
-    _stages.invalidate();
-    res.json({ success: true, data: stage, message: 'Etapa actualizada' });
-  } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
-  }
-});
-
 // Reordenar: llega la lista de ids en el orden deseado.
+// OJO: declarada antes que /stages/:id — si no, Express manda "reorder" al
+// parámetro :id y el cast a ObjectId revienta.
 pipelineRouter.put('/stages/reorder', _checkPerm('pipeline.stages'), async (req, res) => {
   try {
     const { order } = req.body;
@@ -458,6 +484,24 @@ pipelineRouter.put('/stages/reorder', _checkPerm('pipeline.stages'), async (req,
     ));
     _stages.invalidate();
     res.json({ success: true, data: await _stages.getStages(), message: 'Orden actualizado' });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+// Renombrar, recolorear o describir. La clave y el tipo no se tocan: hay leads
+// y lógica de negocio apuntando a ellos.
+pipelineRouter.put('/stages/:id', _checkPerm('pipeline.stages'), async (req, res) => {
+  try {
+    const updates = {};
+    for (const campo of ['label', 'color', 'description', 'emoji']) {
+      if (req.body[campo] !== undefined) updates[campo] = req.body[campo];
+    }
+    const stage = await PipelineStage.findByIdAndUpdate(req.params.id, updates, { new: true });
+    if (!stage) return res.status(404).json({ success: false, message: 'Etapa no encontrada' });
+
+    _stages.invalidate();
+    res.json({ success: true, data: stage, message: 'Etapa actualizada' });
   } catch (error) {
     res.status(400).json({ success: false, message: error.message });
   }

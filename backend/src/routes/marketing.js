@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
-const { auth } = require('../middleware/auth');
+const { auth, checkPerm } = require('../middleware/auth');
 const Lead = require('../models/Lead');
 const Activity = require('../models/Activity');
 const { cacheMiddleware } = require('../middleware/cacheMiddleware');
@@ -11,6 +11,7 @@ const Mailbox = require('../models/Mailbox');
 const CampaignRecipient = require('../models/CampaignRecipient');
 const campaignSender = require('../services/campaignSender');
 const mailer = require('../services/mailerService');
+const { pick } = require('../utils/pick');
 
 // ── Schemas ──────────────────────────────────────────────────────
 const campaignSchema = new mongoose.Schema({
@@ -80,10 +81,18 @@ const automationSchema = new mongoose.Schema({
 const Campaign = mongoose.models.Campaign || mongoose.model('Campaign', campaignSchema);
 const Automation = mongoose.models.Automation || mongoose.model('Automation', automationSchema);
 
+// Campos que el cliente puede escribir. Los contadores (sentCount, openCount…)
+// quedan fuera a propósito: los llenan los webhooks del proveedor, y dejarlos
+// abiertos permitiría inventar los resultados de una campaña.
+const CAMPAIGN_FIELDS = ['name', 'type', 'status', 'segment', 'subject', 'body',
+  'bodyType', 'templateId', 'mailbox', 'scheduledAt'];
+const AUTOMATION_FIELDS = ['name', 'isActive', 'trigger', 'actions'];
+
 router.use(auth);
 
 // ── Campaigns ─────────────────────────────────────────────────────
 router.get('/campaigns',
+  checkPerm('marketing.view'),
   cacheMiddleware(TTL.LIVE, () => 'marketing:campaigns'),
   async (req, res) => {
   try {
@@ -92,23 +101,23 @@ router.get('/campaigns',
   } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 
-router.post('/campaigns', async (req, res) => {
+router.post('/campaigns', checkPerm('marketing.create'), async (req, res) => {
   try {
-    const campaign = await Campaign.create({ ...req.body, createdBy: req.user._id });
+    const campaign = await Campaign.create({ ...pick(req.body, CAMPAIGN_FIELDS), createdBy: req.user._id });
     invalidateMarketing();
     res.json({ success: true, data: campaign });
   } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 
-router.put('/campaigns/:id', async (req, res) => {
+router.put('/campaigns/:id', checkPerm('marketing.create'), async (req, res) => {
   try {
-    const campaign = await Campaign.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    const campaign = await Campaign.findByIdAndUpdate(req.params.id, pick(req.body, CAMPAIGN_FIELDS), { new: true });
     invalidateMarketing();
     res.json({ success: true, data: campaign });
   } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 
-router.delete('/campaigns/:id', async (req, res) => {
+router.delete('/campaigns/:id', checkPerm('marketing.delete'), async (req, res) => {
   try {
     await Campaign.findByIdAndDelete(req.params.id);
     invalidateMarketing();
@@ -117,7 +126,7 @@ router.delete('/campaigns/:id', async (req, res) => {
 });
 
 // POST /api/marketing/campaigns/:id/launch — enqueue async job
-router.post('/campaigns/:id/launch', async (req, res) => {
+router.post('/campaigns/:id/launch', checkPerm('marketing.launch'), async (req, res) => {
   try {
     const campaign = await Campaign.findById(req.params.id);
     if (!campaign) return res.status(404).json({ success: false, message: 'Campaña no encontrada' });
@@ -131,7 +140,7 @@ router.post('/campaigns/:id/launch', async (req, res) => {
 // POST /api/marketing/campaigns/:id/test — prueba antes de disparar a todos.
 // Se envía a la dirección que pida el usuario, sin tocar contadores ni
 // registrar destinatarios.
-router.post('/campaigns/:id/test', async (req, res) => {
+router.post('/campaigns/:id/test', checkPerm('marketing.launch'), async (req, res) => {
   try {
     const campaign = await Campaign.findById(req.params.id);
     if (!campaign) return res.status(404).json({ success: false, message: 'Campaña no encontrada' });
@@ -162,7 +171,7 @@ router.post('/campaigns/:id/test', async (req, res) => {
 // GET /api/marketing/campaigns/:id/metrics — resultado real del envío.
 // Los porcentajes se calculan sobre los entregados, no sobre los enviados:
 // medir aperturas contra correos que rebotaron infla la tasa.
-router.get('/campaigns/:id/metrics', async (req, res) => {
+router.get('/campaigns/:id/metrics', checkPerm('marketing.view'), async (req, res) => {
   try {
     const campaign = await Campaign.findById(req.params.id).lean();
     if (!campaign) return res.status(404).json({ success: false, message: 'Campaña no encontrada' });
@@ -217,6 +226,7 @@ router.get('/campaigns/:id/metrics', async (req, res) => {
 
 // ── Automations ───────────────────────────────────────────────────
 router.get('/automations',
+  checkPerm('marketing.view'),
   cacheMiddleware(TTL.LIVE, () => 'marketing:automations'),
   async (req, res) => {
   try {
@@ -225,23 +235,23 @@ router.get('/automations',
   } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 
-router.post('/automations', async (req, res) => {
+router.post('/automations', checkPerm('marketing.create'), async (req, res) => {
   try {
-    const automation = await Automation.create({ ...req.body, createdBy: req.user._id });
+    const automation = await Automation.create({ ...pick(req.body, AUTOMATION_FIELDS), createdBy: req.user._id });
     invalidateMarketing();
     res.json({ success: true, data: automation });
   } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 
-router.put('/automations/:id', async (req, res) => {
+router.put('/automations/:id', checkPerm('marketing.create'), async (req, res) => {
   try {
-    const automation = await Automation.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    const automation = await Automation.findByIdAndUpdate(req.params.id, pick(req.body, AUTOMATION_FIELDS), { new: true });
     invalidateMarketing();
     res.json({ success: true, data: automation });
   } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 
-router.delete('/automations/:id', async (req, res) => {
+router.delete('/automations/:id', checkPerm('marketing.delete'), async (req, res) => {
   try {
     await Automation.findByIdAndDelete(req.params.id);
     invalidateMarketing();
@@ -250,7 +260,7 @@ router.delete('/automations/:id', async (req, res) => {
 });
 
 // ── Segments — preview ─────────────────────────────────────────────
-router.post('/segments/preview', async (req, res) => {
+router.post('/segments/preview', checkPerm('marketing.view'), async (req, res) => {
   try {
     const { services, stages, countries, minScore } = req.body;
     const filter = { isActive: true };
@@ -268,6 +278,7 @@ router.post('/segments/preview', async (req, res) => {
 // ── Analytics ──────────────────────────────────────────────────────
 // Cache 5 min: agrega múltiples collections
 router.get('/analytics',
+  checkPerm('marketing.view'),
   cacheMiddleware(TTL.COMPUTED, () => 'marketing:analytics'),
   async (req, res) => {
   try {

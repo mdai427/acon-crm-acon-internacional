@@ -136,7 +136,11 @@ router.get('/', auth, checkPerm('integrations.manage'), async (req, res) => {
         meta:      `/api/webhooks/meta`,
         generic:   `/api/webhooks/generic`,
         linkedin:  `/api/webhooks/linkedin`,
-        apiKeyHint: process.env.WEBHOOK_API_KEY || process.env.JWT_SECRET?.slice(0, 20) || '',
+        // Nunca se devuelve la clave: solo si está configurada. Antes se
+        // enviaba un trozo del JWT_SECRET como "pista", que quedaba en el
+        // navegador y en cualquier proxy intermedio — con el secreto de las
+        // sesiones dentro.
+        apiKeyConfigured: !!process.env.WEBHOOK_API_KEY,
         publicBaseUrl: PUBLIC_BASE_URL,
         isLocalhost,
       }

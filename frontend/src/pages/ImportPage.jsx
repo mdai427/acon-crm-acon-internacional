@@ -17,36 +17,132 @@ const COL_MAP = {
   servicios: 'services', services: 'services',
 };
 
+// Se usa exceljs en lugar de la librería `xlsx` (SheetJS): esa arrastra CVE de
+// alta severidad sin parche disponible, y aquí se abren archivos que llegan de
+// fuera —listas de clientes, exportaciones de otros sistemas—, que es
+// exactamente el caso que esas vulnerabilidades explotan.
+const MAX_IMPORT_ROWS = 5000;
+
+// El valor de una celda puede venir como objeto: fórmulas, hipervínculos,
+// texto enriquecido o fechas. Se normaliza a texto plano.
+function cellText(value) {
+  if (value === null || value === undefined) return '';
+  if (value instanceof Date) return value.toLocaleDateString('es-MX');
+  if (typeof value === 'object') {
+    if (value.text) return String(value.text);
+    if (value.result !== undefined) return String(value.result);
+    if (Array.isArray(value.richText)) return value.richText.map(r => r.text).join('');
+    if (value.hyperlink) return String(value.hyperlink);
+    return '';
+  }
+  return String(value);
+}
+
+// El lector de CSV de exceljs espera streams de Node, que en el navegador no
+// están disponibles de forma fiable. Un CSV es texto plano: se parsea aquí,
+// respetando comillas, comas dentro de comillas y comillas escapadas ("").
+function parseCsv(text) {
+  // El separador se decide una sola vez, mirando la cabecera: Excel en español
+  // exporta con ';' y tratar ambos a la vez partiría en dos cualquier campo que
+  // contenga el otro carácter.
+  const firstLine = text.split('\n')[0] || '';
+  const delimiter = (firstLine.match(/;/g)?.length || 0) > (firstLine.match(/,/g)?.length || 0) ? ';' : ',';
+
+  const rows = [];
+  let row = [], field = '', inQuotes = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+
+    if (inQuotes) {
+      if (char === '"') {
+        if (text[i + 1] === '"') { field += '"'; i++; }
+        else inQuotes = false;
+      } else field += char;
+      continue;
+    }
+
+    if (char === '"') inQuotes = true;
+    else if (char === delimiter) { row.push(field); field = ''; }
+    else if (char === '\n') { row.push(field); rows.push(row); row = []; field = ''; }
+    else if (char !== '\r') field += char;
+  }
+  if (field || row.length) { row.push(field); rows.push(row); }
+
+  return rows.filter(r => r.some(cell => cell.trim()));
+}
+
+/**
+ * Lee la primera hoja del archivo y devuelve las filas ya mapeadas a los campos
+ * del CRM según `map`. La primera fila se toma como cabecera.
+ */
+async function parseSheet(file, map, isValidRow) {
+  const isCsv = file.name.toLowerCase().endsWith('.csv');
+
+  // Se normaliza todo a una matriz de texto: así el mapeo es el mismo para
+  // .xlsx y .csv.
+  let matrix;
+  if (isCsv) {
+    matrix = parseCsv(await file.text());
+  } else {
+    const ExcelJS = (await import('exceljs')).default || (await import('exceljs'));
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(await file.arrayBuffer());
+
+    const sheet = workbook.worksheets[0];
+    if (!sheet) return [];
+    matrix = [];
+    sheet.eachRow({ includeEmpty: false }, (excelRow) => {
+      const cells = [];
+      // `values` es 1-indexado en exceljs; se descarta el hueco inicial.
+      excelRow.eachCell({ includeEmpty: true }, (cell, col) => { cells[col - 1] = cellText(cell.value); });
+      matrix.push(cells);
+    });
+  }
+
+  if (matrix.length < 2) return [];
+
+  const headers = matrix[0].map(h => map[String(h || '').toLowerCase().trim()]);
+
+  const rows = [];
+  for (let i = 1; i < matrix.length && rows.length < MAX_IMPORT_ROWS; i++) {
+    const out = {};
+    headers.forEach((key, col) => {
+      if (!key) return;
+      const value = String(matrix[i][col] ?? '').trim();
+      if (value) out[key] = value;
+    });
+    if (isValidRow(out)) rows.push(out);
+  }
+  return rows;
+}
+
 function parseXLSX(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        // Dynamic import of xlsx
-        import('xlsx').then(XLSX => {
-          const wb = XLSX.read(e.target.result, { type: 'array' });
-          const ws = wb.Sheets[wb.SheetNames[0]];
-          const raw = XLSX.utils.sheet_to_json(ws, { defval: '' });
-          if (!raw.length) return resolve([]);
+  return parseSheet(file, COL_MAP, (r) => r.company || r.contact);
+}
 
-          const rows = raw.map(row => {
-            const out = {};
-            Object.entries(row).forEach(([k, v]) => {
-              const key = COL_MAP[k.toLowerCase().trim()];
-              if (key) out[key] = String(v).trim();
-            });
-            return out;
-          }).filter(r => r.company || r.contact);
+/**
+ * Genera y descarga una plantilla .xlsx de ejemplo.
+ * @param {string[]} headers
+ * @param {Array<string|number>} example fila de muestra
+ */
+async function downloadSheetTemplate(headers, example, sheetName, filename) {
+  const ExcelJS = (await import('exceljs')).default || (await import('exceljs'));
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet(sheetName);
+  sheet.addRow(headers).font = { bold: true };
+  sheet.addRow(example);
+  sheet.columns.forEach((col, i) => { col.width = Math.min(Math.max(headers[i].length + 4, 14), 30); });
 
-          resolve(rows);
-        });
-      } catch (err) {
-        reject(err);
-      }
-    };
-    reader.onerror = reject;
-    reader.readAsArrayBuffer(file);
-  });
+  const buffer = await workbook.xlsx.writeBuffer();
+  const url = URL.createObjectURL(new Blob([buffer], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 const QUOTE_COL_MAP = {
@@ -166,37 +262,28 @@ export default function ImportPage({ toast, onNavigate }) {
     }
   };
 
-  const downloadTemplate = () => {
-    import('xlsx').then(XLSX => {
-      const ws = XLSX.utils.aoa_to_sheet([
-        ['company','contact','email','phone','whatsapp','source','stage','country','value','notes','services'],
-        ['ACME Corp','Juan Pérez','juan@acme.com','5551234567','5551234567','web','new','México','50000','Cliente potencial','maritimo'],
-      ]);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Leads');
-      XLSX.writeFile(wb, 'plantilla_importacion_leads.xlsx');
-    });
-  };
+  const downloadTemplate = () => downloadSheetTemplate(
+    ['company','contact','email','phone','whatsapp','source','stage','country','value','notes','services'],
+    ['ACME Corp','Juan Pérez','juan@acme.com','5551234567','5551234567','web','new','México','50000','Cliente potencial','maritimo'],
+    'Leads', 'plantilla_importacion_leads.xlsx',
+  ).catch(() => toast('No se pudo generar la plantilla', 'error'));
 
   const handleImportQuotes = async () => {
     if (!file) return;
     setImporting(true);
     try {
-      const rows = await parseXLSX(file);
-      if (!rows.length) return toast('No hay filas válidas para importar', 'error');
-
-      // Map columns
-      const quotes = rows.map(raw => {
-        const q = {};
-        Object.entries(raw).forEach(([k, v]) => {
-          const key = QUOTE_COL_MAP[k.toLowerCase().trim()];
-          if (key) q[key] = String(v).trim();
-        });
-        // Normalize serviceType
-        if (q.serviceType) q.serviceType = SERVICE_MAP[q.serviceType.toLowerCase()] || 'maritimo_fcl';
-        if (!q.serviceType) q.serviceType = 'maritimo_fcl';
-        return q;
-      }).filter(q => q.clientName || q.folio);
+      // Se parsea directamente con el mapa de cotizaciones. Antes se usaba el
+      // de leads y luego se intentaba traducir otra vez sobre claves ya
+      // convertidas, así que ninguna columna casaba.
+      const quotes = (await parseSheet(file, QUOTE_COL_MAP, (q) => q.clientName || q.folio))
+        .map(q => ({
+          ...q,
+          serviceType: q.serviceType
+            ? (SERVICE_MAP[q.serviceType.toLowerCase()] || 'maritimo_fcl')
+            : 'maritimo_fcl',
+        }));
+      if (!quotes.length) return toast('No hay filas válidas para importar', 'error');
+      const rows = quotes;
 
       let created = 0, errs = [];
       for (const q of quotes) {
@@ -210,17 +297,11 @@ export default function ImportPage({ toast, onNavigate }) {
     finally { setImporting(false); }
   };
 
-  const downloadQuoteTemplate = () => {
-    import('xlsx').then(XLSX => {
-      const ws = XLSX.utils.aoa_to_sheet([
-        ['folio','serviceType','clientName','contactName','clientEmail','clientPhone','origin','destination','incoterm','carrier','commodity','totalUSD','notes'],
-        ['COT-2024-0001','maritimo_fcl','ACME Corp','Juan Pérez','juan@acme.com','5551234567','Shanghai','Manzanillo','FOB','Maersk','Autopartes','5000','Urgente'],
-      ]);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Cotizaciones');
-      XLSX.writeFile(wb, 'plantilla_importacion_cotizaciones.xlsx');
-    });
-  };
+  const downloadQuoteTemplate = () => downloadSheetTemplate(
+    ['folio','serviceType','clientName','contactName','clientEmail','clientPhone','origin','destination','incoterm','carrier','commodity','totalUSD','notes'],
+    ['COT-2024-0001','maritimo_fcl','ACME Corp','Juan Pérez','juan@acme.com','5551234567','Shanghai','Manzanillo','FOB','Maersk','Autopartes','5000','Urgente'],
+    'Cotizaciones', 'plantilla_importacion_cotizaciones.xlsx',
+  ).catch(() => toast('No se pudo generar la plantilla', 'error'));
 
   return (
     <div className="page">

@@ -60,6 +60,14 @@ const AI_AGENTS = [
     where: 'Cotizador',
   },
   {
+    id: 'playbook_agent',
+    name: 'Agente de playbooks',
+    description: 'Redacta y ejecuta las acciones automáticas del pipeline',
+    kind: 'chat',
+    defaultModel: 'gpt-4o-mini',
+    where: 'Al entrar un lead a una etapa con playbook',
+  },
+  {
     id: 'stage_tasks',
     name: 'Tareas por etapa',
     description: 'Genera el plan de 4 acciones al mover un lead de etapa',

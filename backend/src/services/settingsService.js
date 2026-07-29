@@ -58,9 +58,13 @@ const SUPERADMIN_ONLY_KEYS = new Set([...PROVIDER_ENV_KEYS, 'OPENAI_MODEL']);
 
 const isClientKey = (key) => ALLOWED_KEYS.has(key) && !SUPERADMIN_ONLY_KEYS.has(key);
 
+// La clave de cifrado es independiente del secreto de sesión a propósito:
+// reutilizar JWT_SECRET significaba que rotarlo dejaba ilegible toda la
+// configuración guardada, y que una filtración comprometía ambas cosas.
+// validateEnv exige ENCRYPTION_KEY al arrancar, así que aquí ya existe.
 function getKey() {
-  const raw = process.env.ENCRYPTION_KEY || process.env.JWT_SECRET;
-  if (!raw) throw new Error('Falta ENCRYPTION_KEY (o JWT_SECRET) para cifrar la configuración');
+  const raw = process.env.ENCRYPTION_KEY;
+  if (!raw) throw new Error('Falta ENCRYPTION_KEY para cifrar la configuración');
   return crypto.createHash('sha256').update(raw).digest(); // 32 bytes
 }
 

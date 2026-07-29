@@ -13,6 +13,8 @@ const pipelineStageSchema = new mongoose.Schema({
   // Orden de izquierda a derecha en el tablero.
   order: { type: Number, default: 0 },
   color: { type: String, default: '#6B7280' },
+  // Emoji opcional que acompaña al nombre en el tablero y los playbooks.
+  emoji: { type: String, default: '' },
 
   // 'open'  → sigue en juego
   // 'won'   → cierre ganado (dispara comisiones y cuenta como venta)
@@ -32,13 +34,13 @@ pipelineStageSchema.index({ order: 1 });
 // Las siete etapas con las que nació el CRM. Se siembran si la colección está
 // vacía, de modo que una instalación existente no note el cambio.
 const DEFAULT_STAGES = [
-  { key: 'new',         label: 'Nuevos',       order: 0, color: '#6366F1', type: 'open', isSystem: true },
-  { key: 'contacted',   label: 'Contactados',  order: 1, color: '#3B82F6', type: 'open' },
-  { key: 'qualified',   label: 'Calificados',  order: 2, color: '#F59E0B', type: 'open' },
-  { key: 'proposal',    label: 'Propuesta',    order: 3, color: '#F97316', type: 'open' },
-  { key: 'negotiation', label: 'Negociación',  order: 4, color: '#8B5CF6', type: 'open' },
-  { key: 'closed_won',  label: 'Ganado',       order: 5, color: '#16A34A', type: 'won',  isSystem: true },
-  { key: 'closed_lost', label: 'Perdido',      order: 6, color: '#DC2626', type: 'lost', isSystem: true },
+  { key: 'new',         label: 'Nuevos',       order: 0, color: '#6366F1', emoji: '✨', type: 'open', isSystem: true },
+  { key: 'contacted',   label: 'Contactados',  order: 1, color: '#3B82F6', emoji: '📞', type: 'open' },
+  { key: 'qualified',   label: 'Calificados',  order: 2, color: '#F59E0B', emoji: '⭐', type: 'open' },
+  { key: 'proposal',    label: 'Propuesta',    order: 3, color: '#F97316', emoji: '📄', type: 'open' },
+  { key: 'negotiation', label: 'Negociación',  order: 4, color: '#8B5CF6', emoji: '🤝', type: 'open' },
+  { key: 'closed_won',  label: 'Ganado',       order: 5, color: '#16A34A', emoji: '🏆', type: 'won',  isSystem: true },
+  { key: 'closed_lost', label: 'Perdido',      order: 6, color: '#DC2626', emoji: '❌', type: 'lost', isSystem: true },
 ];
 
 module.exports = mongoose.model('PipelineStage', pipelineStageSchema);

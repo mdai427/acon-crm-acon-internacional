@@ -538,7 +538,7 @@ export default function ConfigPage({ toast }) {
             <li>URL: <code style={{ color: 'var(--orange)', background: 'var(--dark4)', padding: '1px 6px', borderRadius: 4 }}>{base}/api/webhooks/linkedin</code>
               <button className="btn btn-ghost btn-sm" style={{ marginLeft: 8 }} onClick={() => { navigator.clipboard.writeText(`${base}/api/webhooks/linkedin`); toast('URL copiada', 'success'); }}>📋</button>
             </li>
-            <li>Headers: <code style={{ color: 'var(--orange)', background: 'var(--dark4)', padding: '1px 6px', borderRadius: 4 }}>x-api-key: {cfg?.webhooks?.apiKeyHint}...</code></li>
+            <li>Headers: <code style={{ color: 'var(--orange)', background: 'var(--dark4)', padding: '1px 6px', borderRadius: 4 }}>x-api-key: (tu WEBHOOK_API_KEY)</code></li>
             <li>Body (JSON): company, contact, email, phone, linkedinUrl, message</li>
           </ol>
           <div style={{ marginTop: 10, fontWeight: 700, color: 'var(--text)' }}>Webhook genérico (cualquier fuente):</div>
@@ -576,8 +576,15 @@ export default function ConfigPage({ toast }) {
         ))}
         <div style={{ padding: '10px 14px', background: 'var(--dark3)', borderRadius: 8, border: '1px solid var(--border)', marginTop: 6 }}>
           <span style={{ fontSize: 12, color: 'var(--text3)' }}>API Key (x-api-key header): </span>
-          <code style={{ fontSize: 12, color: 'var(--yellow)' }}>{cfg?.webhooks?.apiKeyHint}...</code>
-          <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>Primeros 20 chars de JWT_SECRET</div>
+          <code style={{ fontSize: 12, color: cfg?.webhooks?.apiKeyConfigured ? 'var(--green)' : 'var(--red)' }}>
+            {cfg?.webhooks?.apiKeyConfigured ? 'configurada' : 'sin configurar'}
+          </code>
+          <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>
+            Es la variable de entorno <code>WEBHOOK_API_KEY</code>. Por seguridad no se muestra:
+            si la perdiste, genera otra con <code>openssl rand -hex 24</code> y actualízala en el
+            servidor y en la herramienta que llama al webhook.
+            {!cfg?.webhooks?.apiKeyConfigured && ' Mientras no exista, los webhooks de ingesta responden 503.'}
+          </div>
         </div>
       </Section>
       </form>

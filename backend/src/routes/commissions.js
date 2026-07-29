@@ -1,12 +1,12 @@
 const express = require('express');
 const router  = express.Router();
 const Commission = require('../models/Commission');
-const { auth, adminOnly } = require('../middleware/auth');
+const { auth, adminOnly, checkPerm } = require('../middleware/auth');
 
 router.use(auth);
 
 // ── GET /api/commissions — lista con filtros ──────────────────
-router.get('/', async (req, res) => {
+router.get('/', checkPerm('commissions.view'), async (req, res) => {
   try {
     const { period, status, userId } = req.query;
     const filter = {};
@@ -44,7 +44,7 @@ router.get('/', async (req, res) => {
 });
 
 // ── GET /api/commissions/summary — resumen por ejecutivo ──────
-router.get('/summary', async (req, res) => {
+router.get('/summary', checkPerm('commissions.view'), async (req, res) => {
   try {
     const { period } = req.query;
     const match = {};
@@ -95,12 +95,12 @@ const DEFAULT_RATES = {
 };
 
 // ── GET /api/commissions/config — defaults globales por servicio ──
-router.get('/config', async (req, res) => {
+router.get('/config', checkPerm('commissions.view'), async (req, res) => {
   res.json({ success: true, data: DEFAULT_RATES });
 });
 
 // ── GET /api/commissions/rules/:userId — reglas del ejecutivo ──
-router.get('/rules/:userId', async (req, res) => {
+router.get('/rules/:userId', checkPerm('commissions.view'), async (req, res) => {
   try {
     const User = require('../models/User');
     const user = await User.findById(req.params.userId).select('name email commissionRules');
@@ -112,7 +112,7 @@ router.get('/rules/:userId', async (req, res) => {
 });
 
 // ── PUT /api/commissions/rules/:userId — guardar reglas del ejecutivo (admin) ──
-router.put('/rules/:userId', adminOnly, async (req, res) => {
+router.put('/rules/:userId', checkPerm('commissions.config'), async (req, res) => {
   try {
     const User = require('../models/User');
     const { commissionRules } = req.body;
@@ -148,7 +148,7 @@ router.put('/rules/:userId', adminOnly, async (req, res) => {
 
 // ── GET /api/commissions/rules-resolved/:userId — reglas efectivas (propias + defaults) ──
 // Devuelve para cada leadType+serviceType el % que aplica: el del ejecutivo si existe, o el default
-router.get('/rules-resolved/:userId', async (req, res) => {
+router.get('/rules-resolved/:userId', checkPerm('commissions.view'), async (req, res) => {
   try {
     const User = require('../models/User');
     const user = await User.findById(req.params.userId).select('commissionRules');
@@ -173,7 +173,7 @@ router.get('/rules-resolved/:userId', async (req, res) => {
 });
 
 // ── POST /api/commissions — crear comisión ────────────────────
-router.post('/', async (req, res) => {
+router.post('/', checkPerm('commissions.create'), async (req, res) => {
   try {
     const data = req.body;
     // Si no se indica usuario, usar el actual
@@ -192,7 +192,7 @@ router.post('/', async (req, res) => {
 });
 
 // ── PUT /api/commissions/:id — actualizar estado ──────────────
-router.put('/:id', async (req, res) => {
+router.put('/:id', checkPerm('commissions.edit'), async (req, res) => {
   try {
     const { status, notes } = req.body;
     const update = { notes };
@@ -217,7 +217,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // ── DELETE /api/commissions/:id ───────────────────────────────
-router.delete('/:id', adminOnly, async (req, res) => {
+router.delete('/:id', checkPerm('commissions.delete'), async (req, res) => {
   try {
     await Commission.findByIdAndDelete(req.params.id);
     res.json({ success: true });

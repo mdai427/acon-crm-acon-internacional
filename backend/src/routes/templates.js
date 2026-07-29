@@ -1,12 +1,14 @@
 const express = require('express');
 const router = express.Router();
-const { auth } = require('../middleware/auth');
+const { auth, checkPerm } = require('../middleware/auth');
 const Template = require('../models/Template');
+const { pick } = require('../utils/pick');
+const TEMPLATE_FIELDS = ['stage', 'channel', 'name', 'subject', 'body', 'isDefault'];
 
 router.use(auth);
 
 // GET /api/templates
-router.get('/', async (req, res) => {
+router.get('/', checkPerm('templates.view'), async (req, res) => {
   try {
     const filter = {};
     if (req.query.stage) filter.stage = req.query.stage;
@@ -19,9 +21,9 @@ router.get('/', async (req, res) => {
 });
 
 // POST /api/templates
-router.post('/', async (req, res) => {
+router.post('/', checkPerm('templates.edit'), async (req, res) => {
   try {
-    const template = await Template.create({ ...req.body, createdBy: req.user._id });
+    const template = await Template.create({ ...pick(req.body, TEMPLATE_FIELDS), createdBy: req.user._id });
     res.status(201).json({ success: true, data: template });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -29,9 +31,9 @@ router.post('/', async (req, res) => {
 });
 
 // PUT /api/templates/:id
-router.put('/:id', async (req, res) => {
+router.put('/:id', checkPerm('templates.edit'), async (req, res) => {
   try {
-    const template = await Template.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    const template = await Template.findByIdAndUpdate(req.params.id, pick(req.body, TEMPLATE_FIELDS), { new: true });
     if (!template) return res.status(404).json({ success: false, message: 'Plantilla no encontrada' });
     res.json({ success: true, data: template });
   } catch (error) {
@@ -40,7 +42,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // DELETE /api/templates/:id
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', checkPerm('templates.edit'), async (req, res) => {
   try {
     await Template.findByIdAndDelete(req.params.id);
     res.json({ success: true, message: 'Plantilla eliminada' });

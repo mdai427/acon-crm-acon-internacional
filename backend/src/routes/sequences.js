@@ -5,6 +5,8 @@ const SequenceEnrollment = require('../models/SequenceEnrollment');
 const Lead = require('../models/Lead');
 const Activity = require('../models/Activity');
 const { auth, managerOnly } = require('../middleware/auth');
+const { pick } = require('../utils/pick');
+const SEQUENCE_FIELDS = ['name', 'description', 'isActive', 'steps', 'autoEnrollTrigger', 'cooldownDays'];
 
 // ── CRUD Sequences ──────────────────────────────────────────────
 
@@ -19,7 +21,7 @@ router.get('/', auth, async (req, res) => {
 // POST /api/sequences
 router.post('/', auth, managerOnly, async (req, res) => {
   try {
-    const seq = await Sequence.create({ ...req.body, createdBy: req.user._id });
+    const seq = await Sequence.create({ ...pick(req.body, SEQUENCE_FIELDS), createdBy: req.user._id });
     res.status(201).json({ success: true, data: seq });
   } catch (e) { res.status(400).json({ success: false, message: e.message }); }
 });
@@ -27,7 +29,7 @@ router.post('/', auth, managerOnly, async (req, res) => {
 // PUT /api/sequences/:id
 router.put('/:id', auth, managerOnly, async (req, res) => {
   try {
-    const seq = await Sequence.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    const seq = await Sequence.findByIdAndUpdate(req.params.id, pick(req.body, SEQUENCE_FIELDS), { new: true });
     if (!seq) return res.status(404).json({ success: false, message: 'No encontrado' });
     res.json({ success: true, data: seq });
   } catch (e) { res.status(400).json({ success: false, message: e.message }); }

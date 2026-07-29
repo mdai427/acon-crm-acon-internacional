@@ -3,25 +3,28 @@ const router = express.Router();
 const Quote = require('../models/Quote');
 const Lead  = require('../models/Lead');
 const Activity = require('../models/Activity');
-const { auth, adminOnly } = require('../middleware/auth');
+const { auth, adminOnly, checkPerm } = require('../middleware/auth');
 const { audit } = require('../services/auditService');
 const { notifyQuoteReviewed } = require('../services/notificationService');
 const { generateQuotePDF } = require('../services/pdfService');
 // Las llamadas a la IA pasan por aiClient para quedar contabilizadas.
 const aiClient = require('../services/aiClient');
 const User = require('../models/User');
+const { scopeToOwner, ownsDocument, safeRegex } = require('../utils/scope');
 
 // GET /api/quotes
-router.get('/', auth, async (req, res) => {
+router.get('/', auth, checkPerm('quotes.view'), async (req, res) => {
   try {
     const { status, leadId, search } = req.query;
-    const filter = {};
+    // El ejecutivo solo ve sus cotizaciones; el filtro va en la query para que
+    // la paginación y los totales también queden bien.
+    const filter = scopeToOwner(req.user, {}, 'createdBy');
     if (status) filter.status = status;
     if (leadId) filter.lead = leadId;
-    if (search) filter.$or = [
-      { folio: { $regex: search, $options: 'i' } },
-      { clientName: { $regex: search, $options: 'i' } },
-    ];
+    if (search) {
+      const rx = safeRegex(search);
+      filter.$or = [{ folio: rx }, { clientName: rx }];
+    }
     const page  = Math.max(1, Number(req.query.page) || 1);
     const lim   = Math.min(Number(req.query.limit) || 50, 100);
     const quotes = await Quote.find(filter)
@@ -37,7 +40,7 @@ router.get('/', auth, async (req, res) => {
 });
 
 // POST /api/quotes
-router.post('/', auth, async (req, res) => {
+router.post('/', auth, checkPerm('quotes.create'), async (req, res) => {
   try {
     // Calcular totales
     const body = req.body;
@@ -60,18 +63,21 @@ router.post('/', auth, async (req, res) => {
 });
 
 // GET /api/quotes/:id
-router.get('/:id', auth, async (req, res) => {
+router.get('/:id', auth, checkPerm('quotes.view'), async (req, res) => {
   try {
     const quote = await Quote.findById(req.params.id)
       .populate('lead', 'company contact email phone')
       .populate('createdBy', 'name phone');
     if (!quote) return res.status(404).json({ success: false, message: 'Cotización no encontrada' });
+    if (!ownsDocument(req.user, quote, 'createdBy')) {
+      return res.status(403).json({ success: false, message: 'Esta cotización es de otro ejecutivo' });
+    }
     res.json({ success: true, data: quote });
   } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 });
 
 // PUT /api/quotes/:id
-router.put('/:id', auth, async (req, res) => {
+router.put('/:id', auth, checkPerm('quotes.edit'), async (req, res) => {
   try {
     const body = req.body;
     const totalUSD = (body.items || []).filter(i => i.currency === 'USD').reduce((s, i) => s + (i.qty * i.unitPrice), 0);
@@ -79,6 +85,9 @@ router.put('/:id', auth, async (req, res) => {
 
     // Snapshot current version before overwriting
     const existing = await Quote.findById(req.params.id).lean();
+    if (existing && !ownsDocument(req.user, existing, 'createdBy')) {
+      return res.status(403).json({ success: false, message: 'Esta cotización es de otro ejecutivo' });
+    }
     const versionPush = existing ? {
       versionNumber: (existing.versions?.length || 0) + 1,
       savedAt: new Date(),
@@ -94,7 +103,7 @@ router.put('/:id', auth, async (req, res) => {
 });
 
 // GET /api/quotes/:id/versions — list version history
-router.get('/:id/versions', auth, async (req, res) => {
+router.get('/:id/versions', auth, checkPerm('quotes.view'), async (req, res) => {
   try {
     const quote = await Quote.findById(req.params.id)
       .populate('versions.savedBy', 'name')
@@ -106,9 +115,14 @@ router.get('/:id/versions', auth, async (req, res) => {
 });
 
 // PUT /api/quotes/:id/status
-router.put('/:id/status', auth, async (req, res) => {
+router.put('/:id/status', auth, checkPerm('quotes.edit'), async (req, res) => {
   try {
     const { status } = req.body;
+    const existing = await Quote.findById(req.params.id).select('createdBy').lean();
+    if (!existing) return res.status(404).json({ success: false, message: 'Cotización no encontrada' });
+    if (!ownsDocument(req.user, existing, 'createdBy')) {
+      return res.status(403).json({ success: false, message: 'Esta cotización es de otro ejecutivo' });
+    }
     const update = { status };
     if (status === 'sent')     update.sentAt = new Date();
     if (status === 'accepted') update.acceptedAt = new Date();
@@ -118,8 +132,13 @@ router.put('/:id/status', auth, async (req, res) => {
 });
 
 // DELETE /api/quotes/:id
-router.delete('/:id', auth, async (req, res) => {
+router.delete('/:id', auth, checkPerm('quotes.delete'), async (req, res) => {
   try {
+    const existing = await Quote.findById(req.params.id).select('createdBy').lean();
+    if (!existing) return res.status(404).json({ success: false, message: 'Cotización no encontrada' });
+    if (!ownsDocument(req.user, existing, 'createdBy')) {
+      return res.status(403).json({ success: false, message: 'Esta cotización es de otro ejecutivo' });
+    }
     await Quote.findByIdAndDelete(req.params.id);
     res.json({ success: true });
   } catch (e) { res.status(500).json({ success: false, message: e.message }); }
@@ -128,7 +147,7 @@ router.delete('/:id', auth, async (req, res) => {
 // ── FLUJO DE APROBACIÓN INTERNA ──────────────────────────────────────────────
 
 // POST /api/quotes/:id/request-approval — ejecutivo solicita aprobación a gerencia
-router.post('/:id/request-approval', auth, async (req, res) => {
+router.post('/:id/request-approval', auth, checkPerm('quotes.edit'), async (req, res) => {
   try {
     const quote = await Quote.findById(req.params.id);
     if (!quote) return res.status(404).json({ success: false, message: 'Cotización no encontrada' });
@@ -164,7 +183,7 @@ router.post('/:id/request-approval', auth, async (req, res) => {
 });
 
 // POST /api/quotes/:id/review — gerencia/admin aprueba o rechaza
-router.post('/:id/review', auth, async (req, res) => {
+router.post('/:id/review', auth, checkPerm('quotes.approve'), async (req, res) => {
   try {
     if (!['admin', 'executive'].includes(req.user.role)) {
       return res.status(403).json({ success: false, message: 'Solo gerencia puede aprobar cotizaciones' });
@@ -226,7 +245,7 @@ router.post('/:id/review', auth, async (req, res) => {
 });
 
 // GET /api/quotes/:id/pdf — generate branded PDF
-router.get('/:id/pdf', auth, async (req, res) => {
+router.get('/:id/pdf', auth, checkPerm('quotes.view'), async (req, res) => {
   try {
     const quote = await Quote.findById(req.params.id)
       .populate('lead', 'company contact email phone')
@@ -247,7 +266,7 @@ router.get('/:id/pdf', auth, async (req, res) => {
 });
 
 // POST /api/quotes/import — bulk import from Excel/CSV (array of quote objects)
-router.post('/import', auth, async (req, res) => {
+router.post('/import', auth, checkPerm('quotes.create'), async (req, res) => {
   try {
     const { quotes: rows } = req.body;
     if (!Array.isArray(rows) || !rows.length) return res.status(400).json({ success: false, message: 'No hay cotizaciones para importar' });
@@ -268,7 +287,7 @@ router.post('/import', auth, async (req, res) => {
 });
 
 // POST /api/quotes/suggest — IA generativa: suggest prices, routes, carriers
-router.post('/suggest', auth, async (req, res) => {
+router.post('/suggest', auth, checkPerm('quotes.create'), async (req, res) => {
   try {
     const { serviceType, origin, destination, containerType, weight, commodity } = req.body;
     if (!serviceType) return res.status(400).json({ success: false, message: 'serviceType requerido' });
@@ -355,7 +374,7 @@ Responde en JSON con este formato:
 });
 
 // GET /api/quotes/pending-approval — listar cotizaciones pendientes de revisión (admin)
-router.get('/pending-approval/list', auth, async (req, res) => {
+router.get('/pending-approval/list', auth, checkPerm('quotes.approve'), async (req, res) => {
   try {
     const quotes = await Quote.find({ status: 'pending_approval' })
       .populate('createdBy', 'name')

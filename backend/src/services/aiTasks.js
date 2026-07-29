@@ -6,14 +6,11 @@
 // Las llamadas a la IA pasan por aiClient para quedar contabilizadas.
 const aiClient = require('./aiClient');
 
+// Etiquetas de respaldo; las reales vienen de la colección de etapas.
 const STAGE_LABELS = {
-  new:         'Nuevo',
-  contacted:   'Contactado',
-  qualified:   'Calificado',
-  proposal:    'Propuesta',
-  negotiation: 'Negociación',
-  closed_won:  'Ganado',
-  closed_lost: 'Perdido',
+  new: 'Nuevo', contacted: 'Contactado', qualified: 'Calificado',
+  proposal: 'Propuesta', negotiation: 'Negociación',
+  closed_won: 'Ganado', closed_lost: 'Perdido',
 };
 
 // Default playbook tasks (used as fallback if OpenAI not configured)
@@ -70,6 +67,13 @@ const DEFAULT_PLAYBOOKS = {
 async function generateStageTasks(lead, stage) {
   const fallback = DEFAULT_PLAYBOOKS[stage] || DEFAULT_PLAYBOOKS['new'];
 
+  // Etiqueta real de la etapa (las etapas son configurables).
+  let stageLabel = STAGE_LABELS[stage] || stage;
+  try {
+    const labels = await require('./pipelineStages').labels();
+    if (labels[stage]) stageLabel = labels[stage];
+  } catch { /* con el respaldo basta */ }
+
   if (!process.env.OPENAI_API_KEY) {
     return fallback.map((title, i) => ({ title, dueInDays: (i + 1) * 2 }));
   }
@@ -86,7 +90,7 @@ Datos del prospecto:
 - Valor estimado: $${lead.value || 0} USD
 - Score IA: ${lead.score || 0}/100
 - Días sin contacto: ${lead.daysSinceLastContact || 0}
-- Etapa actual: ${STAGE_LABELS[stage] || stage}
+- Etapa actual: ${stageLabel}
 
 Responde SOLO con un JSON array de 4 objetos con esta estructura exacta:
 [
@@ -96,7 +100,7 @@ Responde SOLO con un JSON array de 4 objetos con esta estructura exacta:
   { "title": "Cuarta acción", "dueInDays": 7 }
 ]
 
-Las tareas deben ser específicas para la etapa "${STAGE_LABELS[stage]}", relevantes al sector logístico/aduanal y adaptadas al perfil del prospecto. No incluyas texto fuera del JSON.`;
+Las tareas deben ser específicas para la etapa "${stageLabel}", relevantes al sector logístico/aduanal y adaptadas al perfil del prospecto. No incluyas texto fuera del JSON.`;
 
     const response = await aiClient.chat({
       feature: 'stage_tasks',

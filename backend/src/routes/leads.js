@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const Lead = require('../models/Lead');
 const Activity = require('../models/Activity');
-const { auth, adminOnly } = require('../middleware/auth');
+const { auth, adminOnly, checkPerm } = require('../middleware/auth');
 const { audit } = require('../services/auditService');
 const { scoreLeadWithAI } = require('../services/aiAgent');
 const { invalidateLead } = require('../services/cache');
@@ -16,7 +16,7 @@ const { notifyLeadAssigned } = require('../services/notificationService');
 router.use(auth);
 
 // GET /api/leads — lista con filtros y paginacion
-router.get('/', async (req, res) => {
+router.get('/', checkPerm('leads.view'), async (req, res) => {
   try {
     const {
       stage, source, priority, assignedTo, search,
@@ -79,7 +79,7 @@ router.get('/', async (req, res) => {
 });
 
 // GET /api/leads/pipeline — conteo por etapa
-router.get('/pipeline', async (req, res) => {
+router.get('/pipeline', checkPerm('pipeline.view'), async (req, res) => {
   try {
     const filter = { isActive: true };
     if (req.user.role === 'executive') filter.assignedTo = req.user._id;
@@ -112,7 +112,7 @@ router.get('/pipeline', async (req, res) => {
 });
 
 // GET /api/leads/:id
-router.get('/:id', async (req, res) => {
+router.get('/:id', checkPerm('leads.view'), async (req, res) => {
   try {
     const lead = await Lead.findById(req.params.id)
       .populate('assignedTo', 'name email avatar phone');
@@ -139,7 +139,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // POST /api/leads
-router.post('/', async (req, res) => {
+router.post('/', checkPerm('leads.create'), async (req, res) => {
   try {
     const { autoAssignLead } = require('../services/leadAssignment');
     const { researchCompany } = require('../services/companyResearch');
@@ -209,7 +209,7 @@ router.post('/', async (req, res) => {
 });
 
 // POST /api/leads/:id/research — investigación manual de empresa
-router.post('/:id/research', async (req, res) => {
+router.post('/:id/research', checkPerm('leads.edit'), async (req, res) => {
   try {
     const { researchCompany } = require('../services/companyResearch');
     const lead = await Lead.findById(req.params.id);
@@ -225,7 +225,7 @@ router.post('/:id/research', async (req, res) => {
 });
 
 // PUT /api/leads/:id
-router.put('/:id', async (req, res) => {
+router.put('/:id', checkPerm('leads.edit'), async (req, res) => {
   try {
     const lead = await Lead.findById(req.params.id);
     if (!lead) return res.status(404).json({ success: false, message: 'Lead no encontrado' });
@@ -251,39 +251,19 @@ router.put('/:id', async (req, res) => {
 
     // Option B: auto-create AI tasks on stage change (background, no blocking)
     if (stageChanged) {
+      // El playbook de la etapa ejecuta sus acciones (mensajes, correos,
+      // tareas…) en background; ver services/playbookRunner.
       setImmediate(async () => {
         try {
-          const newStage = updates.stage;
-          // Check if playbook exists for this stage
-          const playbook = await Playbook.findOne({ stage: newStage, isActive: true });
-          let tasks;
-          if (playbook && !playbook.useAI && playbook.tasks?.length) {
-            // Option C: use fixed playbook tasks
-            tasks = playbook.tasks.map(t => ({ title: t.title, dueInDays: t.dueInDays }));
-          } else {
-            // Option B: generate with AI (falls back to defaults if no API key)
-            tasks = await generateStageTasks(updated, newStage);
-          }
-          // Create task activities
-          const now = new Date();
-          for (const task of tasks) {
-            const dueDate = new Date(now.getTime() + (task.dueInDays || 2) * 86400000);
-            await Activity.create({
-              lead: lead._id,
-              user: req.user._id,
-              type: 'task',
-              direction: 'internal',
-              content: task.title,
-              isAuto: true,
-              taskData: {
-                completed: false,
-                dueDate,
-                priority: 'medium',
-              },
-            });
-          }
+          const playbookRunner = require('../services/playbookRunner');
+          await playbookRunner.runStageEntry({
+            leadId: lead._id,
+            stageKey: updates.stage,
+            userId: req.user._id,
+            io: req.io,
+          });
         } catch (e) {
-          console.error('[AutoTasks] Error generando tareas:', e.message);
+          console.error('[Playbook] Error ejecutando acciones:', e.message);
         }
       });
     }
@@ -317,7 +297,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // DELETE /api/leads/:id (soft delete)
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', checkPerm('leads.delete'), async (req, res) => {
   try {
     const lead = await Lead.findById(req.params.id).select('company').lean();
     await Lead.findByIdAndUpdate(req.params.id, { isActive: false });
@@ -330,7 +310,7 @@ router.delete('/:id', async (req, res) => {
 });
 
 // POST /api/leads/rescore-all — encola rescoring en background (admin)
-router.post('/rescore-all', adminOnly, async (req, res) => {
+router.post('/rescore-all', checkPerm('leads.rescore'), async (req, res) => {
   try {
     const job = await enqueue('lead_rescore_all', {}, req.user._id);
     res.status(202).json({ success: true, message: 'Rescoring encolado en background', data: { jobId: job._id } });
@@ -340,7 +320,7 @@ router.post('/rescore-all', adminOnly, async (req, res) => {
 });
 
 // POST /api/leads/:id/assign
-router.post('/:id/assign', auth, async (req, res) => {
+router.post('/:id/assign', checkPerm('leads.assign'), async (req, res) => {
   try {
     const { userId } = req.body;
     const lead = await Lead.findByIdAndUpdate(
@@ -365,7 +345,7 @@ router.post('/:id/assign', auth, async (req, res) => {
 });
 
 // POST /api/leads/import — bulk import (async, returns jobId)
-router.post('/import', async (req, res) => {
+router.post('/import', checkPerm('leads.import'), async (req, res) => {
   try {
     const { leads: rows } = req.body;
     if (!Array.isArray(rows) || !rows.length) {
@@ -380,7 +360,7 @@ router.post('/import', async (req, res) => {
 });
 
 // GET /api/leads/:id/stage-suggestions — Option A: get AI task suggestions for current stage
-router.get('/:id/stage-suggestions', async (req, res) => {
+router.get('/:id/stage-suggestions', checkPerm('leads.view'), async (req, res) => {
   try {
     const lead = await Lead.findById(req.params.id);
     if (!lead) return res.status(404).json({ success: false, message: 'Lead no encontrado' });
@@ -401,7 +381,7 @@ router.get('/:id/stage-suggestions', async (req, res) => {
 });
 
 // POST /api/leads/:id/create-stage-tasks — manually trigger task creation for current stage
-router.post('/:id/create-stage-tasks', async (req, res) => {
+router.post('/:id/create-stage-tasks', checkPerm('leads.edit'), async (req, res) => {
   try {
     const lead = await Lead.findById(req.params.id);
     if (!lead) return res.status(404).json({ success: false, message: 'Lead no encontrado' });
@@ -463,7 +443,7 @@ const upload = multer({
 });
 
 // POST /api/leads/:id/attachments
-router.post('/:id/attachments', upload.single('file'), async (req, res) => {
+router.post('/:id/attachments', checkPerm('leads.edit'), upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ success: false, message: 'No se recibió archivo' });
     const lead = await Lead.findById(req.params.id);
@@ -506,7 +486,7 @@ router.post('/:id/attachments', upload.single('file'), async (req, res) => {
 });
 
 // DELETE /api/leads/:id/attachments/:attId
-router.delete('/:id/attachments/:attId', async (req, res) => {
+router.delete('/:id/attachments/:attId', checkPerm('leads.edit'), async (req, res) => {
   try {
     const lead = await Lead.findById(req.params.id);
     if (!lead) return res.status(404).json({ success: false, message: 'Lead no encontrado' });
@@ -528,7 +508,7 @@ router.delete('/:id/attachments/:attId', async (req, res) => {
 
 // GET /api/leads/:id/attachments/:attId/download
 // Returns presigned URL (S3) or streams file (local)
-router.get('/:id/attachments/:attId/download', async (req, res) => {
+router.get('/:id/attachments/:attId/download', checkPerm('leads.view'), async (req, res) => {
   try {
     const lead = await Lead.findById(req.params.id).lean();
     if (!lead) return res.status(404).json({ success: false });

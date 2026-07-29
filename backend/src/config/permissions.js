@@ -97,6 +97,12 @@ const PERMISSIONS = {
   // nuevas y reasignarlas es administración del dominio.
   'mailboxes.view':       ['admin','direccion','gerencia','executive','marketing'],
   'mailboxes.manage':     ['admin','direccion'],
+  // Escribir un correo suelto a un lead desde el CRM.
+  'email.send':           ['admin','direccion','gerencia','executive','marketing'],
+  // Lista de direcciones bloqueadas por rebote. Bloquear a mano corta el envío
+  // para todo el CRM, así que no es una acción de cualquier usuario.
+  'email.blocklist_view': ['admin','direccion','gerencia','marketing'],
+  'email.blocklist_edit': ['admin','direccion','gerencia'],
 
   // ── PLANTILLAS Y AUTOMATIZACIONES ────────────────────────
   'templates.view':       ['admin','gerencia','executive','marketing'],

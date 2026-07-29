@@ -7,7 +7,6 @@
 // queda registrado para poder atribuirle los eventos del proveedor, y todo
 // correo lleva enlace de baja.
 
-const crypto = require('crypto');
 const mongoose = require('mongoose');
 const Lead = require('../models/Lead');
 const Mailbox = require('../models/Mailbox');
@@ -15,6 +14,7 @@ const CampaignRecipient = require('../models/CampaignRecipient');
 const mailer = require('./mailerService');
 const mailboxService = require('./mailboxService');
 const suppression = require('./suppressionService');
+const derivedKeys = require('../utils/derivedKeys');
 
 // Pausa entre envíos. Sin esto se dispara el límite de tasa del proveedor y
 // medio envío termina en reintentos innecesarios.
@@ -27,17 +27,15 @@ const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 // El token va firmado para que nadie pueda dar de baja a un tercero
 // adivinando la URL.
 
+const UNSUB_PURPOSE = 'unsubscribe';
+const UNSUB_TOKEN_LENGTH = 20;
+
 function unsubscribeToken(email) {
-  return crypto.createHmac('sha256', process.env.JWT_SECRET || '')
-    .update(`unsub:${email.toLowerCase()}`)
-    .digest('hex')
-    .slice(0, 20);
+  return derivedKeys.sign(UNSUB_PURPOSE, email.toLowerCase(), UNSUB_TOKEN_LENGTH);
 }
 
 function verifyUnsubscribeToken(email, token) {
-  const expected = unsubscribeToken(email);
-  return token?.length === expected.length
-    && crypto.timingSafeEqual(Buffer.from(token), Buffer.from(expected));
+  return derivedKeys.verify(UNSUB_PURPOSE, String(email).toLowerCase(), token, UNSUB_TOKEN_LENGTH);
 }
 
 function unsubscribeUrl(email) {

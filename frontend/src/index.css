@@ -1610,6 +1610,9 @@ textarea.form-input{resize:vertical;min-height:80px}
   background: var(--dark2, #fff);
 }
 .stage-input:focus { outline: none; border-color: var(--orange-500) }
+.stage-name-row { display: flex; gap: 6px }
+.stage-emoji { flex: 0 0 52px; text-align: center; font-size: 15px }
+.kanban-emoji { font-size: 13px }
 .stage-colors { display: flex; gap: 4px; flex-wrap: wrap }
 .stage-color {
   width: 16px;
@@ -1671,3 +1674,74 @@ textarea.form-input{resize:vertical;min-height:80px}
   .stage-row { flex-wrap: wrap }
   .stage-tags { align-items: flex-start }
 }
+
+
+/* ── Editor de playbooks (acciones por etapa) ────────────────── */
+.pb-head { display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 2px 0 }
+.pb-stage { font-size: 14px; font-weight: 700 }
+.pb-summary { font-size: 12px; color: var(--gray-500) }
+.pb-off {
+  font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 20px;
+  background: var(--gray-100); color: var(--gray-500);
+}
+.pb-body { margin-top: 14px; border-top: 1px solid var(--gray-100); padding-top: 14px }
+.pb-switches { display: flex; gap: 18px; flex-wrap: wrap; margin-bottom: 14px }
+.pb-switches label {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12.5px; font-weight: 600; color: var(--gray-700); cursor: pointer;
+}
+.pb-actions { display: flex; flex-direction: column; gap: 10px }
+.pb-empty {
+  padding: 18px; text-align: center; font-size: 12.5px; color: var(--gray-400);
+  border: 2px dashed var(--gray-200); border-radius: 10px;
+}
+.pb-action {
+  border: 1px solid var(--gray-200); border-radius: 11px;
+  padding: 11px 13px; background: var(--gray-50);
+  display: flex; flex-direction: column; gap: 8px;
+}
+.pb-action-top { display: flex; gap: 8px; align-items: center; flex-wrap: wrap }
+.pb-kind {
+  flex: 0 0 175px; padding: 7px 9px; font-size: 12.5px; font-weight: 600;
+  font-family: inherit; border: 1px solid var(--gray-200); border-radius: 8px;
+  background: #fff; color: var(--navy-900);
+}
+.pb-title {
+  flex: 1; min-width: 190px; padding: 7px 10px; font-size: 13px; font-family: inherit;
+  border: 1px solid var(--gray-200); border-radius: 8px; background: #fff;
+}
+.pb-title:focus, .pb-field:focus, .pb-kind:focus { outline: none; border-color: var(--orange-500) }
+.pb-delay {
+  display: flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--gray-500);
+  background: #fff; border: 1px solid var(--gray-200); border-radius: 8px; padding: 5px 9px;
+}
+.pb-delay input { width: 44px; border: none; outline: none; font-family: inherit; font-size: 12.5px; text-align: center }
+.pb-remove {
+  display: flex; padding: 7px; border: 1px solid var(--gray-200); border-radius: 8px;
+  background: #fff; color: var(--red); cursor: pointer;
+}
+.pb-kind-hint { font-size: 11px; color: var(--gray-400) }
+.pb-field {
+  width: 100%; padding: 8px 10px; font-size: 12.5px; font-family: inherit;
+  border: 1px solid var(--gray-200); border-radius: 8px; background: #fff; resize: vertical;
+}
+.pb-ai-row { display: flex }
+.pb-ai-toggle {
+  display: flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 600;
+  color: #7C3AED; cursor: pointer;
+}
+.pb-cond-toggle {
+  display: flex; align-items: center; gap: 5px; align-self: flex-start;
+  background: none; border: none; padding: 0; cursor: pointer;
+  font-family: inherit; font-size: 11.5px; font-weight: 600; color: var(--gray-500);
+}
+.pb-conds {
+  display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-end;
+  padding: 10px 12px; background: #fff; border: 1px solid var(--gray-200); border-radius: 9px;
+}
+.pb-conds label { display: flex; flex-direction: column; gap: 4px; font-size: 11px; font-weight: 600; color: var(--gray-500) }
+.pb-conds input {
+  width: 110px; padding: 6px 8px; font-size: 12.5px; font-family: inherit;
+  border: 1px solid var(--gray-200); border-radius: 7px;
+}
+.pb-conds-hint { font-size: 11px; color: var(--gray-400); padding-bottom: 6px }

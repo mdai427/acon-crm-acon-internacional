@@ -13,6 +13,12 @@ const auth = async (req, res, next) => {
       return res.status(401).json({ success: false, message: 'Usuario no válido o inactivo' });
     }
 
+    // Sesiones revocadas: el token se emitió antes del último cambio de
+    // contraseña o de rol. `iat` viene en segundos.
+    if (user.sessionsValidFrom && decoded.iat * 1000 < new Date(user.sessionsValidFrom).getTime()) {
+      return res.status(401).json({ success: false, message: 'Sesión expirada, vuelve a iniciar sesión' });
+    }
+
     req.user = user;
     next();
   } catch (error) {

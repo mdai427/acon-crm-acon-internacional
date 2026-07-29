@@ -25,6 +25,14 @@ async function getStages() {
     await PipelineStage.insertMany(DEFAULT_STAGES);
     stages = await PipelineStage.find({ isActive: true }).sort({ order: 1 }).lean();
     console.log(`📊 Pipeline: ${stages.length} etapas iniciales creadas`);
+  } else if (stages.some(s => s.emoji === undefined)) {
+    // Instalación sembrada antes de que existiera el emoji: se completa una vez
+    // con los de fábrica y las etapas propias quedan sin emoji hasta editarlas.
+    for (const d of DEFAULT_STAGES) {
+      await PipelineStage.updateOne({ key: d.key, emoji: { $exists: false } }, { emoji: d.emoji });
+    }
+    await PipelineStage.updateMany({ emoji: { $exists: false } }, { emoji: '' });
+    stages = await PipelineStage.find({ isActive: true }).sort({ order: 1 }).lean();
   }
 
   cache = stages;

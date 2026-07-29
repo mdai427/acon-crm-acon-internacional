@@ -3,6 +3,7 @@ const router = express.Router();
 const crypto = require('crypto');
 const Lead = require('../models/Lead');
 const { scoreLeadWithAI } = require('../services/aiAgent');
+const { secureCompare } = require('../utils/secureCompare');
 const { processInbound } = require('../services/inboundEmail');
 const suppression = require('../services/suppressionService');
 const mongoose = require('mongoose');
@@ -43,7 +44,7 @@ router.post('/meta', (req, res) => {
         .createHmac('sha256', process.env.META_APP_SECRET)
         .update(rawBody)
         .digest('hex');
-      if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSig))) {
+      if (!secureCompare(signature, expectedSig)) {
         console.warn('⚠️ Meta webhook firma invalida — rechazado');
         return;
       }
@@ -117,17 +118,25 @@ async function processFacebookLead(leadData, io) {
 // WEBHOOK GENERICO (Zapier / Make / n8n)
 // ============================================
 
-// POST /api/webhooks/generic — recibir leads de cualquier fuente via HTTP
-router.post('/generic', express.json(), async (req, res) => {
-  try {
-    const apiKey = req.headers['x-api-key'];
-    // WEBHOOK_API_KEY independiente; el slice del JWT_SECRET queda solo como
-    // compatibilidad con integraciones ya configuradas.
-    const validKey = process.env.WEBHOOK_API_KEY || process.env.JWT_SECRET?.slice(0, 20);
-    if (!apiKey || apiKey !== validKey) {
-      return res.status(401).json({ success: false, message: 'API key invalida' });
-    }
+// Los webhooks de ingesta crean leads y disparan scoring con IA (que cuesta
+// dinero por llamada), así que ninguno puede quedar abierto.
+function requireWebhookKey(req, res, next) {
+  if (!process.env.WEBHOOK_API_KEY) {
+    console.warn('⚠️ Webhook de ingesta deshabilitado: falta WEBHOOK_API_KEY');
+    return res.status(503).json({ success: false, message: 'Webhook no configurado' });
+  }
+  if (!secureCompare(req.headers['x-api-key'], process.env.WEBHOOK_API_KEY)) {
+    return res.status(401).json({ success: false, message: 'API key invalida' });
+  }
+  next();
+}
 
+// POST /api/webhooks/generic — recibir leads de cualquier fuente via HTTP
+// WEBHOOK_API_KEY es independiente a propósito. Antes se aceptaba como
+// alternativa un trozo del JWT_SECRET: eso convertía una clave de webhook
+// filtrada en material del secreto que firma las sesiones.
+router.post('/generic', express.json(), requireWebhookKey, async (req, res) => {
+  try {
     const {
       company, contact, email, phone, whatsapp,
       source = 'other', sourceDetail, services,
@@ -161,7 +170,7 @@ router.post('/generic', express.json(), async (req, res) => {
 // WEBHOOK LINKEDIN (via Zapier/Make)
 // LinkedIn no tiene webhook nativo, se usa via automatizacion
 // ============================================
-router.post('/linkedin', express.json(), async (req, res) => {
+router.post('/linkedin', express.json(), requireWebhookKey, async (req, res) => {
   try {
     const { contact, company, position, linkedinUrl, email, phone, message } = req.body;
 

@@ -2,8 +2,8 @@
 // Buzones: enrutamiento, permisos y tokens de respuesta
 // ============================================
 
-const crypto = require('crypto');
 const Mailbox = require('../models/Mailbox');
+const derivedKeys = require('../utils/derivedKeys');
 
 // Dominio donde viven los buzones del CRM. Se usa un subdominio propio
 // (mail.aconinternacional.com) para no tocar el MX del dominio corporativo:
@@ -25,14 +25,10 @@ function isValidLocalPart(localPart) {
 // aunque conteste desde otra dirección. La firma HMAC evita que alguien
 // escriba a un lead ajeno inventando el token.
 
-const TOKEN_SIG_LENGTH = 10;
+const TOKEN_PURPOSE = 'mailbox-reply';
 
 function signToken(localPart, leadId) {
-  return crypto
-    .createHmac('sha256', process.env.JWT_SECRET || '')
-    .update(`${localPart}:${leadId}`)
-    .digest('hex')
-    .slice(0, TOKEN_SIG_LENGTH);
+  return derivedKeys.sign(TOKEN_PURPOSE, `${localPart}:${leadId}`);
 }
 
 /** Dirección de respuesta con el lead codificado. */
@@ -55,9 +51,7 @@ function parseAddress(raw) {
   if (!match) return { address, leadId: null };
 
   const [, base, leadId, sig] = match;
-  const expected = signToken(base, leadId);
-  const valid = sig.length === expected.length
-    && crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected));
+  const valid = derivedKeys.verify(TOKEN_PURPOSE, `${base}:${leadId}`, sig);
 
   return { address: `${base}@${domain}`, leadId: valid ? leadId : null };
 }

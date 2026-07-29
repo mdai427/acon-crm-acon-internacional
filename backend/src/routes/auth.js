@@ -4,6 +4,7 @@ const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const { auth, adminOnly } = require('../middleware/auth');
 const { audit } = require('../services/auditService');
+const { validatePassword } = require('../utils/passwordPolicy');
 
 // POST /api/auth/login
 router.post('/login', async (req, res) => {
@@ -42,7 +43,10 @@ router.post('/login', async (req, res) => {
 router.post('/register', auth, adminOnly, async (req, res) => {
   try {
     const { name, email, password, role, phone } = req.body;
-    
+
+    const check = validatePassword(password, { email, name });
+    if (!check.ok) return res.status(400).json({ success: false, message: check.message });
+
     const exists = await User.findOne({ email });
     if (exists) {
       return res.status(400).json({ success: false, message: 'El email ya está registrado' });
@@ -81,14 +85,28 @@ router.put('/change-password', auth, async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body;
     const user = await User.findById(req.user._id);
-    
+
     if (!(await user.comparePassword(currentPassword))) {
       return res.status(400).json({ success: false, message: 'Contraseña actual incorrecta' });
     }
+
+    const check = validatePassword(newPassword, { email: user.email, name: user.name });
+    if (!check.ok) return res.status(400).json({ success: false, message: check.message });
     
     user.password = newPassword;
+    // Cierra las sesiones abiertas en otros dispositivos: si alguien robó el
+    // token, cambiar la contraseña tiene que dejarlo fuera.
+    user.sessionsValidFrom = new Date();
     await user.save();
-    res.json({ success: true, message: 'Contraseña actualizada' });
+
+    // El token actual también queda invalidado, así que se emite uno nuevo para
+    // no echar de la sesión a quien acaba de cambiar su propia contraseña.
+    const token = jwt.sign(
+      { id: user._id, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+    );
+    res.json({ success: true, message: 'Contraseña actualizada', token });
   } catch (error) {
     console.error("[auth]", error);
     res.status(500).json({ success: false, message: "Error interno. Intenta de nuevo." });
@@ -107,6 +125,9 @@ router.post('/setup', async (req, res) => {
     if (!name || !email || !password) {
       return res.status(400).json({ success: false, message: 'name, email y password requeridos' });
     }
+
+    const check = validatePassword(password, { email, name });
+    if (!check.ok) return res.status(400).json({ success: false, message: check.message });
 
     const admin = await User.create({ name, email, password, role: 'admin' });
 

@@ -94,7 +94,7 @@ export default function PipelinePage({ toast, onSelect, canEditStages = true }) 
     getKanban()
       .then(r => {
         setColumns(r.data.data || {});
-        setStages((r.data.stages || []).map(s => ({ id: s.key, label: s.label, color: s.color, type: s.type })));
+        setStages((r.data.stages || []).map(s => ({ id: s.key, label: s.label, color: s.color, emoji: s.emoji || '', type: s.type })));
       })
       .catch(() => toast('Error al cargar pipeline', 'error'))
       .finally(() => setLoading(false));
@@ -193,7 +193,9 @@ export default function PipelinePage({ toast, onSelect, canEditStages = true }) 
             >
               {/* Column Header */}
               <div className="kanban-header">
-                <span className="kanban-title" style={{ color: stage.color }}>{stage.label}</span>
+                <span className="kanban-title" style={{ color: stage.color }}>
+                  {stage.emoji && <span className="kanban-emoji">{stage.emoji} </span>}{stage.label}
+                </span>
                 <span className="kanban-count" style={{ background: stage.color + '18', color: stage.color }}>
                   {totals.count}
                 </span>
