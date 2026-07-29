@@ -27,14 +27,26 @@ api.interceptors.request.use(cfg => {
   return cfg;
 });
 
+// Rutas cuyo 401 NO significa "te caducó la sesión, recarga":
+//   /auth/login → contraseña incorrecta, lo maneja la propia pantalla.
+//   /auth/me    → es la comprobación de "¿hay sesión?" que se hace al cargar.
+//                 Con la sesión en cookie no se puede saber de antemano si la
+//                 hay, así que se pregunta siempre; si respondiera con una
+//                 recarga, la app entraría en un bucle de refrescos.
+const RUTAS_SIN_REDIRECCION = ['/auth/login', '/auth/me', '/auth/logout'];
+
 api.interceptors.response.use(
   r => r,
   err => {
-    // No redirigir desde la propia pantalla de login: ahí un 401 es
-    // simplemente una contraseña incorrecta.
-    const esLogin = err.config?.url?.includes('/auth/login');
-    if (err.response?.status === 401 && !esLogin) {
-      window.location.href = '/login';
+    const url = err.config?.url || '';
+    const esRutaDeSesion = RUTAS_SIN_REDIRECCION.some(ruta => url.includes(ruta));
+
+    if (err.response?.status === 401 && !esRutaDeSesion) {
+      // Recargar solo si de verdad se cambia de sitio: si ya estamos donde
+      // toca, otra recarga sería un bucle.
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(err);
   }
