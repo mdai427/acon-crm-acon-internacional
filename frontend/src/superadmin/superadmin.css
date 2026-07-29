@@ -147,6 +147,9 @@
 }
 .sa-table td { padding: 9px 10px; border-bottom: 1px solid rgba(37, 49, 64, .6); color: var(--sa-text-2); }
 .sa-table tr:last-child td { border-bottom: none; }
+/* index.css pinta el hover de cualquier tabla con un gris claro pensado para el
+   CRM; aquí se sobrescribe para no romper el tema oscuro. */
+.sa-app .sa-table tbody tr:hover td { background: var(--sa-surface-2); }
 .sa-table strong { color: var(--sa-text); }
 .sa-sub { font-size: 11px; color: var(--sa-text-3); margin-top: 2px; }
 
