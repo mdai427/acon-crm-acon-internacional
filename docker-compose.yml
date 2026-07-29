@@ -45,6 +45,8 @@ services:
       PUBLIC_BASE_URL: ${BACKEND_URL}
 
       # --- OpenAI (agentes IA) ---
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
 

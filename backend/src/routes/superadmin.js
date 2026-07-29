@@ -10,6 +10,9 @@ const { superAdminOnly } = require('../services/superAdmin');
 const AiUsage = require('../models/AiUsage');
 const User = require('../models/User');
 const aiBilling = require('../services/aiBilling');
+const settings = require('../services/settingsService');
+const openRouterPricing = require('../services/openRouterPricing');
+const { AI_PROVIDERS, getProvider } = require('../config/aiProviders');
 const { labelFor } = require('./aiUsage');
 
 router.use(auth, superAdminOnly);
@@ -135,6 +138,153 @@ router.put('/pricing', async (req, res) => {
     res.json({ success: true, data: config, message: 'Tarifas actualizadas' });
   } catch (error) {
     res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+// ─────────────────────────────────────────
+// GET /api/superadmin/ai — proveedor, modelos por defecto y agentes
+// ─────────────────────────────────────────
+const MASK = '••••••';
+const mask = v => v ? (v.slice(0, 4) + MASK + v.slice(-3)) : '';
+
+router.get('/ai', async (req, res) => {
+  try {
+    const [config, agents] = await Promise.all([
+      aiBilling.getConfig(),
+      aiBilling.agentsWithModels(),
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        providers: AI_PROVIDERS.map(p => {
+          const key = process.env[p.envKey];
+          return {
+            id: p.id,
+            name: p.name,
+            envKey: p.envKey,
+            docs: p.docs,
+            keyHint: p.keyHint,
+            supportsAudio: p.supportsAudio,
+            apiKeySet: !!key,
+            apiKeyMask: key ? mask(key) : '',
+          };
+        }),
+        defaultProvider: config.defaultProvider,
+        defaultChatModel: config.defaultChatModel,
+        defaultAudioModel: config.defaultAudioModel,
+        pricesSyncedAt: config.pricesSyncedAt || null,
+        agents,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// ─────────────────────────────────────────
+// GET /api/superadmin/ai/models — catálogo de OpenRouter por proveedor
+// ─────────────────────────────────────────
+router.get('/ai/models', async (req, res) => {
+  try {
+    res.json({ success: true, data: await openRouterPricing.availableModels() });
+  } catch (error) {
+    res.status(502).json({
+      success: false,
+      message: `No se pudo leer el catálogo de OpenRouter: ${error.message}`,
+    });
+  }
+});
+
+// ─────────────────────────────────────────
+// PUT /api/superadmin/ai — guarda clave, modelos por defecto y por agente
+// ─────────────────────────────────────────
+router.put('/ai', async (req, res) => {
+  try {
+    const { apiKeys, defaultProvider, defaultChatModel, defaultAudioModel, agents } = req.body || {};
+
+    // Las claves viajan enmascaradas cuando el usuario no las tocó: esas se
+    // ignoran para no destruir el valor real guardado.
+    const keyUpdates = {};
+    for (const provider of AI_PROVIDERS) {
+      const value = apiKeys?.[provider.id];
+      if (value && !value.includes(MASK)) keyUpdates[provider.envKey] = value;
+    }
+    if (Object.keys(keyUpdates).length) {
+      await settings.setMany(keyUpdates, req.user._id, { includeSuperadminKeys: true });
+    }
+
+    await aiBilling.updateConfig(
+      { defaultProvider, defaultChatModel, defaultAudioModel, agents },
+      req.user._id
+    );
+
+    // OPENAI_MODEL sigue existiendo como respaldo para cualquier código que aún
+    // lo lea; se mantiene alineado con el modelo de chat por defecto.
+    if (defaultChatModel) {
+      await settings.setMany({ OPENAI_MODEL: defaultChatModel }, req.user._id, { includeSuperadminKeys: true });
+    }
+
+    const [config, agentList] = await Promise.all([
+      aiBilling.getConfig(),
+      aiBilling.agentsWithModels(),
+    ]);
+    res.json({
+      success: true,
+      message: 'Configuración de IA guardada',
+      data: {
+        defaultProvider: config.defaultProvider,
+        defaultChatModel: config.defaultChatModel,
+        defaultAudioModel: config.defaultAudioModel,
+        agents: agentList,
+      },
+    });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+// ─────────────────────────────────────────
+// POST /api/superadmin/ai/test — llamada real mínima para validar la clave
+// ─────────────────────────────────────────
+router.post('/ai/test', async (req, res) => {
+  const provider = getProvider(req.body?.provider || 'openai');
+  if (!process.env[provider.envKey]) {
+    return res.status(400).json({ success: false, message: `Configura primero la API Key de ${provider.name}` });
+  }
+  try {
+    const aiClient = require('../services/aiClient');
+    const config = await aiBilling.getConfig();
+    const model = req.body?.model || config.defaultChatModel;
+
+    // Llamada mínima real: es la única forma de saber si la clave sirve.
+    const r = await aiClient.getClient(provider.id).chat.completions.create({
+      model,
+      messages: [{ role: 'user', content: 'Responde solo "OK" en español' }],
+      max_tokens: 5,
+    });
+    res.json({ success: true, message: `✅ ${provider.name} conectado — Modelo: ${r.model || model}` });
+  } catch (e) {
+    res.json({ success: false, message: `❌ ${provider.name}: ${e.message}` });
+  }
+});
+
+// ─────────────────────────────────────────
+// POST /api/superadmin/ai/prices/sync — precios desde el catálogo de OpenRouter
+// ─────────────────────────────────────────
+router.post('/ai/prices/sync', async (req, res) => {
+  try {
+    const result = await aiBilling.syncPrices(req.user._id);
+    const detalle = result.missing.length
+      ? ` (${result.missing.length} sin precio público: ${result.missing.join(', ')})`
+      : '';
+    res.json({
+      success: true,
+      message: `✅ ${result.updated.length} modelo(s) actualizados desde OpenRouter${detalle}`,
+      data: result,
+    });
+  } catch (error) {
+    res.status(502).json({ success: false, message: `No se pudo sincronizar: ${error.message}` });
   }
 });
 

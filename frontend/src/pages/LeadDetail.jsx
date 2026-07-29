@@ -4,6 +4,7 @@ import {
   draftEmail, rescoreLead, sendEmail,
   getGmailMessages, sendGmailMessage, getCalendarEvents, createCalendarEvent,
   uploadLeadAttachment, deleteLeadAttachment, getLeadAttachmentUrl,
+  getMailboxes,
 } from '../services/api';
 import { ScoreBadge, StageBadge, SourceBadge } from '../components/Badges';
 import { Mail, Calendar, FileText, MessageSquare, RefreshCw, Plus, Send, Video, Clock, MapPin, CheckSquare, Square, Building2, Zap, Paperclip, Trash2, Download, Phone } from 'lucide-react';
@@ -101,6 +102,10 @@ export default function LeadDetail({ leadId, toast, onBack }) {
   const [replySubject, setReplySubject] = useState('');
   const [showCompose, setShowCompose] = useState(false);
   const [composeForm, setComposeForm] = useState({ to: '', subject: '', body: '', threadId: null });
+  // Remitente: un buzón del CRM (la respuesta vuelve al chat) o la cuenta de
+  // Gmail conectada del asesor.
+  const [mailboxes, setMailboxes] = useState([]);
+  const [senderId, setSenderId] = useState('gmail');
   const [gmailMaxResults, setGmailMaxResults] = useState(20);
 
   // Calendar
@@ -133,6 +138,18 @@ export default function LeadDetail({ leadId, toast, onBack }) {
   };
 
   useEffect(() => { load(); }, [leadId]);
+
+  useEffect(() => {
+    getMailboxes()
+      .then(r => {
+        const list = r.data.data || [];
+        setMailboxes(list);
+        // Con buzones configurados, ese es el camino por defecto: el correo
+        // queda en el chat y la respuesta también.
+        if (list.length) setSenderId(list.find(m => m.isDefault)?._id || list[0]._id);
+      })
+      .catch(() => setMailboxes([]));
+  }, []);
 
   const loadEmails = useCallback(async (maxResults) => {
     if (!lead) return;
@@ -231,18 +248,34 @@ export default function LeadDetail({ leadId, toast, onBack }) {
   const handleSendGmail = async (e) => {
     e.preventDefault();
     try {
-      await sendGmailMessage({
-        to: composeForm.to || (lead.contact?.email || lead.email),
-        subject: composeForm.subject,
-        body: composeForm.body,
-        threadId: composeForm.threadId || undefined,
-      });
-      toast('Correo enviado via Gmail', 'success');
+      if (senderId === 'gmail') {
+        await sendGmailMessage({
+          to: composeForm.to || (lead.contact?.email || lead.email),
+          subject: composeForm.subject,
+          body: composeForm.body,
+          threadId: composeForm.threadId || undefined,
+        });
+        toast('Correo enviado via Gmail', 'success');
+        loadEmails();
+      } else {
+        // El salto de línea del textarea se respeta en el HTML final.
+        await sendEmail({
+          leadId,
+          mailboxId: senderId,
+          subject: composeForm.subject,
+          html: composeForm.body.replace(/\n/g, '<br>'),
+          text: composeForm.body,
+        });
+        toast('Correo enviado — quedó en el chat del lead', 'success');
+        load();
+      }
       setShowCompose(false);
       setComposeForm({ to: '', subject: '', body: '', threadId: null });
-      loadEmails();
     } catch (err) {
-      toast(err.response?.data?.message || 'Error al enviar', 'error');
+      const message = err.response?.data?.code === 'EMAIL_SUPPRESSED'
+        ? 'Este contacto tiene el envío bloqueado por rebotes previos'
+        : (err.response?.data?.message || 'Error al enviar');
+      toast(message, 'error');
     }
   };
 
@@ -347,6 +380,33 @@ export default function LeadDetail({ leadId, toast, onBack }) {
           </button>
         </div>
       </div>
+
+      {/* Envío de correo bloqueado por rebotes */}
+      {lead.emailStatus?.canReceive === false && (
+        <div className="card" style={{ marginBottom: 16, border: '1px solid #DC262640', background: '#FEF2F2' }}>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+            <span style={{ fontSize: 16 }}>🚫</span>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 13, color: '#991B1B' }}>
+                Correo bloqueado para este contacto
+              </div>
+              <p style={{ margin: '4px 0 0', fontSize: 12, color: '#991B1B', lineHeight: 1.6 }}>
+                {lead.emailStatus.blockedReason === 'hard_bounce' && 'La dirección no existe o fue rechazada de forma permanente. '}
+                {lead.emailStatus.blockedReason === 'complaint' && 'El contacto marcó un correo nuestro como spam. '}
+                {lead.emailStatus.blockedReason === 'soft_bounces' && 'La dirección rebotó varias veces seguidas. '}
+                {lead.emailStatus.blockedReason === 'manual' && 'El contacto pidió no recibir más correos. '}
+                Seguir enviando dañaría la reputación del dominio, así que el CRM lo detuvo.
+                Actualiza el correo del lead o pide a un administrador que lo reactive en Buzones de correo.
+                {lead.emailStatus.blockedDetail && (
+                  <span style={{ display: 'block', marginTop: 4, opacity: 0.75 }}>
+                    Detalle del proveedor: {lead.emailStatus.blockedDetail}
+                  </span>
+                )}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Borrador IA */}
       {draft && (
@@ -666,6 +726,22 @@ export default function LeadDetail({ leadId, toast, onBack }) {
             {showCompose && (
               <form onSubmit={handleSendGmail} className="card" style={{ marginBottom: 14, border: '1px solid #F2641E30' }}>
                 <div style={{ fontWeight: 700, marginBottom: 12, color: '#0B2545' }}>Nuevo Correo</div>
+                {mailboxes.length > 0 && (
+                  <div className="form-group">
+                    <label className="form-label">Enviar desde</label>
+                    <select className="form-input" value={senderId} onChange={e => setSenderId(e.target.value)}>
+                      {mailboxes.map(mb => (
+                        <option key={mb._id} value={mb._id}>{mb.displayName} — {mb.address}</option>
+                      ))}
+                      <option value="gmail">Mi cuenta de Gmail conectada</option>
+                    </select>
+                    <span style={{ fontSize: 11, color: '#9AA3AE' }}>
+                      {senderId === 'gmail'
+                        ? 'La respuesta llega a tu Gmail, no al chat del lead.'
+                        : 'La respuesta del contacto entra al chat de este lead.'}
+                    </span>
+                  </div>
+                )}
                 <div className="form-group">
                   <label className="form-label">Para</label>
                   <input className="form-input" value={composeForm.to} onChange={e => setComposeForm(f => ({...f, to: e.target.value}))} required />

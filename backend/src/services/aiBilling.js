@@ -12,16 +12,19 @@
 
 const { AiBillingConfig, AiPeriod } = require('../models/AiBilling');
 const AiUsage = require('../models/AiUsage');
+const { AI_AGENTS, getAgent } = require('../config/aiAgents');
+const { getProvider } = require('../config/aiProviders');
+const openRouterPricing = require('./openRouterPricing');
 
 const DEFAULT_MARGIN_PCT = 40;
 
-// USD por millón de tokens (chat) o por minuto (audio).
+// Semilla mínima; los precios reales se bajan del catálogo de OpenRouter con
+// syncPrices(). El audio se queda en 'manual' porque OpenRouter no lo publica.
 const DEFAULT_MODELS = [
-  { model: 'gpt-4o-mini', kind: 'chat',  inputPer1M: 0.15, outputPer1M: 0.60 },
-  { model: 'gpt-4o',      kind: 'chat',  inputPer1M: 2.50, outputPer1M: 10.00 },
-  { model: 'gpt-4.1-mini',kind: 'chat',  inputPer1M: 0.40, outputPer1M: 1.60 },
-  { model: 'gpt-4.1',     kind: 'chat',  inputPer1M: 2.00, outputPer1M: 8.00 },
-  { model: 'whisper-1',   kind: 'audio', perMinute: 0.006 },
+  { provider: 'openai',   model: 'gpt-4o-mini',    kind: 'chat',  inputPer1M: 0.15, outputPer1M: 0.60 },
+  { provider: 'openai',   model: 'gpt-4o',         kind: 'chat',  inputPer1M: 2.50, outputPer1M: 10.00 },
+  { provider: 'openai',   model: 'whisper-1',      kind: 'audio', perMinute: 0.006, priceSource: 'manual' },
+  { provider: 'deepseek', model: 'deepseek-chat',  kind: 'chat',  inputPer1M: 0.20, outputPer1M: 0.80 },
 ];
 
 const round6 = (n) => Math.round((Number(n) || 0) * 1e6) / 1e6;
@@ -46,8 +49,22 @@ async function getConfig() {
   return config;
 }
 
-async function updateConfig({ defaultMarginPct, models }, userId) {
+async function updateConfig({ defaultMarginPct, models, agents, defaultChatModel, defaultAudioModel, defaultProvider }, userId) {
   const config = await getConfig();
+  if (defaultProvider !== undefined) config.defaultProvider = getProvider(defaultProvider).id;
+  if (defaultChatModel !== undefined)  config.defaultChatModel = String(defaultChatModel || '').trim() || 'gpt-4o-mini';
+  if (defaultAudioModel !== undefined) config.defaultAudioModel = String(defaultAudioModel || '').trim() || 'whisper-1';
+  if (Array.isArray(agents)) {
+    // Solo se guardan agentes registrados: un id inventado no debe crear
+    // configuración huérfana que nadie pueda ver ni borrar desde el panel.
+    config.agents = agents
+      .filter(a => getAgent(a.agent))
+      .map(a => ({
+        agent: a.agent,
+        provider: a.provider ? getProvider(a.provider).id : '',
+        model: String(a.model || '').trim(),
+      }));
+  }
   if (defaultMarginPct !== undefined) {
     const pct = Number(defaultMarginPct);
     if (!Number.isFinite(pct) || pct < 0 || pct > 1000) {
@@ -57,8 +74,11 @@ async function updateConfig({ defaultMarginPct, models }, userId) {
   }
   if (Array.isArray(models)) {
     config.models = models.map(m => ({
+      provider: getProvider(m.provider).id,
       model: String(m.model || '').trim(),
       kind: m.kind === 'audio' ? 'audio' : 'chat',
+      priceSource: m.priceSource === 'manual' ? 'manual' : 'auto',
+      priceUpdatedAt: m.priceUpdatedAt,
       inputPer1M:  Math.max(0, Number(m.inputPer1M) || 0),
       outputPer1M: Math.max(0, Number(m.outputPer1M) || 0),
       perMinute:   Math.max(0, Number(m.perMinute) || 0),
@@ -72,10 +92,75 @@ async function updateConfig({ defaultMarginPct, models }, userId) {
   return config;
 }
 
+/**
+ * Modelo que debe usar un agente: el asignado desde el panel, si no el que pide
+ * el código, y si no el modelo por defecto del tipo (chat o audio).
+ *
+ * Se lee de la config en base de datos, así que un cambio en el panel aplica en
+ * la siguiente llamada sin reiniciar nada.
+ */
+async function modelForAgent(agentId, requestedModel) {
+  const config = await getConfig();
+  const assignment = config.agents?.find(a => a.agent === agentId);
+  const agent = getAgent(agentId);
+  const isAudio = agent?.kind === 'audio';
+
+  const model = assignment?.model
+    || requestedModel
+    || (isAudio
+      ? (config.defaultAudioModel || 'whisper-1')
+      : (config.defaultChatModel || process.env.OPENAI_MODEL || 'gpt-4o-mini'));
+
+  // El audio solo lo sirve OpenAI (Whisper); el resto sigue al proveedor
+  // asignado al agente o al global.
+  const provider = isAudio
+    ? 'openai'
+    : (assignment?.provider || config.defaultProvider || 'openai');
+
+  return { provider, model };
+}
+
+// Estado de todos los agentes para el panel: qué modelo usan y de dónde sale.
+async function agentsWithModels() {
+  const config = await getConfig();
+  return AI_AGENTS.map(agent => {
+    const assignment = config.agents?.find(a => a.agent === agent.id);
+    const isAudio = agent.kind === 'audio';
+    const fallbackModel = isAudio
+      ? (config.defaultAudioModel || 'whisper-1')
+      : (config.defaultChatModel || 'gpt-4o-mini');
+    const fallbackProvider = isAudio ? 'openai' : (config.defaultProvider || 'openai');
+
+    return {
+      ...agent,
+      // '' significa heredado del valor por defecto.
+      model: assignment?.model || '',
+      provider: assignment?.provider || '',
+      effectiveModel: assignment?.model || fallbackModel,
+      effectiveProvider: isAudio ? 'openai' : (assignment?.provider || fallbackProvider),
+    };
+  });
+}
+
+/**
+ * Baja los precios del catálogo de OpenRouter y los aplica a la tabla de costos.
+ * Es la referencia de costo para todos los proveedores.
+ */
+async function syncPrices(userId) {
+  const config = await getConfig();
+  const { models, updated, missing } = await openRouterPricing.applyCatalogPrices(config.models);
+  config.models = models;
+  config.pricesSyncedAt = new Date();
+  config.updatedBy = userId;
+  await config.save();
+  return { updated, missing, syncedAt: config.pricesSyncedAt, models: config.models };
+}
+
 // Tarifa de un modelo. Si no está en la tabla se registra igual, con costo 0:
 // mejor un registro visible con tarifa pendiente que perder el consumo.
-function priceFor(config, model) {
-  const entry = config.models.find(m => m.model === model);
+function priceFor(config, model, provider) {
+  const entry = config.models.find(m => m.model === model && (!provider || (m.provider || 'openai') === provider))
+    || config.models.find(m => m.model === model);
   const marginPct = entry?.marginPct ?? config.defaultMarginPct ?? DEFAULT_MARGIN_PCT;
   return { entry, marginPct };
 }
@@ -102,7 +187,7 @@ function computeCost(entry, { inputTokens = 0, outputTokens = 0, audioSeconds = 
 async function recordUsage(data) {
   try {
     const config = await getConfig();
-    const { entry, marginPct } = priceFor(config, data.model);
+    const { entry, marginPct } = priceFor(config, data.model, data.provider);
 
     const costUsd = computeCost(entry, data);
     const priceUsd = round6(costUsd * (1 + marginPct / 100));
@@ -239,6 +324,9 @@ async function listPeriods() {
 
 module.exports = {
   DEFAULT_MODELS,
+  modelForAgent,
+  agentsWithModels,
+  syncPrices,
   periodOf,
   getConfig,
   updateConfig,

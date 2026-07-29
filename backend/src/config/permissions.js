@@ -90,6 +90,12 @@ const PERMISSIONS = {
   'whatsapp.send':        ['admin','gerencia','executive','marketing'],
   'whatsapp.templates':   ['admin','gerencia','marketing'],
 
+  // ── BUZONES DE CORREO ────────────────────────────────────
+  // Ver los propios lo puede cualquiera que escriba correos; crear direcciones
+  // nuevas y reasignarlas es administración del dominio.
+  'mailboxes.view':       ['admin','direccion','gerencia','executive','marketing'],
+  'mailboxes.manage':     ['admin','direccion'],
+
   // ── PLANTILLAS Y AUTOMATIZACIONES ────────────────────────
   'templates.view':       ['admin','gerencia','executive','marketing'],
   'templates.edit':       ['admin','gerencia','marketing'],

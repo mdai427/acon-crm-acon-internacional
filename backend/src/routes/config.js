@@ -32,7 +32,10 @@ const mask = v => v ? (v.slice(0, 4) + MASK + v.slice(-3)) : '';
 router.get('/settings', auth, checkPerm('integrations.manage'), (req, res) => {
   const e = readEnv();
   const data = {};
+  // Las claves de IA no se listan: el proveedor y el modelo los define el dueño
+  // de la plataforma desde su propio panel (ver routes/superadmin).
   for (const key of settings.ALLOWED_KEYS) {
+    if (!settings.isClientKey(key)) continue;
     const value = e[key];
     data[key] = { set: !!value, hint: value ? mask(value) : '' };
   }
@@ -71,6 +74,12 @@ router.post('/settings', auth, checkPerm('integrations.manage'), async (req, res
 // ─────────────────────────────────────────
 router.delete('/settings/:key', auth, checkPerm('integrations.manage'), async (req, res) => {
   try {
+    if (settings.SUPERADMIN_ONLY_KEYS.has(req.params.key)) {
+      return res.status(403).json({
+        success: false,
+        message: 'La configuración de IA la administra el proveedor de la plataforma',
+      });
+    }
     const removed = await settings.remove([req.params.key]);
     if (!removed.length) {
       return res.status(400).json({ success: false, message: 'Clave no administrable' });
@@ -114,11 +123,6 @@ router.get('/', auth, checkPerm('integrations.manage'), async (req, res) => {
         GOOGLE_CLIENT_SECRET: e.GOOGLE_CLIENT_SECRET ? '••••••••••••'               : '',
         GOOGLE_REDIRECT_URI:  e.GOOGLE_REDIRECT_URI  || '',
         configured: !!(e.GOOGLE_CLIENT_ID && e.GOOGLE_CLIENT_SECRET),
-      },
-      openai: {
-        OPENAI_API_KEY: e.OPENAI_API_KEY ? mask(e.OPENAI_API_KEY) : '',
-        OPENAI_MODEL:   e.OPENAI_MODEL   || 'gpt-4o-mini',
-        connected: !!e.OPENAI_API_KEY,
       },
       facebook: {
         META_ACCESS_TOKEN:       e.META_ACCESS_TOKEN       ? mask(e.META_ACCESS_TOKEN)       : '',
@@ -393,38 +397,9 @@ router.post('/google/test', auth, checkPerm('integrations.manage'), async (req, 
   });
 });
 
-// ─────────────────────────────────────────
-// POST /api/config/openai — guarda API key de OpenAI
-// ─────────────────────────────────────────
-router.post('/openai', auth, checkPerm('integrations.manage'), async (req, res) => {
-  const { OPENAI_API_KEY, OPENAI_MODEL } = req.body;
-  const updates = {};
-  if (OPENAI_API_KEY) updates.OPENAI_API_KEY = OPENAI_API_KEY;
-  if (OPENAI_MODEL)   updates.OPENAI_MODEL   = OPENAI_MODEL;
-  await writeEnv(updates, req.user._id);
-  res.json({ success: true, message: 'OpenAI API Key guardada' });
-});
-
-// ─────────────────────────────────────────
-// POST /api/config/openai/test
-// ─────────────────────────────────────────
-router.post('/openai/test', auth, checkPerm('integrations.manage'), async (req, res) => {
-  if (!process.env.OPENAI_API_KEY) {
-    return res.status(400).json({ success: false, message: 'Configura OPENAI_API_KEY primero' });
-  }
-  try {
-    const aiClient = require('../services/aiClient');
-    const r = await aiClient.chat({
-      feature: 'connection_test',
-      user: req.user._id,
-      messages: [{ role: 'user', content: 'Responde solo "OK" en español' }],
-      max_tokens: 5
-    });
-    res.json({ success: true, message: `✅ OpenAI conectado — Modelo: ${r.raw?.model || 'ok'}` });
-  } catch (e) {
-    res.json({ success: false, message: e.message });
-  }
-});
+// La configuración de OpenAI (clave y modelos) ya no vive aquí: la IA se
+// revende, así que solo el super admin la administra desde /api/superadmin/ai.
+// Ver routes/superadmin.js.
 
 // ─────────────────────────────────────────
 // POST /api/config/facebook — guarda credenciales Meta/Facebook

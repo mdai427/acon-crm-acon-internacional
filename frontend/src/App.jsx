@@ -14,6 +14,7 @@ import IntegrationsPage from './pages/IntegrationsPage';
 import AiUsagePage from './pages/AiUsagePage';
 import SuperAdminApp from './superadmin/SuperAdminApp';
 import ConfigPage from './pages/ConfigPage';
+import MailboxesPage from './pages/MailboxesPage';
 import OperationsPage from './pages/OperationsPage';
 import UsersPage from './pages/UsersPage';
 import QuoterPage from './pages/QuoterPage';
@@ -38,7 +39,7 @@ import {
   BarChart3, Settings, Plug, Package, UserPlus,
   Calculator, Zap, LogOut, Bell, FileText, Upload,
   Megaphone, HeartHandshake, Menu, X, ChevronRight, Sparkles, DollarSign,
-  Search, AlertTriangle, Clock, Building2, Moon, Sun, Shield, BookOpen, TrendingUp, FileSearch, Database, CalendarDays
+  AtSign, Search, AlertTriangle, Clock, Building2, Moon, Sun, Shield, BookOpen, TrendingUp, FileSearch, Database, CalendarDays
 } from 'lucide-react';
 
 const NAV = [
@@ -60,6 +61,8 @@ const NAV = [
   // El consumo de IA es información de facturación: solo dirección y quien administra.
   { id: 'ai_usage',     label: 'Consumo de IA',     Icon: Sparkles,        section: 'analytics', mobile: false,
     roles: ['admin', 'direccion', 'gerencia', 'finanzas'] },
+  { id: 'mailboxes',    label: 'Buzones de correo', Icon: AtSign,          section: 'config',    mobile: false,
+    roles: ['admin', 'direccion'] },
   { id: 'users',        label: 'Usuarios',          Icon: UserPlus,        section: 'config',    mobile: false },
   { id: 'permissions',  label: 'Permisos',          Icon: Shield,          section: 'config',    mobile: false },
   { id: 'catalog',     label: 'Catálogo',           Icon: BookOpen,        section: 'config',    mobile: false },
@@ -466,6 +469,7 @@ function CRMApp() {
           {page === 'pipeline'     && <PipelinePage toast={toast} onSelect={handleSelectLead} />}
           {page === 'operations'   && <OperationsPage toast={toast} />}
           {page === 'whatsapp'     && <WhatsAppPage toast={toast} />}
+          {page === 'mailboxes'    && <MailboxesPage toast={toast} />}
           {page === 'reports'      && <ReportsPage toast={toast} />}
           {page === 'config'       && <ConfigPage toast={toast} />}
           {page === 'quoter'       && <QuoterPage toast={toast} />}

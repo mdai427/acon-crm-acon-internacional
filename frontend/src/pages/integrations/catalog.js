@@ -1,7 +1,7 @@
 import {
-  Mail, MessageSquare, Bot, Users, Globe, Zap, HardDrive, TrendingUp, Send, Phone,
+  Mail, MessageSquare, Users, Globe, Zap, HardDrive, TrendingUp, Send, Phone,
 } from 'lucide-react';
-import { testWhatsApp, testEmail, testOpenAI, testResend, testTwilio } from '../../services/api';
+import { testWhatsApp, testEmail, testResend, testTwilio } from '../../services/api';
 
 // ── Catálogo de integraciones ─────────────────────────────────────────────────
 // Cada campo se guarda cifrado en la base de datos (AES-256-GCM). Los marcados
@@ -10,6 +10,10 @@ import { testWhatsApp, testEmail, testOpenAI, testResend, testTwilio } from '../
 //
 // Cada integración tiene su propia pantalla: la lista solo muestra tarjetas y el
 // formulario vive en /integrations/<id>.
+//
+// La IA no aparece aquí a propósito: el proveedor, la clave y el modelo de cada
+// agente los administra el dueño de la plataforma desde su panel, porque la IA
+// se revende con margen.
 const askRecipient = (label) => async (test) => {
   const to = window.prompt(`¿A qué dirección enviamos el correo de prueba con ${label}?`);
   if (!to) return null;
@@ -82,6 +86,10 @@ export const CATALOG = [
           { key: 'EMAIL_PROVIDER', label: 'Proveedor de correo saliente', type: 'select',
             options: [{ v: 'resend', l: 'Resend (API)' }, { v: 'smtp', l: 'SMTP' }],
             help: 'Define por dónde salen todos los correos del CRM. Si lo dejas vacío se usa Resend cuando hay API Key' },
+          { key: 'INBOUND_EMAIL_DOMAIN', label: 'Dominio de buzones (entrantes)', placeholder: 'mail.aconinternacional.com',
+            help: 'Subdominio con los MX apuntando a Resend. Usa un subdominio: cambiar el MX del dominio principal deja sin recibir al correo corporativo actual' },
+          { key: 'RESEND_WEBHOOK_SECRET', label: 'Secreto del webhook', secret: true, placeholder: 'whsec_...',
+            help: 'resend.com → Webhooks. Apunta el webhook a /api/webhooks/resend con los eventos email.received, delivered, bounced, complained, opened y clicked' },
         ],
       },
       {
@@ -135,26 +143,6 @@ export const CATALOG = [
           { key: 'LINKEDIN_CLIENT_ID', label: 'Client ID' },
           { key: 'LINKEDIN_CLIENT_SECRET', label: 'Client Secret', secret: true },
           { key: 'LINKEDIN_ACCESS_TOKEN', label: 'Access Token', secret: true },
-        ],
-      },
-    ],
-  },
-  {
-    section: 'Inteligencia artificial',
-    subtitle: 'Motor de los agentes: scoring, respuestas sugeridas y análisis',
-    items: [
-      {
-        id: 'openai',
-        name: 'OpenAI',
-        desc: 'Califica leads, redacta respuestas y analiza el pipeline',
-        icon: Bot, color: '#10A37F',
-        docs: 'https://platform.openai.com/api-keys',
-        required: ['OPENAI_API_KEY'],
-        test: testOpenAI,
-        fields: [
-          { key: 'OPENAI_API_KEY', label: 'API Key', secret: true, placeholder: 'sk-...' },
-          { key: 'OPENAI_MODEL', label: 'Modelo', placeholder: 'gpt-4o-mini',
-            help: 'gpt-4o-mini es el más económico; gpt-4o da mejores análisis' },
         ],
       },
     ],

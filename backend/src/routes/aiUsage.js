@@ -9,21 +9,9 @@ const { auth, checkPerm } = require('../middleware/auth');
 const AiUsage = require('../models/AiUsage');
 const aiBilling = require('../services/aiBilling');
 
-// Etiquetas legibles de cada herramienta que consume IA.
-const FEATURE_LABELS = {
-  lead_scoring:       'Calificación de leads',
-  auto_reply:         'Respuesta automática',
-  email_draft:        'Redacción de correos',
-  pipeline_analysis:  'Análisis del pipeline',
-  copilot:            'Copiloto',
-  stage_tasks:        'Tareas por etapa',
-  quote_suggest:      'Sugerencia de cotización',
-  company_research:   'Investigación de empresa',
-  call_transcription: 'Transcripción de llamadas',
-  connection_test:    'Prueba de conexión',
-};
-
-const labelFor = (feature) => FEATURE_LABELS[feature] || feature;
+// Los nombres de las herramientas salen del registro de agentes, para que el
+// panel del cliente y el del super admin muestren siempre lo mismo.
+const { labelFor } = require('../config/aiAgents');
 
 // Quita el costo real y el margen: el cliente solo ve lo que paga.
 const toClientUsage = (u) => ({
@@ -125,5 +113,4 @@ router.get('/', auth, checkPerm('ai_usage.view'), async (req, res) => {
 });
 
 module.exports = router;
-module.exports.FEATURE_LABELS = FEATURE_LABELS;
 module.exports.labelFor = labelFor;

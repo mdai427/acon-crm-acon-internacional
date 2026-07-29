@@ -33,10 +33,12 @@ const ALLOWED_KEYS = new Set([
   'SMTP_HOST', 'SMTP_PORT', 'SMTP_SECURE', 'SMTP_USER', 'SMTP_PASS', 'SMTP_FROM', 'EMAIL_FROM',
   // Resend (API HTTP de correo) y selector de proveedor de correo saliente
   'RESEND_API_KEY', 'RESEND_FROM', 'EMAIL_PROVIDER',
+  // Buzones del CRM: dominio de los correos entrantes y firma del webhook
+  'INBOUND_EMAIL_DOMAIN', 'RESEND_WEBHOOK_SECRET',
   // Google OAuth
   'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'GOOGLE_REDIRECT_URI',
-  // OpenAI
-  'OPENAI_API_KEY', 'OPENAI_MODEL',
+  // Proveedores de IA (ver SUPERADMIN_ONLY_KEYS: no se administran desde el CRM)
+  'OPENAI_API_KEY', 'OPENAI_MODEL', 'OPENROUTER_API_KEY', 'DEEPSEEK_API_KEY',
   // LinkedIn
   'LINKEDIN_CLIENT_ID', 'LINKEDIN_CLIENT_SECRET', 'LINKEDIN_ACCESS_TOKEN',
   // Almacenamiento S3
@@ -47,6 +49,14 @@ const ALLOWED_KEYS = new Set([
   // Otros
   'N8N_API_KEY', 'BANXICO_TOKEN', 'DEFAULT_EXCHANGE_RATE', 'WEBHOOK_API_KEY',
 ]);
+
+// La IA se revende: quien opera el CRM no elige el proveedor ni el modelo, así
+// que estas claves solo se pueden leer y escribir desde el panel de plataforma.
+const { PROVIDER_ENV_KEYS } = require('../config/aiProviders');
+
+const SUPERADMIN_ONLY_KEYS = new Set([...PROVIDER_ENV_KEYS, 'OPENAI_MODEL']);
+
+const isClientKey = (key) => ALLOWED_KEYS.has(key) && !SUPERADMIN_ONLY_KEYS.has(key);
 
 function getKey() {
   const raw = process.env.ENCRYPTION_KEY || process.env.JWT_SECRET;
@@ -86,10 +96,11 @@ async function getAll() {
 
 // Guarda un conjunto de claves y las aplica de inmediato a process.env.
 // Devuelve las claves que sí se guardaron (las no permitidas se ignoran).
-async function setMany(updates, userId) {
+async function setMany(updates, userId, { includeSuperadminKeys = false } = {}) {
   const saved = [];
   for (const [key, rawValue] of Object.entries(updates || {})) {
     if (!ALLOWED_KEYS.has(key)) continue;
+    if (!includeSuperadminKeys && SUPERADMIN_ONLY_KEYS.has(key)) continue;
     const value = String(rawValue).trim();
     // El panel muestra los secretos enmascarados ("abcd••••••xyz"). Si llega uno
     // así es que el usuario no tocó ese campo: guardarlo destruiría el valor real.
@@ -107,10 +118,11 @@ async function setMany(updates, userId) {
 
 // Borra credenciales guardadas. Si la clave también viene del entorno del
 // contenedor, volverá a aparecer en el próximo arranque.
-async function remove(keys) {
+async function remove(keys, { includeSuperadminKeys = false } = {}) {
   const removed = [];
   for (const key of keys || []) {
     if (!ALLOWED_KEYS.has(key)) continue;
+    if (!includeSuperadminKeys && SUPERADMIN_ONLY_KEYS.has(key)) continue;
     await Setting.deleteOne({ key });
     delete process.env[key];
     removed.push(key);
@@ -138,4 +150,7 @@ function currentEnv() {
   return out;
 }
 
-module.exports = { getAll, setMany, remove, hydrateEnv, currentEnv, ALLOWED_KEYS };
+module.exports = {
+  getAll, setMany, remove, hydrateEnv, currentEnv,
+  ALLOWED_KEYS, SUPERADMIN_ONLY_KEYS, isClientKey,
+};

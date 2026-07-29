@@ -6,7 +6,16 @@ import { money } from './format';
 // Configuración de la reventa: cuánto cuesta cada modelo y qué margen se le
 // suma antes de facturárselo al CRM.
 
-const EMPTY_MODEL = { model: '', kind: 'chat', inputPer1M: 0, outputPer1M: 0, perMinute: 0, marginPct: '' };
+const EMPTY_MODEL = {
+  provider: 'openai', model: '', kind: 'chat',
+  inputPer1M: 0, outputPer1M: 0, perMinute: 0, marginPct: '', priceSource: 'manual',
+};
+
+const PROVIDERS = [
+  { id: 'openai', name: 'OpenAI' },
+  { id: 'openrouter', name: 'OpenRouter' },
+  { id: 'deepseek', name: 'DeepSeek' },
+];
 
 // Ejemplo de referencia para que se entienda qué se está cobrando.
 const EXAMPLE_TOKENS = { input: 500_000, output: 150_000 };
@@ -31,8 +40,16 @@ export default function PricingTab({ toast }) {
     })();
   }, [toast]);
 
+  // Tocar un precio a mano lo marca como manual: a partir de ahí la
+  // sincronización con OpenRouter respeta ese valor.
+  const PRICE_FIELDS = ['inputPer1M', 'outputPer1M', 'perMinute'];
   const setModelField = (index, field, value) => {
-    setModels(list => list.map((m, i) => (i === index ? { ...m, [field]: value } : m)));
+    setModels(list => list.map((m, i) => {
+      if (i !== index) return m;
+      const next = { ...m, [field]: value };
+      if (PRICE_FIELDS.includes(field)) next.priceSource = 'manual';
+      return next;
+    }));
   };
 
   const handleSave = async () => {
@@ -101,18 +118,25 @@ export default function PricingTab({ toast }) {
           <table className="sa-table">
             <thead>
               <tr>
+                <th>Proveedor</th>
                 <th>Modelo</th>
                 <th>Tipo</th>
                 <th style={{ textAlign: 'right' }}>Entrada /1M</th>
                 <th style={{ textAlign: 'right' }}>Salida /1M</th>
                 <th style={{ textAlign: 'right' }}>Por minuto</th>
                 <th style={{ textAlign: 'right' }}>Margen propio</th>
+                <th>Precio</th>
                 <th />
               </tr>
             </thead>
             <tbody>
               {models.map((m, i) => (
                 <tr key={i}>
+                  <td>
+                    <select value={m.provider || 'openai'} onChange={e => setModelField(i, 'provider', e.target.value)}>
+                      {PROVIDERS.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    </select>
+                  </td>
                   <td>
                     <input value={m.model} placeholder="gpt-4o-mini"
                       onChange={e => setModelField(i, 'model', e.target.value)} />
@@ -140,6 +164,20 @@ export default function PricingTab({ toast }) {
                       onChange={e => setModelField(i, 'marginPct', e.target.value)} />
                   </td>
                   <td>
+                    <button
+                      type="button"
+                      className={`sa-pill${m.priceSource === 'manual' ? ' closed' : ''}`}
+                      title={m.priceSource === 'manual'
+                        ? 'Fijado a mano: la sincronización no lo toca. Clic para volver a automático.'
+                        : 'Se actualiza desde OpenRouter'}
+                      onClick={() => setModels(list => list.map((x, idx) =>
+                        idx === i ? { ...x, priceSource: x.priceSource === 'manual' ? 'auto' : 'manual' } : x))}
+                      style={{ cursor: 'pointer', border: 'none', font: 'inherit' }}
+                    >
+                      {m.priceSource === 'manual' ? 'Manual' : 'Automático'}
+                    </button>
+                  </td>
+                  <td>
                     <button className="sa-icon-btn danger" title="Quitar modelo"
                       onClick={() => setModels(list => list.filter((_, idx) => idx !== i))}>
                       <Trash2 size={14} />
@@ -158,8 +196,9 @@ export default function PricingTab({ toast }) {
 
         <div className="sa-hint" style={{ marginTop: 14 }}>
           <Info size={13} />
-          Un modelo que la IA use y no esté en esta lista se registra igual, pero con costo cero
-          hasta que le pongas tarifa.
+          Los precios marcados como automáticos se bajan del catálogo de OpenRouter desde
+          “Proveedores y agentes”. Un modelo que la IA use y no esté en esta lista se registra
+          igual, pero con costo cero hasta que le pongas tarifa.
         </div>
       </div>
 

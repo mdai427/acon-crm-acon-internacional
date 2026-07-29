@@ -57,6 +57,18 @@ export const sendTemplate = (data) => api.post('/whatsapp/template', data);
 export const sendEmail = (data) => api.post('/email/send', data);
 export const getTemplates = () => api.get('/email/templates');
 
+// Buzones de correo del dominio
+export const getMailboxes = () => api.get('/mailboxes');
+export const getAllMailboxes = () => api.get('/mailboxes/all');
+export const createMailbox = (data) => api.post('/mailboxes', data);
+export const updateMailbox = (id, data) => api.put(`/mailboxes/${id}`, data);
+export const deleteMailbox = (id) => api.delete(`/mailboxes/${id}`);
+
+// Rebotes y bloqueos de envío
+export const getSuppressions = () => api.get('/email/suppressions');
+export const suppressEmail = (data) => api.post('/email/suppressions', data);
+export const releaseEmail = (address) => api.delete(`/email/suppressions/${encodeURIComponent(address)}`);
+
 // Gmail (OAuth)
 export const getGmailMessages = (contactEmail, maxResults = 20) =>
   api.get('/gmail/messages', { params: { contactEmail, maxResults } });
@@ -101,8 +113,6 @@ export const saveEmailConfig = (d) => api.post('/config/email', d);
 export const testEmail = (d) => api.post('/config/email/test', d);
 export const testResend = (d) => api.post('/config/resend/test', d);
 export const testTwilio = () => api.post('/config/twilio/test');
-export const saveOpenAIConfig = (d) => api.post('/config/openai', d);
-export const testOpenAI = () => api.post('/config/openai/test');
 // Configuración genérica de integraciones (se guarda cifrada en la base de datos)
 export const getSettings = () => api.get('/config/settings');
 export const saveSettings = (d) => api.post('/config/settings', d);
@@ -128,6 +138,13 @@ export const saveSuperPricing = (d) => api.put('/superadmin/pricing', d);
 export const getSuperPeriods  = () => api.get('/superadmin/periods');
 export const closeSuperPeriod = (period, note) => api.post(`/superadmin/periods/${period}/close`, { note });
 export const reopenSuperPeriod = (period) => api.post(`/superadmin/periods/${period}/reopen`);
+
+// Proveedores de IA y modelo por agente (solo super admin)
+export const getSuperAi        = () => api.get('/superadmin/ai');
+export const saveSuperAi       = (d) => api.put('/superadmin/ai', d);
+export const getSuperAiModels  = () => api.get('/superadmin/ai/models');
+export const testSuperAi       = (d) => api.post('/superadmin/ai/test', d);
+export const syncSuperAiPrices = () => api.post('/superadmin/ai/prices/sync');
 
 // Operations
 export const getOperations = (params) => api.get('/operations', { params });
@@ -181,6 +198,8 @@ export const createCampaign = (data) => api.post('/marketing/campaigns', data);
 export const updateCampaign = (id, data) => api.put(`/marketing/campaigns/${id}`, data);
 export const deleteCampaign = (id) => api.delete(`/marketing/campaigns/${id}`);
 export const launchCampaign = (id) => api.post(`/marketing/campaigns/${id}/launch`);
+export const testCampaign = (id, to) => api.post(`/marketing/campaigns/${id}/test`, { to });
+export const getCampaignMetrics = (id) => api.get(`/marketing/campaigns/${id}/metrics`);
 export const getAutomations = () => api.get('/marketing/automations');
 export const createAutomation = (data) => api.post('/marketing/automations', data);
 export const updateAutomation = (id, data) => api.put(`/marketing/automations/${id}`, data);

@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { Crown, LogOut, BarChart3, Percent, CalendarRange, Menu, X } from 'lucide-react';
+import { Crown, LogOut, BarChart3, Percent, CalendarRange, Bot, Menu, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { Toast, useToast } from '../components/Toast';
 import OverviewTab from './OverviewTab';
 import PricingTab from './PricingTab';
 import PeriodsTab from './PeriodsTab';
+import AgentsTab from './AgentsTab';
 import './superadmin.css';
 
 // Panel del dueño de la plataforma. Vive fuera del CRM a propósito: mismo login
@@ -16,6 +17,12 @@ const NAV = [
     section: 'Consumo',
     items: [
       { id: 'overview', label: 'Métricas', Icon: BarChart3, hint: 'Costo, facturado y ganancia' },
+    ],
+  },
+  {
+    section: 'Inteligencia artificial',
+    items: [
+      { id: 'agents', label: 'Proveedores y agentes', Icon: Bot, hint: 'Claves y modelo por agente' },
     ],
   },
   {
@@ -92,6 +99,7 @@ export default function SuperAdminApp() {
       <main className="sa-main">
         {page === 'overview' && <OverviewTab toast={toast} />}
         {page === 'pricing'  && <PricingTab toast={toast} />}
+        {page === 'agents'   && <AgentsTab toast={toast} />}
         {page === 'periods'  && <PeriodsTab toast={toast} />}
       </main>
 
