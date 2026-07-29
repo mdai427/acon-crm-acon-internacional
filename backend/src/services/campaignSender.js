@@ -15,6 +15,7 @@ const mailer = require('./mailerService');
 const mailboxService = require('./mailboxService');
 const suppression = require('./suppressionService');
 const derivedKeys = require('../utils/derivedKeys');
+const { PUBLIC_BASE_URL } = require('../config/urls');
 
 // Pausa entre envíos. Sin esto se dispara el límite de tasa del proveedor y
 // medio envío termina en reintentos innecesarios.
@@ -38,10 +39,13 @@ function verifyUnsubscribeToken(email, token) {
   return derivedKeys.verify(UNSUB_PURPOSE, String(email).toLowerCase(), token, UNSUB_TOKEN_LENGTH);
 }
 
+// La baja se procesa en el backend (/api/email/unsubscribe), así que el enlace
+// tiene que apuntar al dominio de la API. Antes usaba el del frontend: el
+// contacto acababa en la pantalla de login del CRM en vez de darse de baja, y
+// el enlace de baja de una campaña no es opcional.
 function unsubscribeUrl(email) {
-  const base = (process.env.PUBLIC_URL || process.env.FRONTEND_URL || '').replace(/\/$/, '');
   const query = `email=${encodeURIComponent(email)}&token=${unsubscribeToken(email)}`;
-  return `${base}/api/email/unsubscribe?${query}`;
+  return `${PUBLIC_BASE_URL}/api/email/unsubscribe?${query}`;
 }
 
 // ── Composición ─────────────────────────────────────────────────────

@@ -49,6 +49,9 @@ services:
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      # Modelo de transcripción de las llamadas. Sin valor se usa el que tenga
+      # configurado el agente en el panel de plataforma.
+      OPENAI_TRANSCRIBE_MODEL: ${OPENAI_TRANSCRIBE_MODEL:-}
 
       # --- Meta / WhatsApp Cloud API ---
       META_APP_ID: ${META_APP_ID:-}
