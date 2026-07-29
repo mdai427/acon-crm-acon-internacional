@@ -292,6 +292,9 @@ activitiesRouter.put('/:id/complete', async (req, res) => {
 const pipelineRouter = express.Router();
 const { cacheMiddleware: _cacheMw } = require('../middleware/cacheMiddleware');
 const { TTL: _TTL, invalidateLead: _invLead } = require('../services/cache');
+const _stages = require('../services/pipelineStages');
+const PipelineStage = require('../models/PipelineStage');
+const { checkPerm: _checkPerm } = require('../middleware/auth');
 
 pipelineRouter.use(auth);
 
@@ -303,7 +306,10 @@ pipelineRouter.get('/kanban',
     const filter = { isActive: true };
     if (req.user.role === 'executive') filter.assignedTo = req.user._id;
 
-    const STAGES = ['new','contacted','qualified','proposal','negotiation','closed_won','closed_lost'];
+    // Las etapas son configurables (colección PipelineStage), así que el
+    // tablero se arma con las que haya en ese momento.
+    const stageDocs = await _stages.getStages();
+    const STAGES = stageDocs.map(s => s.key);
     const SELECT = { company:1, contact:1, stage:1, score:1, priority:1, value:1,
                      source:1, services:1, createdAt:1, lastContactDate:1,
                      daysSinceLastContact:1, assignedTo:1 };
@@ -342,7 +348,9 @@ pipelineRouter.get('/kanban',
       }));
     }
 
-    res.json({ success: true, data: result });
+    // Se devuelven también las etapas para que el tablero pinte columnas,
+    // colores y orden sin una segunda petición.
+    res.json({ success: true, data: result, stages: stageDocs });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -351,7 +359,11 @@ pipelineRouter.get('/kanban',
 pipelineRouter.put('/move', async (req, res) => {
   try {
     const { leadId, newStage } = req.body;
+    if (!(await _stages.exists(newStage))) {
+      return res.status(400).json({ success: false, message: 'La etapa indicada no existe' });
+    }
     const lead = await Lead.findById(leadId);
+    if (!lead) return res.status(404).json({ success: false, message: 'Lead no encontrado' });
     const prevStage = lead.stage;
 
     await Lead.findByIdAndUpdate(leadId, { stage: newStage });
@@ -366,6 +378,133 @@ pipelineRouter.put('/move', async (req, res) => {
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// ── Etapas del pipeline ──────────────────────────────────────────────────────
+// Verlas puede cualquiera (el tablero las necesita); editarlas requiere permiso.
+
+pipelineRouter.get('/stages', async (req, res) => {
+  try {
+    res.json({ success: true, data: await _stages.getStages() });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// Crea una etapa nueva al final del tablero.
+pipelineRouter.post('/stages', _checkPerm('pipeline.stages'), async (req, res) => {
+  try {
+    const { label, color, description } = req.body;
+    if (!String(label || '').trim()) {
+      return res.status(400).json({ success: false, message: 'La etapa necesita un nombre' });
+    }
+
+    const existentes = await _stages.getStages();
+    // Las etapas nuevas entran antes de las de cierre: el orden del tablero
+    // cuenta una historia y "Ganado"/"Perdido" van siempre al final.
+    const ultimaAbierta = existentes.filter(s => s.type === 'open').pop();
+    const order = ultimaAbierta ? ultimaAbierta.order + 1 : existentes.length;
+
+    const stage = await PipelineStage.create({
+      key: await _stages.buildKey(label),
+      label: String(label).trim(),
+      color: color || '#6B7280',
+      description,
+      type: 'open',
+      order,
+    });
+
+    // Se recolocan las de cierre para que sigan al final.
+    await PipelineStage.updateMany(
+      { type: { $in: ['won', 'lost'] } },
+      { $inc: { order: 1 } }
+    );
+    _stages.invalidate();
+
+    res.status(201).json({ success: true, data: stage, message: `Etapa "${stage.label}" creada` });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+// Renombrar, recolorear o describir. La clave y el tipo no se tocan: hay leads
+// y lógica de negocio apuntando a ellos.
+pipelineRouter.put('/stages/:id', _checkPerm('pipeline.stages'), async (req, res) => {
+  try {
+    const updates = {};
+    for (const campo of ['label', 'color', 'description']) {
+      if (req.body[campo] !== undefined) updates[campo] = req.body[campo];
+    }
+    const stage = await PipelineStage.findByIdAndUpdate(req.params.id, updates, { new: true });
+    if (!stage) return res.status(404).json({ success: false, message: 'Etapa no encontrada' });
+
+    _stages.invalidate();
+    res.json({ success: true, data: stage, message: 'Etapa actualizada' });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+// Reordenar: llega la lista de ids en el orden deseado.
+pipelineRouter.put('/stages/reorder', _checkPerm('pipeline.stages'), async (req, res) => {
+  try {
+    const { order } = req.body;
+    if (!Array.isArray(order)) {
+      return res.status(400).json({ success: false, message: 'Se espera un arreglo de ids' });
+    }
+    await Promise.all(order.map((id, index) =>
+      PipelineStage.findByIdAndUpdate(id, { order: index })
+    ));
+    _stages.invalidate();
+    res.json({ success: true, data: await _stages.getStages(), message: 'Orden actualizado' });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+// Eliminar. Si la etapa tiene leads hay que decir a cuál se mueven: perderlos
+// en una etapa inexistente los sacaría del tablero.
+pipelineRouter.delete('/stages/:id', _checkPerm('pipeline.stages'), async (req, res) => {
+  try {
+    const stage = await PipelineStage.findById(req.params.id);
+    if (!stage) return res.status(404).json({ success: false, message: 'Etapa no encontrada' });
+    if (stage.isSystem) {
+      return res.status(400).json({
+        success: false,
+        message: `"${stage.label}" es una etapa del sistema y no se puede eliminar`,
+      });
+    }
+
+    const enUso = await Lead.countDocuments({ stage: stage.key, isActive: true });
+    const destino = req.body?.moveTo;
+
+    if (enUso && !destino) {
+      return res.status(400).json({
+        success: false,
+        needsTarget: true,
+        count: enUso,
+        message: `La etapa tiene ${enUso} lead(s). Indica a qué etapa moverlos.`,
+      });
+    }
+    if (enUso) {
+      if (!(await _stages.exists(destino)) || destino === stage.key) {
+        return res.status(400).json({ success: false, message: 'Etapa destino inválida' });
+      }
+      await Lead.updateMany({ stage: stage.key }, { stage: destino });
+    }
+
+    await PipelineStage.deleteOne({ _id: stage._id });
+    _stages.invalidate();
+
+    res.json({
+      success: true,
+      message: enUso
+        ? `Etapa eliminada y ${enUso} lead(s) movidos`
+        : 'Etapa eliminada',
+    });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
   }
 });
 

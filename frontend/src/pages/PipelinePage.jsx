@@ -1,17 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { getKanban, moveLead } from '../services/api';
 import { ScoreBadge } from '../components/Badges';
-import { Flame, Thermometer, Snowflake, Zap, RefreshCw, DollarSign, Users } from 'lucide-react';
+import { Flame, Thermometer, Snowflake, Zap, RefreshCw, DollarSign, Users, SlidersHorizontal } from 'lucide-react';
+import StageManager from '../components/StageManager';
 
-const STAGES = [
-  { id: 'new',         label: 'Nuevos',      color: '#6366f1' },
-  { id: 'contacted',   label: 'Contactados', color: '#3b82f6' },
-  { id: 'qualified',   label: 'Calificados', color: '#eab308' },
-  { id: 'proposal',    label: 'Propuesta',   color: '#f97316' },
-  { id: 'negotiation', label: 'Negociación', color: '#8b5cf6' },
-  { id: 'closed_won',  label: '✓ Ganados',   color: '#22c55e' },
-  { id: 'closed_lost', label: '✗ Perdidos',  color: '#ef4444' },
-];
+// Las etapas ya no están cableadas: llegan con el tablero desde el backend
+// (colección PipelineStage) y se editan con el botón "Etapas".
 
 // ── Temperature ────────────────────────────────────────────────────────────────
 function getTemp(lead) {
@@ -87,16 +81,21 @@ function KanbanCard({ lead, stage, onDragStart, onClick }) {
 }
 
 // ── Main ───────────────────────────────────────────────────────────────────────
-export default function PipelinePage({ toast, onSelect }) {
+export default function PipelinePage({ toast, onSelect, canEditStages = true }) {
   const [columns, setColumns]   = useState({});
+  const [stages, setStages]     = useState([]);
   const [loading, setLoading]   = useState(true);
   const [dragging, setDragging] = useState(null);
   const [dragOver, setDragOver] = useState(null);
+  const [editando, setEditando] = useState(false);
 
   const load = () => {
     setLoading(true);
     getKanban()
-      .then(r => setColumns(r.data.data || {}))
+      .then(r => {
+        setColumns(r.data.data || {});
+        setStages((r.data.stages || []).map(s => ({ id: s.key, label: s.label, color: s.color, type: s.type })));
+      })
       .catch(() => toast('Error al cargar pipeline', 'error'))
       .finally(() => setLoading(false));
   };
@@ -113,7 +112,7 @@ export default function PipelinePage({ toast, onSelect }) {
     if (!dragging || dragging.stage === targetStage) return;
     try {
       await moveLead({ leadId: dragging.lead._id, newStage: targetStage });
-      toast(`Movido a ${STAGES.find(s => s.id === targetStage)?.label}`, 'success');
+      toast(`Movido a ${stages.find(s => s.id === targetStage)?.label || targetStage}`, 'success');
       load();
     } catch { toast('Error al mover lead', 'error'); }
     setDragging(null);
@@ -123,7 +122,7 @@ export default function PipelinePage({ toast, onSelect }) {
   // Stage totals
   const stageTotals = useMemo(() => {
     const totals = {};
-    for (const s of STAGES) {
+    for (const s of stages) {
       const cards = columns[s.id] || [];
       totals[s.id] = {
         count: cards.length,
@@ -131,19 +130,17 @@ export default function PipelinePage({ toast, onSelect }) {
       };
     }
     return totals;
-  }, [columns]);
+  }, [columns, stages]);
 
   if (loading) return (
     <div className="loading"><div className="spinner" />Cargando pipeline...</div>
   );
 
-  const totalActive = STAGES
-    .filter(s => !['closed_won', 'closed_lost'].includes(s.id))
-    .reduce((sum, s) => sum + (stageTotals[s.id]?.count || 0), 0);
-
-  const totalValue = STAGES
-    .filter(s => !['closed_won', 'closed_lost'].includes(s.id))
-    .reduce((sum, s) => sum + (stageTotals[s.id]?.value || 0), 0);
+  // "Activas" son las etapas abiertas: las de cierre (ganado/perdido) no cuentan
+  // como oportunidades en juego, sea cual sea su nombre.
+  const abiertas = stages.filter(s => s.type === 'open');
+  const totalActive = abiertas.reduce((sum, s) => sum + (stageTotals[s.id]?.count || 0), 0);
+  const totalValue  = abiertas.reduce((sum, s) => sum + (stageTotals[s.id]?.value || 0), 0);
 
   return (
     <div className="page pipeline-page">
@@ -168,6 +165,11 @@ export default function PipelinePage({ toast, onSelect }) {
               </span>
             ))}
           </div>
+          {canEditStages && (
+            <button className="btn btn-ghost btn-sm" onClick={() => setEditando(true)}>
+              <SlidersHorizontal size={13} /> Etapas
+            </button>
+          )}
           <button className="btn btn-ghost btn-sm" onClick={load}>
             <RefreshCw size={13} /> Actualizar
           </button>
@@ -175,7 +177,7 @@ export default function PipelinePage({ toast, onSelect }) {
       </div>
 
       <div className="kanban">
-        {STAGES.map(stage => {
+        {stages.map(stage => {
           const cards = columns[stage.id] || [];
           const totals = stageTotals[stage.id];
           const isDragOver = dragOver === stage.id;
@@ -224,6 +226,14 @@ export default function PipelinePage({ toast, onSelect }) {
           );
         })}
       </div>
+
+      {editando && (
+        <StageManager
+          toast={toast}
+          onClose={() => setEditando(false)}
+          onSaved={load}
+        />
+      )}
     </div>
   );
 }

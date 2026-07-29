@@ -41,6 +41,14 @@ export const deleteLead = (id) => api.delete(`/leads/${id}`);
 export const getKanban = () => api.get('/pipeline/kanban');
 export const moveLead = (data) => api.put('/pipeline/move', data);
 
+// Etapas del pipeline (configurables)
+export const getPipelineStages   = () => api.get('/pipeline/stages');
+export const createPipelineStage = (d) => api.post('/pipeline/stages', d);
+export const updatePipelineStage = (id, d) => api.put(`/pipeline/stages/${id}`, d);
+export const reorderPipelineStages = (order) => api.put('/pipeline/stages/reorder', { order });
+export const deletePipelineStage = (id, moveTo) =>
+  api.delete(`/pipeline/stages/${id}`, { data: { moveTo } });
+
 // Activities
 export const getActivities = (leadId) => api.get(`/activities/lead/${leadId}`);
 export const createActivity = (data) => api.post('/activities', data);

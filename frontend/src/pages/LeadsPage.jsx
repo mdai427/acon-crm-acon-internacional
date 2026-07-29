@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { getLeads, createLead, deleteLead } from '../services/api';
 import { ScoreBadge, StageBadge, SourceBadge } from '../components/Badges';
+import { usePipelineStages } from '../hooks/usePipelineStages';
 
-const STAGES = ['new','contacted','qualified','proposal','negotiation','closed_won','closed_lost'];
+// Las etapas se leen del backend (son configurables desde el pipeline).
 const SOURCES = ['web','facebook','instagram','linkedin','referral','whatsapp','email','cold_call','other'];
 const SERVICES = ['terrestre_nacional','terrestre_internacional','maritimo','aereo','almacenaje','aduana','distribucion'];
 
 export default function LeadsPage({ toast, onSelect }) {
+  const { stages } = usePipelineStages();
   const [leads, setLeads] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -68,7 +70,7 @@ export default function LeadsPage({ toast, onSelect }) {
         <input className="form-input" style={{ flex: 1 }} placeholder="🔍 Buscar empresa, contacto, email..." value={search} onChange={e => setSearch(e.target.value)} />
         <select className="form-select" style={{ width: 180 }} value={stageFilter} onChange={e => setStageFilter(e.target.value)}>
           <option value="">Todas las etapas</option>
-          {STAGES.map(s => <option key={s} value={s}>{s}</option>)}
+          {stages.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
         </select>
         <button className="btn btn-ghost btn-sm" onClick={load}>↻ Actualizar</button>
       </div>

@@ -26,11 +26,10 @@ const leadSchema = new mongoose.Schema({
   },
 
   // ---- Pipeline ----
-  stage: {
-    type: String,
-    enum: ['new', 'contacted', 'qualified', 'proposal', 'negotiation', 'closed_won', 'closed_lost'],
-    default: 'new'
-  },
+  // Sin enum a propósito: las etapas son configurables y viven en la colección
+  // PipelineStage. La validación se hace contra services/pipelineStages, que
+  // las mantiene en memoria.
+  stage: { type: String, default: 'new', index: true },
   score:     { type: Number, default: 0, min: 0, max: 100 }, // IA scoring
   priority:  { type: String, enum: ['low', 'medium', 'high', 'urgent'], default: 'medium' },
   value:     { type: Number, default: 0 }, // valor estimado del deal en USD

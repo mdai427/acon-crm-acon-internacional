@@ -27,6 +27,8 @@ const PERMISSIONS = {
   // ── PIPELINE ─────────────────────────────────────────────
   'pipeline.view':        ['admin','direccion','gerencia','executive','operaciones','marketing','finanzas','viewer'],
   'pipeline.move':        ['admin','gerencia','executive'],
+  // Editar las etapas del tablero (crear, renombrar, reordenar, eliminar)
+  'pipeline.stages':      ['admin','gerencia'],
 
   // ── COTIZADOR ────────────────────────────────────────────
   'quotes.view':          ['admin','direccion','gerencia','executive','finanzas','viewer'],

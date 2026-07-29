@@ -1152,7 +1152,16 @@ textarea.form-input{resize:vertical;min-height:80px}
 .quick-lbl { font-size: 11px; font-weight: 600; color: var(--gray-700) }
 
 /* ── Enhanced Pipeline ───────────────────────────────────────── */
-.pipeline-page { overflow-x: auto }
+/* El tablero ocupa el alto disponible: la cabecera queda fija arriba y cada
+   columna hace su propio scroll vertical, como un kanban de verdad. */
+.pipeline-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+.pipeline-page .page-header { flex-shrink: 0 }
 
 .pipeline-legend {
   display: flex;
@@ -1171,10 +1180,22 @@ textarea.form-input{resize:vertical;min-height:80px}
   font-weight: 600;
 }
 
-.kanban { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 12px; align-items: flex-start }
+.kanban {
+  display: flex;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 8px;
+  align-items: stretch;
+}
 .kanban-col {
-  min-width: 240px;
-  max-width: 260px;
+  flex: 0 0 auto;
+  width: 250px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
   background: #f8fafc;
   border-radius: 14px;
   padding: 0 0 10px;
@@ -1206,7 +1227,22 @@ textarea.form-input{resize:vertical;min-height:80px}
   border-bottom: 1px solid var(--gray-200);
   margin-bottom: 8px;
 }
-.kanban-cards { display: flex; flex-direction: column; gap: 8px; padding: 0 10px }
+.kanban-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 10px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--gray-200) transparent;
+}
+.kanban-cards::-webkit-scrollbar { width: 3px }
+.kanban-cards::-webkit-scrollbar-track { background: transparent }
+.kanban-cards::-webkit-scrollbar-thumb { background: var(--gray-200); border-radius: 99px }
+.kanban-header, .kanban-stage-value { flex-shrink: 0 }
 .kanban-empty {
   text-align: center;
   padding: 24px 10px;
@@ -1480,4 +1516,139 @@ textarea.form-input{resize:vertical;min-height:80px}
   .kpi-grid.g4 { grid-template-columns: 1fr }
   .period-tabs { gap: 0 }
   .period-tab { padding: 6px 10px; font-size: 12px }
+}
+
+
+/* ── Pestañas de página ──────────────────────────────────────── */
+.tabs-row {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 18px;
+  border-bottom: 1px solid var(--gray-200);
+  overflow-x: auto;
+}
+.tab-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 15px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--gray-400);
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+}
+.tab-btn:hover { color: var(--text2) }
+.tab-btn.is-active { color: var(--navy-900); border-bottom-color: var(--orange-500) }
+.tab-badge {
+  background: var(--red);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 1px 6px;
+  border-radius: 10px;
+}
+
+/* ── Editor de etapas del pipeline ───────────────────────────── */
+.stage-modal-sub { font-size: 12.5px; color: var(--gray-500); margin-top: 4px; max-width: 520px; line-height: 1.5 }
+.stage-list { display: flex; flex-direction: column; gap: 8px }
+.stage-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--gray-200);
+  border-radius: 11px;
+  background: var(--gray-50);
+}
+.stage-order { display: flex; flex-direction: column; gap: 2px }
+.stage-order button {
+  display: flex;
+  padding: 2px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--gray-400);
+  border-radius: 4px;
+}
+.stage-order button:hover:not(:disabled) { color: var(--navy-900); background: var(--gray-100) }
+.stage-order button:disabled { opacity: .25; cursor: default }
+.stage-grip { color: var(--gray-300); flex-shrink: 0 }
+.stage-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 7px }
+.stage-input {
+  width: 100%;
+  padding: 7px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--dark2, #fff);
+}
+.stage-input:focus { outline: none; border-color: var(--orange-500) }
+.stage-colors { display: flex; gap: 4px; flex-wrap: wrap }
+.stage-color {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+}
+.stage-color.is-active { border-color: var(--navy-900); transform: scale(1.15) }
+.stage-tags { display: flex; flex-direction: column; gap: 3px; align-items: flex-end }
+.stage-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 20px;
+  white-space: nowrap;
+}
+.stage-tag.won  { background: rgba(22,163,74,.12);  color: #16A34A }
+.stage-tag.lost { background: rgba(220,38,38,.12);  color: #DC2626 }
+.stage-tag.sys  { background: var(--gray-100);      color: var(--gray-500) }
+.stage-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0 }
+.stage-del {
+  display: flex;
+  padding: 6px;
+  border: 1px solid var(--gray-200);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--red);
+  cursor: pointer;
+}
+.stage-del:disabled { opacity: .3; cursor: not-allowed; color: var(--gray-400) }
+
+.stage-delete-box {
+  margin-top: 14px;
+  padding: 14px;
+  border-radius: 11px;
+  background: rgba(220,38,38,.05);
+  border: 1px solid rgba(220,38,38,.25);
+}
+.stage-delete-title { font-size: 13px; font-weight: 700; color: var(--navy-900) }
+.stage-delete-sub { font-size: 12px; color: var(--gray-500); margin: 3px 0 10px }
+.stage-delete-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center }
+.stage-delete-row .form-select { flex: 1; min-width: 180px }
+
+.stage-new { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--gray-200) }
+.stage-new-title { font-size: 13px; font-weight: 700; color: var(--navy-900); margin-bottom: 10px }
+.stage-new-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap }
+.stage-new-row .stage-input { flex: 1; min-width: 180px }
+.stage-new-hint { font-size: 11.5px; color: var(--gray-500); margin-top: 8px }
+
+@media (max-width: 720px) {
+  /* En móvil las columnas ocupan casi toda la pantalla y se navegan deslizando */
+  .kanban { scroll-snap-type: x mandatory }
+  .kanban-col { width: 84vw; max-width: 300px; scroll-snap-align: start }
+  .stage-row { flex-wrap: wrap }
+  .stage-tags { align-items: flex-start }
 }

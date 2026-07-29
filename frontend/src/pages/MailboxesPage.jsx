@@ -4,7 +4,7 @@ import {
   getUsers, getSuppressions, releaseEmail,
 } from '../services/api';
 import {
-  Mail, Plus, Save, Trash2, AtSign, ShieldAlert, RotateCcw, Star, X,
+  Mail, Plus, Save, Trash2, AtSign, ShieldAlert, RotateCcw, Star, X, Inbox,
 } from 'lucide-react';
 
 // Motivos por los que una dirección deja de recibir correo, en lenguaje del
@@ -261,7 +261,13 @@ function SuppressionList({ items, onRelease, toast }) {
 }
 
 // ── Página ──────────────────────────────────────────────────────────
+const TABS = [
+  { id: 'buzones',   label: 'Buzones',           Icon: Inbox },
+  { id: 'bloqueados', label: 'Envíos bloqueados', Icon: ShieldAlert },
+];
+
 export default function MailboxesPage({ toast }) {
+  const [tab, setTab] = useState('buzones');
   const [mailboxes, setMailboxes] = useState([]);
   const [domain, setDomain] = useState('');
   const [users, setUsers] = useState([]);
@@ -298,50 +304,75 @@ export default function MailboxesPage({ toast }) {
     }
   };
 
-  if (loading) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--gray-500)' }}>Cargando buzones…</div>;
+  if (loading) return <div className="loading"><div className="spinner" />Cargando buzones…</div>;
 
   return (
-    <div>
-      <div style={{ marginBottom: 20 }}>
-        <h1 style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 20, fontWeight: 700, color: 'var(--navy-900)', margin: 0 }}>
-          <Mail size={20} color="var(--orange-500)" /> Buzones de correo
-        </h1>
-        <p style={{ fontSize: 13, color: 'var(--gray-500)', margin: '6px 0 0', maxWidth: 720, lineHeight: 1.6 }}>
-          Direcciones del dominio que envían y reciben dentro del CRM. Los correos entrantes
-          aparecen en el chat del lead junto a WhatsApp y llamadas. No son cuentas de Gmail:
-          no tienen contraseña ni bandeja aparte.
-        </p>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(280px, 340px) 1fr', gap: 20, alignItems: 'start' }}>
-        <div style={{ display: 'grid', gap: 16 }}>
-          <NewMailboxForm domain={domain} users={users} onCreate={handleCreate} toast={toast} />
-
-          <div className="card">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-              <ShieldAlert size={16} color="#DC2626" />
-              <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: 'var(--navy-900)' }}>
-                Envío bloqueado ({suppressions.length})
-              </h3>
-            </div>
-            <SuppressionList items={suppressions} onRelease={handleRelease} toast={toast} />
+    <div className="page">
+      <div className="page-header">
+        <div>
+          <div className="page-title" style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+            <Mail size={19} color="var(--orange-500)" /> Buzones de correo
+          </div>
+          <div className="page-sub" style={{ maxWidth: 760, lineHeight: 1.6 }}>
+            Direcciones del dominio que envían y reciben dentro del CRM. Los correos entrantes
+            aparecen en el chat del lead junto a WhatsApp y llamadas. No son cuentas de Gmail:
+            no tienen contraseña ni bandeja aparte.
           </div>
         </div>
-
-        {mailboxes.length === 0 ? (
-          <div className="card" style={{ textAlign: 'center', padding: 40, color: 'var(--gray-500)' }}>
-            <Mail size={30} style={{ opacity: 0.3, marginBottom: 10 }} />
-            <p style={{ margin: 0, fontSize: 13 }}>Todavía no hay buzones. Crea el primero a la izquierda.</p>
-          </div>
-        ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
-            {mailboxes.map(mb => (
-              <MailboxCard key={mb._id} mailbox={mb} users={users}
-                onSave={handleSave} onDelete={setConfirmDelete} toast={toast} />
-            ))}
-          </div>
-        )}
       </div>
+
+      {/* Pestañas: los bloqueos son un registro aparte, no un panel lateral */}
+      <div className="tabs-row">
+        {TABS.map(({ id, label, Icon }) => (
+          <button
+            key={id}
+            className={`tab-btn${tab === id ? ' is-active' : ''}`}
+            onClick={() => setTab(id)}
+          >
+            <Icon size={14} /> {label}
+            {id === 'bloqueados' && suppressions.length > 0 && (
+              <span className="tab-badge">{suppressions.length}</span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'buzones' && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(280px, 340px) 1fr', gap: 20, alignItems: 'start' }}>
+          <NewMailboxForm domain={domain} users={users} onCreate={handleCreate} toast={toast} />
+
+          {mailboxes.length === 0 ? (
+            <div className="card" style={{ textAlign: 'center', padding: 40, color: 'var(--gray-500)' }}>
+              <Mail size={30} style={{ opacity: 0.3, marginBottom: 10 }} />
+              <p style={{ margin: 0, fontSize: 13 }}>Todavía no hay buzones. Crea el primero a la izquierda.</p>
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
+              {mailboxes.map(mb => (
+                <MailboxCard key={mb._id} mailbox={mb} users={users}
+                  onSave={handleSave} onDelete={setConfirmDelete} toast={toast} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {tab === 'bloqueados' && (
+        <div className="card">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+            <ShieldAlert size={16} color="#DC2626" />
+            <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: 'var(--navy-900)' }}>
+              Direcciones con envío bloqueado ({suppressions.length})
+            </h3>
+          </div>
+          <p style={{ fontSize: 12.5, color: 'var(--gray-500)', lineHeight: 1.6, margin: '0 0 14px', maxWidth: 720 }}>
+            Cuando un correo rebota en firme o alguien lo marca como spam, el CRM deja de
+            escribirle a esa dirección para no dañar la reputación del dominio. Aquí queda el
+            registro y desde aquí se puede reactivar.
+          </p>
+          <SuppressionList items={suppressions} onRelease={handleRelease} toast={toast} />
+        </div>
+      )}
 
       {confirmDelete && (
         <div onClick={() => setConfirmDelete(null)} style={{

@@ -12,9 +12,9 @@ import { triggerLeadResearch } from '../services/api';
 import AISuggestionsPanel from '../components/AISuggestionsPanel';
 import CallPanel from '../components/CallPanel';
 import { completeActivity } from '../services/api';
+import { usePipelineStages } from '../hooks/usePipelineStages';
 
-const STAGES = ['new','contacted','qualified','proposal','negotiation','closed_won','closed_lost'];
-const STAGE_LABELS = { new:'Nuevo', contacted:'Contactado', qualified:'Calificado', proposal:'Propuesta', negotiation:'Negociación', closed_won:'Ganado', closed_lost:'Perdido' };
+// Las etapas son configurables: llegan del backend con usePipelineStages.
 
 const TABS = [
   { id: 'info',      label: 'Información', Icon: FileText },
@@ -83,6 +83,7 @@ function ActivityCard({ activity: a, onComplete }) {
 }
 
 export default function LeadDetail({ leadId, toast, onBack }) {
+  const { stages } = usePipelineStages();
   const [lead, setLead] = useState(null);
   const [activities, setActivities] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -449,7 +450,7 @@ export default function LeadDetail({ leadId, toast, onBack }) {
                   <div className="form-group">
                     <label className="form-label">Etapa</label>
                     <select className="form-select" value={form.stage} onChange={e => setForm(f => ({...f, stage: e.target.value}))}>
-                      {STAGES.map(s => <option key={s} value={s}>{STAGE_LABELS[s]}</option>)}
+                      {stages.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
                     </select>
                   </div>
                   <div className="form-group">
