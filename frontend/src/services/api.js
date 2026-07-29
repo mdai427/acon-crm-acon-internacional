@@ -115,6 +115,20 @@ export const getCalls        = (params) => api.get('/calls', { params });
 export const getCall         = (id) => api.get(`/calls/${id}`);
 export const retryTranscript = (id) => api.post(`/calls/${id}/transcribe`);
 
+// Consumo de IA (lo que el CRM debe por el uso de IA)
+export const getAiUsageSummary = (period) => api.get('/ai-usage/summary', { params: { period } });
+export const getAiUsagePeriods = () => api.get('/ai-usage/periods');
+export const getAiUsageDetail  = (params) => api.get('/ai-usage', { params });
+
+// Panel de super admin (reventa de IA)
+export const getSuperOverview = (period) => api.get('/superadmin/overview', { params: { period } });
+export const getSuperUsage    = (params) => api.get('/superadmin/usage', { params });
+export const getSuperPricing  = () => api.get('/superadmin/pricing');
+export const saveSuperPricing = (d) => api.put('/superadmin/pricing', d);
+export const getSuperPeriods  = () => api.get('/superadmin/periods');
+export const closeSuperPeriod = (period, note) => api.post(`/superadmin/periods/${period}/close`, { note });
+export const reopenSuperPeriod = (period) => api.post(`/superadmin/periods/${period}/reopen`);
+
 // Operations
 export const getOperations = (params) => api.get('/operations', { params });
 export const createOperation = (data) => api.post('/operations', data);

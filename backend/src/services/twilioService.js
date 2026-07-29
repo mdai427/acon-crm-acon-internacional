@@ -153,24 +153,23 @@ async function downloadRecording(recordingUrl) {
 }
 
 /**
- * Transcribe un audio con Whisper. Usa la misma OPENAI_API_KEY del CRM.
+ * Transcribe un audio con Whisper. Usa la misma OPENAI_API_KEY del CRM y deja
+ * registrado el consumo (feature 'call_transcription').
+ * @param {object} context { user, lead, durationSeconds } para la contabilidad
  * @returns {Promise<{text: string, language: string, provider: string}>}
  */
-async function transcribeAudio(buffer, filename = 'llamada.mp3') {
+async function transcribeAudio(buffer, filename = 'llamada.mp3', context = {}) {
   if (!process.env.OPENAI_API_KEY) {
     throw new Error('Falta OPENAI_API_KEY: la transcripción usa Whisper de OpenAI');
   }
-  const { default: OpenAI, toFile } = await import('openai');
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
-  const file = await toFile(buffer, filename, { type: 'audio/mpeg' });
-  const result = await openai.audio.transcriptions.create({
-    file,
-    model: process.env.OPENAI_TRANSCRIBE_MODEL || 'whisper-1',
+  // aiClient contabiliza el consumo (minutos de audio) en el panel de costos.
+  const aiClient = require('./aiClient');
+  return aiClient.transcribe(buffer, {
+    feature: 'call_transcription',
+    filename,
     language: 'es',
+    ...context,
   });
-
-  return { text: result.text || '', language: 'es', provider: 'openai-whisper' };
 }
 
 module.exports = {

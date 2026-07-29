@@ -413,14 +413,14 @@ router.post('/openai/test', auth, checkPerm('integrations.manage'), async (req, 
     return res.status(400).json({ success: false, message: 'Configura OPENAI_API_KEY primero' });
   }
   try {
-    const { default: OpenAI } = await import('openai');
-    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-    const r = await client.chat.completions.create({
-      model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+    const aiClient = require('../services/aiClient');
+    const r = await aiClient.chat({
+      feature: 'connection_test',
+      user: req.user._id,
       messages: [{ role: 'user', content: 'Responde solo "OK" en español' }],
       max_tokens: 5
     });
-    res.json({ success: true, message: `✅ OpenAI conectado — Modelo: ${r.model}` });
+    res.json({ success: true, message: `✅ OpenAI conectado — Modelo: ${r.raw?.model || 'ok'}` });
   } catch (e) {
     res.json({ success: false, message: e.message });
   }

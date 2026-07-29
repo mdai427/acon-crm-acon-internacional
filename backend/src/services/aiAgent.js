@@ -1,17 +1,14 @@
 // ============================================
 // ACON CRM - Agentes de Inteligencia Artificial
 // ============================================
-const OpenAI = require('openai');
 const Lead = require('../models/Lead');
+// Todas las llamadas pasan por aiClient para quedar contabilizadas (ver aiBilling).
+const aiClient = require('./aiClient');
 const Activity = require('../models/Activity');
 
-let openai;
-const getOpenAI = () => {
-  if (!openai && process.env.OPENAI_API_KEY) {
-    openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-  }
-  return openai;
-};
+// La IA solo está disponible si hay clave configurada; aiClient la lee en
+// caliente desde process.env (la hidrata settingsService).
+const getOpenAI = () => (aiClient.isConfigured() ? aiClient : null);
 
 // ============================================
 // AGENTE 1: SCORING DE LEADS
@@ -71,14 +68,15 @@ DATOS DEL PROSPECTO:
 
 Responde SOLO con JSON: {"score": NUMBER, "reason": "explicacion breve en español", "priority": "low|medium|high|urgent", "suggestedAction": "accion recomendada"}`;
 
-    const response = await ai.chat.completions.create({
-      model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+    const response = await aiClient.chat({
+      feature: 'lead_scoring',
+      lead: lead._id,
       messages: [{ role: 'user', content: prompt }],
       response_format: { type: 'json_object' },
       max_tokens: 200
     });
 
-    const result = JSON.parse(response.choices[0].message.content);
+    const result = JSON.parse(response.content);
 
     await Lead.findByIdAndUpdate(leadId, {
       score: result.score,
@@ -141,8 +139,9 @@ Mantén un tono profesional pero amigable. Respuestas cortas (máx 3 líneas en 
 NUNCA des precios exactos. SIEMPRE ofrece conectar con un ejecutivo.
 Empresa: ${lead.company} | Contacto: ${lead.contact}`;
 
-    const response = await ai.chat.completions.create({
-      model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+    const response = await aiClient.chat({
+      feature: 'auto_reply',
+      lead: lead._id,
       messages: [
         { role: 'system', content: systemPrompt },
         ...conversationHistory,
@@ -151,7 +150,7 @@ Empresa: ${lead.company} | Contacto: ${lead.contact}`;
       max_tokens: 300
     });
 
-    const autoReply = response.choices[0].message.content;
+    const autoReply = response.content;
 
     // Guardar respuesta automatica
     await Activity.create({
@@ -212,14 +211,15 @@ HISTORIAL: Etapa ${lead.stage}
 El email debe ser profesional, conciso (máx 200 palabras), en español mexicano.
 Responde con JSON: {"subject": "asunto", "body": "cuerpo del email en HTML simple"}`;
 
-    const response = await ai.chat.completions.create({
-      model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+    const response = await aiClient.chat({
+      feature: 'email_draft',
+      lead: lead._id,
       messages: [{ role: 'user', content: prompt }],
       response_format: { type: 'json_object' },
       max_tokens: 600
     });
 
-    return JSON.parse(response.choices[0].message.content);
+    return JSON.parse(response.content);
   } catch (error) {
     console.error('Email draft error:', error.message);
     return null;
@@ -261,14 +261,15 @@ DATOS: ${JSON.stringify(stats)}
 
 Responde con JSON: {"insights": ["insight1", "insight2", "insight3"], "priority_action": "accion mas urgente"}`;
 
-    const response = await ai.chat.completions.create({
-      model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+    const response = await aiClient.chat({
+      feature: 'pipeline_analysis',
+      user: userId,
       messages: [{ role: 'user', content: prompt }],
       response_format: { type: 'json_object' },
       max_tokens: 400
     });
 
-    return JSON.parse(response.choices[0].message.content);
+    return JSON.parse(response.content);
   } catch (error) {
     console.error('Pipeline analysis error:', error.message);
     return null;

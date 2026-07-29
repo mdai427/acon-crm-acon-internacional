@@ -7,7 +7,8 @@ const { auth, adminOnly } = require('../middleware/auth');
 const { audit } = require('../services/auditService');
 const { notifyQuoteReviewed } = require('../services/notificationService');
 const { generateQuotePDF } = require('../services/pdfService');
-const OpenAI = require('openai');
+// Las llamadas a la IA pasan por aiClient para quedar contabilizadas.
+const aiClient = require('../services/aiClient');
 const User = require('../models/User');
 
 // GET /api/quotes
@@ -297,7 +298,6 @@ router.post('/suggest', auth, async (req, res) => {
       });
     }
 
-    const openai = new OpenAI({ apiKey });
     const historyText = history.slice(0, 10).map(q =>
       `- ${q.origin || '?'} → ${q.destination || '?'}: $${q.totalUSD || 0} USD (${q.carrier || 'sin carrier'}, ${new Date(q.createdAt).toLocaleDateString('es-MX')})`
     ).join('\n');
@@ -328,7 +328,9 @@ Responde en JSON con este formato:
   "riskFactors": ["<riesgo 1>"]
 }`;
 
-    const completion = await openai.chat.completions.create({
+    const completion = await aiClient.chat({
+      feature: 'quote_suggest',
+      user: req.user?._id,
       model: 'gpt-4o-mini',
       messages: [{ role: 'user', content: prompt }],
       response_format: { type: 'json_object' },
@@ -336,7 +338,7 @@ Responde en JSON con este formato:
       max_tokens: 600,
     });
 
-    const suggestion = JSON.parse(completion.choices[0].message.content);
+    const suggestion = JSON.parse(completion.content);
     res.json({
       success: true,
       data: {

@@ -204,7 +204,11 @@ async function transcribeCall(callId, io) {
 
   try {
     const audio = await twilioService.downloadRecording(call.recording.url);
-    const result = await twilioService.transcribeAudio(audio, `llamada-${call._id}.mp3`);
+    const result = await twilioService.transcribeAudio(audio, `llamada-${call._id}.mp3`, {
+      user: call.user,
+      lead: call.lead,
+      durationSeconds: call.recording.duration || call.duration || 0,
+    });
 
     const updated = await Call.findByIdAndUpdate(callId, {
       transcription: {

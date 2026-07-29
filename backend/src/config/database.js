@@ -40,6 +40,10 @@ const connectDB = async () => {
     console.log(`✅ MongoDB conectado: ${conn.connection.host}`);
     await seedAdmin().catch(err => console.error(`⚠️ No se pudo crear el admin inicial: ${err.message}`));
 
+    // Cuenta del dueño de la plataforma, definida en el entorno
+    await require('../services/superAdmin').ensureSuperAdmin()
+      .catch(err => console.error(`⚠️ No se pudo preparar el super admin: ${err.message}`));
+
     // Carga la configuración de integraciones guardada desde el panel
     await require('../services/settingsService').hydrateEnv()
       .catch(err => console.error(`⚠️ No se pudo cargar la configuración guardada: ${err.message}`));

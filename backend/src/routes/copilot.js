@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
-const OpenAI = require('openai');
+// Las llamadas a la IA pasan por aiClient para quedar contabilizadas.
+const aiClient = require('../services/aiClient');
 const Lead = require('../models/Lead');
 const Activity = require('../models/Activity');
 const { cacheMiddleware } = require('../middleware/cacheMiddleware');
@@ -48,8 +49,6 @@ router.post('/chat', auth, async (req, res) => {
   }
 
   try {
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
     // Build context string from CRM data
     let contextStr = '';
     if (context?.leadId) {
@@ -67,15 +66,18 @@ router.post('/chat', auth, async (req, res) => {
       content: SYSTEM_PROMPT + contextStr,
     };
 
-    const response = await openai.chat.completions.create({
+    const response = await aiClient.chat({
+      feature: 'copilot',
+      user: req.user._id,
+      lead: context?.leadId || undefined,
       model: 'gpt-4o-mini',
       messages: [systemMessage, ...(messages || [])],
       max_tokens: 800,
       temperature: 0.7,
     });
 
-    const reply = response.choices[0]?.message?.content || 'No pude generar una respuesta.';
-    res.json({ success: true, data: { reply, usage: response.usage } });
+    const reply = response.content || 'No pude generar una respuesta.';
+    res.json({ success: true, data: { reply, usage: response.raw?.usage } });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }

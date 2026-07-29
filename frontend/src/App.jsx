@@ -11,6 +11,8 @@ import PipelinePage from './pages/PipelinePage';
 import WhatsAppPage from './pages/WhatsAppPage';
 import ReportsPage from './pages/ReportsPage';
 import IntegrationsPage from './pages/IntegrationsPage';
+import AiUsagePage from './pages/AiUsagePage';
+import SuperAdminApp from './superadmin/SuperAdminApp';
 import ConfigPage from './pages/ConfigPage';
 import OperationsPage from './pages/OperationsPage';
 import UsersPage from './pages/UsersPage';
@@ -55,6 +57,9 @@ const NAV = [
   { id: 'postventa',    label: 'Post-Venta',        Icon: HeartHandshake,  section: 'marketing', mobile: false },
   { id: 'direccion',    label: 'Dirección',          Icon: TrendingUp,      section: 'analytics', mobile: false },
   { id: 'reports',      label: 'Reportes',          Icon: BarChart3,       section: 'analytics', mobile: true,  mobileOrder: 4 },
+  // El consumo de IA es información de facturación: solo dirección y quien administra.
+  { id: 'ai_usage',     label: 'Consumo de IA',     Icon: Sparkles,        section: 'analytics', mobile: false,
+    roles: ['admin', 'direccion', 'gerencia', 'finanzas'] },
   { id: 'users',        label: 'Usuarios',          Icon: UserPlus,        section: 'config',    mobile: false },
   { id: 'permissions',  label: 'Permisos',          Icon: Shield,          section: 'config',    mobile: false },
   { id: 'catalog',     label: 'Catálogo',           Icon: BookOpen,        section: 'config',    mobile: false },
@@ -349,11 +354,15 @@ function CRMApp() {
   const handleSelectOperation = (_id) => { navigate('operations'); toast('Abriendo operaciones…', 'info'); };
   const handleSelectQuote = (_id) => { navigate('quoter'); toast('Abriendo cotizador…', 'info'); };
 
-  const navBySections = NAV.reduce((acc, n) => {
-    acc[n.section] = acc[n.section] || [];
-    acc[n.section].push(n);
-    return acc;
-  }, {});
+  // Las entradas con `roles` solo se muestran a esos roles; el resto es visible
+  // para todos y el backend sigue validando cada petición.
+  const navBySections = NAV
+    .filter(n => !n.roles || n.roles.includes(user?.role))
+    .reduce((acc, n) => {
+      acc[n.section] = acc[n.section] || [];
+      acc[n.section].push(n);
+      return acc;
+    }, {});
 
   const activePage = page === 'lead_detail' ? 'leads' : page;
 
@@ -470,6 +479,7 @@ function CRMApp() {
               onSelectIntegration={setSelectedIntegrationId}
             />
           )}
+          {page === 'ai_usage'     && <AiUsagePage toast={toast} />}
           {page === 'templates'    && <TemplatesPage toast={toast} />}
           {page === 'import'       && <ImportPage toast={toast} onNavigate={navigate} />}
           {page === 'marketing'    && <MarketingPage toast={toast} />}
@@ -534,5 +544,8 @@ export default function App() {
       <div className="spinner" /> Cargando ACON CRM...
     </div>
   );
+  // El dueño de la plataforma no usa el CRM: al entrar va a su propio panel.
+  if (user?.role === 'superadmin') return <SuperAdminApp />;
+
   return user ? <CRMApp /> : <LoginPage />;
 }

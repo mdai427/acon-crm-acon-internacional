@@ -76,6 +76,11 @@ const PERMISSIONS = {
   'integrations.connect': ['admin'],
   'integrations.manage':  ['admin','gerencia'],
 
+  // ── CONSUMO DE IA ────────────────────────────────────────
+  // Cuánto se le factura al CRM por el uso de IA (sin costo real ni margen,
+  // eso solo lo ve el superadmin en su propio panel).
+  'ai_usage.view':        ['admin','direccion','gerencia','finanzas'],
+
   // ── LLAMADAS (Twilio) ────────────────────────────────────
   'calls.make':           ['admin','gerencia','executive'],
   'calls.view':           ['admin','direccion','gerencia','executive'],

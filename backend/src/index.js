@@ -135,6 +135,8 @@ app.use('/api/sequences',     require('./routes/sequences'));
 app.use('/api/audit',         require('./routes/audit'));
 app.use('/api/erp',           require('./routes/erp'));
 app.use('/api/calls',         require('./routes/calls'));
+app.use('/api/ai-usage',      require('./routes/aiUsage'));
+app.use('/api/superadmin',    require('./routes/superadmin'));
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString(), service: 'ACON CRM API v2.0' }));
 

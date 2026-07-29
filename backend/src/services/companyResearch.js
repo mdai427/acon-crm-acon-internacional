@@ -4,14 +4,13 @@
  * Al llegar un lead, investiga: giro, embarques, países, mercancía, tamaño, potencial
  */
 
-const OpenAI = require('openai');
+// Las llamadas a la IA pasan por aiClient para quedar contabilizadas.
+const aiClient = require('./aiClient');
 
 async function researchCompany(lead) {
   if (!process.env.OPENAI_API_KEY) {
     return getFallbackResearch(lead);
   }
-
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
   const prompt = `Eres un experto en logística internacional y comercio exterior.
 Investiga la siguiente empresa y genera un reporte ejecutivo en español para un ejecutivo de ventas de logística.
@@ -38,14 +37,16 @@ Genera un JSON con esta estructura exacta (solo JSON, sin markdown):
 }`;
 
   try {
-    const response = await openai.chat.completions.create({
+    const response = await aiClient.chat({
+      feature: 'company_research',
+      lead: lead._id,
       model: 'gpt-4o-mini',
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.3,
       max_tokens: 800,
     });
 
-    const text = response.choices[0].message.content.trim();
+    const text = (response.content || '').trim();
     const json = text.replace(/```json|```/g, '').trim();
     return JSON.parse(json);
   } catch (err) {

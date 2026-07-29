@@ -7,7 +7,9 @@ const userSchema = new mongoose.Schema({
   password: { type: String, required: true, minlength: 6 },
   role: {
     type: String,
-    enum: ['admin', 'direccion', 'gerencia', 'executive', 'operaciones', 'marketing', 'finanzas', 'viewer'],
+    // 'superadmin' es el dueño de la plataforma (panel de costos de IA), no un
+    // rol del CRM: se crea solo desde el entorno (ver services/superAdmin).
+    enum: ['superadmin', 'admin', 'direccion', 'gerencia', 'executive', 'operaciones', 'marketing', 'finanzas', 'viewer'],
     default: 'executive'
   },
   phone:    { type: String },

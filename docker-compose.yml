@@ -25,6 +25,11 @@ services:
       # true = en cada deploy crea o actualiza el admin con los datos de arriba
       ADMIN_FORCE_UPDATE: ${ADMIN_FORCE_UPDATE:-false}
 
+      # --- Super admin (panel de costos de IA, credenciales solo del entorno) ---
+      SUPERADMIN_NAME: ${SUPERADMIN_NAME:-Super Admin}
+      SUPERADMIN_EMAIL: ${SUPERADMIN_EMAIL:-}
+      SUPERADMIN_PASSWORD: ${SUPERADMIN_PASSWORD:-}
+
       # --- Seguridad ---
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1d}

@@ -3,7 +3,8 @@
 // Generates 4 specific tasks for a lead based
 // on its current stage, services and context.
 // ============================================
-const OpenAI = require('openai');
+// Las llamadas a la IA pasan por aiClient para quedar contabilizadas.
+const aiClient = require('./aiClient');
 
 const STAGE_LABELS = {
   new:         'Nuevo',
@@ -74,8 +75,6 @@ async function generateStageTasks(lead, stage) {
   }
 
   try {
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
     const prompt = `Eres un experto en ventas de freight forwarding internacional.
 Genera exactamente 4 tareas concretas y accionables para un ejecutivo de ventas de ACON Internacional.
 
@@ -99,14 +98,16 @@ Responde SOLO con un JSON array de 4 objetos con esta estructura exacta:
 
 Las tareas deben ser específicas para la etapa "${STAGE_LABELS[stage]}", relevantes al sector logístico/aduanal y adaptadas al perfil del prospecto. No incluyas texto fuera del JSON.`;
 
-    const response = await openai.chat.completions.create({
+    const response = await aiClient.chat({
+      feature: 'stage_tasks',
+      lead: lead._id,
       model: 'gpt-4o-mini',
       messages: [{ role: 'user', content: prompt }],
       max_tokens: 400,
       temperature: 0.4,
     });
 
-    const text = response.choices[0]?.message?.content?.trim() || '';
+    const text = (response.content || '').trim();
     // Extract JSON array from response
     const match = text.match(/\[[\s\S]*\]/);
     if (!match) throw new Error('No JSON array in response');
