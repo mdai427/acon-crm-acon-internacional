@@ -26,7 +26,17 @@ const campaignSchema = new mongoose.Schema({
     tags: [String],
   },
   subject: String,
-  body: { type: String, required: true },
+  // Cuerpo del correo. Las campañas de WhatsApp no lo usan: envían plantilla.
+  body: { type: String, default: '' },
+
+  // Campaña de WhatsApp: plantilla aprobada de Meta y el valor de cada
+  // variable {{n}} (admiten {{contact}}, {{company}}… que se renderizan por lead).
+  waTemplate: {
+    name:      { type: String, default: '' },
+    language:  { type: String, default: 'es_MX' },
+    params:    { type: [String], default: [] },
+    headerUrl: { type: String, default: '' },
+  },
 
   // Cómo se escribió el cuerpo:
   //   'text' → correo en blanco: se escribe texto plano y el CRM lo envuelve
@@ -85,7 +95,7 @@ const Automation = mongoose.models.Automation || mongoose.model('Automation', au
 // quedan fuera a propósito: los llenan los webhooks del proveedor, y dejarlos
 // abiertos permitiría inventar los resultados de una campaña.
 const CAMPAIGN_FIELDS = ['name', 'type', 'status', 'segment', 'subject', 'body',
-  'bodyType', 'templateId', 'mailbox', 'scheduledAt'];
+  'bodyType', 'templateId', 'mailbox', 'scheduledAt', 'waTemplate'];
 const AUTOMATION_FIELDS = ['name', 'isActive', 'trigger', 'actions'];
 
 router.use(auth);

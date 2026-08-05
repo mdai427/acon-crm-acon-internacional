@@ -18,14 +18,24 @@ const CATEGORIES = [
   { id: 'MARKETING', label: 'Marketing', hint: 'Promociones y prospección; Meta la revisa con más lupa' },
 ];
 
-// Valores de ejemplo para que la vista previa se lea natural.
-const SAMPLES = ['Ana López', 'Acme SA', 'flete marítimo', 'Shanghái', 'Manzanillo'];
+// Variables predefinidas: al enviar, el sistema las rellena solo con el dato
+// del lead. La personalizada pide el texto de ejemplo (Meta lo exige para
+// aprobar) y su valor se captura al momento de enviar.
+const PRESET_VARS = [
+  { id: 'contacto',  label: 'Nombre del contacto', sample: 'Ana López' },
+  { id: 'empresa',   label: 'Empresa',             sample: 'Acme SA' },
+  { id: 'ejecutivo', label: 'Ejecutivo asignado',  sample: 'Carlos Ruiz' },
+  { id: 'etapa',     label: 'Etapa del pipeline',  sample: 'Propuesta' },
+  { id: 'custom',    label: 'Personalizada…',      sample: '' },
+];
 
 export default function WaTemplateCreator({ onClose, onCreated, toast }) {
   const [form, setForm] = useState({
     name: '', language: 'es_MX', category: 'UTILITY',
     headerText: '', bodyText: '', footerText: '',
   });
+  // Qué representa cada variable {{n}}: predefinida o personalizada con su texto.
+  const [varMeta, setVarMeta] = useState([]);
   const [saving, setSaving] = useState(false);
 
   const set = (campo, valor) => setForm(f => ({ ...f, [campo]: valor }));
@@ -40,6 +50,19 @@ export default function WaTemplateCreator({ onClose, onCreated, toast }) {
   const addVariable = () => {
     const next = vars.length + 1;
     set('bodyText', `${form.bodyText}${form.bodyText && !form.bodyText.endsWith(' ') ? ' ' : ''}{{${next}}}`);
+    setVarMeta(m => [...m, { kind: 'contacto', custom: '' }]);
+  };
+
+  const setVarKind = (i, kind) =>
+    setVarMeta(m => vars.map((_, idx) => (idx === i ? { ...(m[idx] || {}), kind } : (m[idx] || { kind: 'contacto', custom: '' }))));
+  const setVarCustom = (i, custom) =>
+    setVarMeta(m => vars.map((_, idx) => (idx === i ? { ...(m[idx] || { kind: 'custom' }), custom } : (m[idx] || { kind: 'contacto', custom: '' }))));
+
+  // Texto de ejemplo de cada variable (para la vista previa y para Meta).
+  const sampleFor = (i) => {
+    const meta = varMeta[i] || { kind: 'contacto' };
+    if (meta.kind === 'custom') return meta.custom || `Ejemplo ${i + 1}`;
+    return PRESET_VARS.find(v => v.id === meta.kind)?.sample || `Ejemplo ${i + 1}`;
   };
 
   // La vista previa reutiliza el formato de componentes de Meta.
@@ -56,7 +79,11 @@ export default function WaTemplateCreator({ onClose, onCreated, toast }) {
     if (!form.bodyText.trim()) return toast('Escribe el cuerpo del mensaje', 'error');
     setSaving(true);
     try {
-      const r = await createMetaWaTemplate(form);
+      const r = await createMetaWaTemplate({
+        ...form,
+        // Meta exige un ejemplo por variable para aprobar la plantilla.
+        examples: vars.map((n, i) => sampleFor(i)),
+      });
       toast(r.data.message, 'success');
       onCreated?.();
       onClose();
@@ -128,10 +155,40 @@ export default function WaTemplateCreator({ onClose, onCreated, toast }) {
                 <button type="button" className="waw-chip" onClick={addVariable}>
                   <Plus size={11} /> Insertar variable {'{{'}{vars.length + 1}{'}}'}
                 </button>
-                {vars.length > 0 && (
-                  <span className="pb-tpl-hint">{vars.length} variable(s): al enviarla se rellenan con datos del lead.</span>
-                )}
               </div>
+
+              {/* Qué representa cada variable */}
+              {vars.length > 0 && (
+                <div className="waw-vars">
+                  {vars.map((n, i) => {
+                    const meta = varMeta[i] || { kind: 'contacto', custom: '' };
+                    return (
+                      <div key={n} className="waw-var-row">
+                        <code className="waw-var-tag">{'{{'}{n}{'}}'}</code>
+                        <select
+                          className="form-select"
+                          value={meta.kind}
+                          onChange={e => setVarKind(i, e.target.value)}
+                        >
+                          {PRESET_VARS.map(v => <option key={v.id} value={v.id}>{v.label}</option>)}
+                        </select>
+                        {meta.kind === 'custom' && (
+                          <input
+                            className="waw-var-custom"
+                            placeholder="Texto de ejemplo (ej. 20% de descuento)"
+                            value={meta.custom || ''}
+                            onChange={e => setVarCustom(i, e.target.value)}
+                          />
+                        )}
+                      </div>
+                    );
+                  })}
+                  <div className="pb-tpl-hint">
+                    Las predefinidas se rellenan solas con el dato del lead al enviar; la
+                    personalizada se captura en cada envío.
+                  </div>
+                </div>
+              )}
             </label>
 
             <label className="waw-field">
@@ -151,7 +208,7 @@ export default function WaTemplateCreator({ onClose, onCreated, toast }) {
           <div>
             <PhonePreview
               template={previewTemplate}
-              values={vars.map((n, i) => SAMPLES[i] || `Ejemplo ${n}`)}
+              values={vars.map((n, i) => sampleFor(i))}
               contactName="Cliente"
             />
             <div className="pb-tpl-hint" style={{ textAlign: 'center', marginTop: 8 }}>

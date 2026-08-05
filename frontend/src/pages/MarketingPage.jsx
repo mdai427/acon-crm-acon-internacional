@@ -11,6 +11,8 @@ import {
   disconnectAdPlatform, getMetaAdAccounts, getLinkedInAdAccounts, createAdCampaign,
   getJob,
 } from '../services/api';
+import { getMetaWaTemplates } from '../services/api';
+import { PhonePreview, extractVars } from '../components/WaTemplateWizard';
 import {
   Megaphone, Zap, BarChart3, Plus, Play, Pause, Trash2, Mail,
   MessageSquare, Target, Send, Radio, Link2, Link2Off, ExternalLink,
@@ -194,8 +196,16 @@ export default function MarketingPage({ toast }) {
   });
   const [showAdCampaignForm, setShowAdCampaignForm] = useState(false);
 
+  const [waTemplates, setWaTemplates] = useState([]);
+  useEffect(() => {
+    getMetaWaTemplates()
+      .then(r => setWaTemplates((r.data.data || []).filter(t => t.status === 'APPROVED')))
+      .catch(() => setWaTemplates([]));
+  }, []);
+
   const [campaignForm, setCampaignForm] = useState({
     name: '', type: 'email', subject: '', body: '', bodyType: 'text', mailbox: '',
+    waTemplate: { name: '', language: 'es_MX', params: [] },
     segment: { services: [], stages: [], countries: [], minScore: 0 }
   });
   // Buzones disponibles como remitente de la campaña.
@@ -298,7 +308,7 @@ export default function MarketingPage({ toast }) {
       await createCampaign(campaignForm);
       toast('Campaña creada', 'success');
       setShowNewCampaign(false);
-      setCampaignForm({ name: '', type: 'email', subject: '', body: '', bodyType: 'text', mailbox: '', segment: { services: [], stages: [], countries: [], minScore: 0 } });
+      setCampaignForm({ name: '', type: 'email', subject: '', body: '', bodyType: 'text', mailbox: '', waTemplate: { name: '', language: 'es_MX', params: [] }, segment: { services: [], stages: [], countries: [], minScore: 0 } });
       setSegmentPreview(null); load();
     } catch { toast('Error al crear campaña', 'error'); }
   };
@@ -514,6 +524,7 @@ export default function MarketingPage({ toast }) {
                 </div>
               )}
 
+              {campaignForm.type !== 'whatsapp' ? (
               <div className="form-group">
                 <label className="form-label">Formato del mensaje</label>
                 <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
@@ -546,6 +557,91 @@ export default function MarketingPage({ toast }) {
                   Variables: {'{{contact}}'}, {'{{company}}'}, {'{{country}}'}, {'{{city}}'} · Se agrega el enlace de baja automáticamente.
                 </div>
               </div>
+              ) : (
+                <div className="form-group">
+                  <label className="form-label">Plantilla de WhatsApp</label>
+                  <div style={{ fontSize: 11.5, color: '#9AA3AE', marginBottom: 8 }}>
+                    Las campañas de WhatsApp llegan fuera de la ventana de 24 h, así que solo
+                    envían plantillas aprobadas de Meta.
+                  </div>
+                  <div className="camp-wa-grid">
+                    <div>
+                      <select
+                        className="form-select"
+                        value={campaignForm.waTemplate.name}
+                        onChange={e => {
+                          const tpl = waTemplates.find(t => t.name === e.target.value);
+                          const nVars = extractVars(tpl?.components?.find(c => c.type === 'BODY')?.text).length;
+                          setCampaignForm(f => ({
+                            ...f,
+                            waTemplate: {
+                              name: e.target.value,
+                              language: tpl?.language || 'es_MX',
+                              params: Array(nVars).fill(''),
+                            },
+                          }));
+                        }}
+                      >
+                        <option value="">
+                          {waTemplates.length ? 'Selecciona una plantilla aprobada…' : 'Sin plantillas aprobadas en Meta'}
+                        </option>
+                        {waTemplates.map(t => (
+                          <option key={t.name + t.language} value={t.name}>{t.name} ({t.language})</option>
+                        ))}
+                      </select>
+
+                      {(() => {
+                        const tpl = waTemplates.find(t => t.name === campaignForm.waTemplate.name);
+                        if (!tpl) return null;
+                        const vars = extractVars(tpl.components?.find(c => c.type === 'BODY')?.text);
+                        if (!vars.length) return null;
+                        return (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10 }}>
+                            {vars.map((n, i) => (
+                              <input
+                                key={n}
+                                className="form-input"
+                                placeholder={`{{${n}}} — admite {{contact}} {{company}} {{country}}`}
+                                value={campaignForm.waTemplate.params[i] || ''}
+                                onChange={e => setCampaignForm(f => ({
+                                  ...f,
+                                  waTemplate: {
+                                    ...f.waTemplate,
+                                    params: vars.map((_, idx) => (idx === i ? e.target.value : (f.waTemplate.params[idx] || ''))),
+                                  },
+                                }))}
+                              />
+                            ))}
+                            <div style={{ fontSize: 11, color: '#9AA3AE' }}>
+                              Cada variable se rellena por destinatario: {'{{contact}}'} y {'{{company}}'} toman el dato de cada lead.
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+
+                    {(() => {
+                      const tpl = waTemplates.find(t => t.name === campaignForm.waTemplate.name);
+                      if (!tpl) return null;
+                      return (
+                        <div>
+                          <PhonePreview
+                            template={tpl}
+                            values={campaignForm.waTemplate.params.map((v, i) =>
+                              (v || '').replace('{{contact}}', 'Ana López').replace('{{company}}', 'Acme SA')
+                                .replace('{{country}}', 'México') || `{{${i + 1}}}`)}
+                            contactName="Cliente"
+                          />
+                          <div style={{ fontSize: 11, color: '#9AA3AE', textAlign: 'center', marginTop: 6 }}>
+                            Vista previa con datos de ejemplo
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+              )}
+
               <div style={{ fontWeight: 600, fontSize: 13, color: '#0B2545', marginBottom: 10, marginTop: 4 }}>Segmentación de audiencia</div>
               <div className="form-row">
                 <div className="form-group">

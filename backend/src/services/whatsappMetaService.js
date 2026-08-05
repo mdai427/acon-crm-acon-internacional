@@ -144,7 +144,7 @@ async function listTemplates() {
  * Crea una plantilla en Meta (queda PENDING hasta que la aprueben).
  * @param {object} data { name, language, category, bodyText, headerText, footerText }
  */
-async function createTemplate({ name, language = 'es_MX', category = 'UTILITY', bodyText, headerText, footerText }) {
+async function createTemplate({ name, language = 'es_MX', category = 'UTILITY', bodyText, headerText, footerText, examples }) {
   if (!isConfigured()) throw new Error('WhatsApp no configurado');
   const wabaId = process.env.WHATSAPP_WABA_ID;
   if (!wabaId) throw new Error('Falta WHATSAPP_WABA_ID para administrar plantillas');
@@ -158,7 +158,14 @@ async function createTemplate({ name, language = 'es_MX', category = 'UTILITY', 
 
   const components = [];
   if (headerText?.trim()) components.push({ type: 'HEADER', format: 'TEXT', text: headerText.trim() });
-  components.push({ type: 'BODY', text: bodyText.trim() });
+  // Meta exige valores de ejemplo cuando el cuerpo lleva variables {{n}}.
+  const bodyComponent = { type: 'BODY', text: bodyText.trim() };
+  const nVars = new Set([...bodyText.matchAll(/\{\{(\d+)\}\}/g)].map(m => m[1])).size;
+  if (nVars > 0) {
+    const sample = Array.from({ length: nVars }, (_, i) => String(examples?.[i] || `Ejemplo ${i + 1}`));
+    bodyComponent.example = { body_text: [sample] };
+  }
+  components.push(bodyComponent);
   if (footerText?.trim()) components.push({ type: 'FOOTER', text: footerText.trim() });
 
   const r = await axios.post(

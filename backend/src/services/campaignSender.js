@@ -124,6 +124,7 @@ async function sendCampaign(campaignId, onProgress = async () => {}) {
   const Campaign = mongoose.models.Campaign;
   const campaign = await Campaign.findById(campaignId);
   if (!campaign) throw new Error('Campaña no encontrada');
+  if (campaign.type === 'whatsapp') return sendWhatsAppCampaign(campaign, onProgress);
   if (!campaign.body) throw new Error('La campaña no tiene cuerpo');
 
   const mailbox = campaign.mailbox
@@ -193,6 +194,103 @@ async function sendCampaign(campaignId, onProgress = async () => {}) {
   }
 
   await Campaign.findByIdAndUpdate(campaignId, {
+    status: 'completed',
+    sentCount: results.sent,
+    failedCount: results.failed,
+    skippedCount: results.skipped,
+  });
+
+  return results;
+}
+
+// ── Campañas de WhatsApp ────────────────────────────────────────────
+// Envío masivo = fuera de la ventana de 24 h con seguridad, así que solo
+// plantillas aprobadas de Meta. Cada variable admite {{contact}}, {{company}}…
+// y se renderiza por destinatario.
+
+async function sendWhatsAppCampaign(campaign, onProgress = async () => {}) {
+  const Campaign = mongoose.models.Campaign;
+  const metaWA = require('./whatsappMetaService');
+  const Activity = require('../models/Activity');
+
+  if (!campaign.waTemplate?.name) {
+    throw new Error('La campaña de WhatsApp necesita una plantilla aprobada de Meta');
+  }
+
+  const filter = {
+    isActive: true,
+    $or: [{ whatsapp: { $exists: true, $ne: '' } }, { phone: { $exists: true, $ne: '' } }],
+  };
+  const seg = campaign.segment || {};
+  if (seg.services?.length) filter.services = { $in: seg.services };
+  if (seg.stages?.length) filter.stage = { $in: seg.stages };
+  if (seg.countries?.length) filter.country = { $in: seg.countries };
+  if (seg.tags?.length) filter.tags = { $in: seg.tags };
+  if (seg.minScore) filter.score = { $gte: seg.minScore };
+
+  const leads = await Lead.find(filter)
+    .select('_id company contact country city whatsapp phone email')
+    .limit(MAX_RECIPIENTS)
+    .lean();
+
+  const total = leads.length;
+  await Campaign.findByIdAndUpdate(campaign._id, {
+    status: 'running', totalRecipients: total, lastError: null,
+  });
+
+  const results = { sent: 0, failed: 0, skipped: 0, total };
+
+  for (const [index, lead] of leads.entries()) {
+    const phone = lead.whatsapp || lead.phone;
+    const recipient = await CampaignRecipient.findOneAndUpdate(
+      { campaign: campaign._id, lead: lead._id },
+      { $setOnInsert: { email: lead.email || `${phone}@wa`, status: 'pending' } },
+      { upsert: true, new: true, setDefaultsOnInsert: true },
+    );
+    if (recipient.status !== 'pending') continue; // reanudar no reenvía
+
+    try {
+      const params = (campaign.waTemplate.params || []).map(v => renderVariables(v, lead));
+      const components = [];
+      if (campaign.waTemplate.headerUrl) {
+        components.push({ type: 'header', parameters: [{ type: 'image', image: { link: campaign.waTemplate.headerUrl } }] });
+      }
+      if (params.length) {
+        components.push({ type: 'body', parameters: params.map(text => ({ type: 'text', text })) });
+      }
+
+      const r = await metaWA.sendTemplate(
+        phone, campaign.waTemplate.name, campaign.waTemplate.language || 'es_MX', components
+      );
+
+      await CampaignRecipient.updateOne({ _id: recipient._id }, {
+        status: 'sent', messageId: r.messages?.[0]?.id, sentAt: new Date(),
+      });
+      // Queda en el chat del lead como cualquier otro mensaje saliente.
+      await Activity.create({
+        lead: lead._id, type: 'whatsapp_out', direction: 'outbound', isAuto: true,
+        content: `[Campaña: ${campaign.name}] plantilla ${campaign.waTemplate.name}`,
+        metadata: { campaignId: campaign._id },
+      });
+      results.sent++;
+    } catch (error) {
+      await CampaignRecipient.updateOne({ _id: recipient._id }, {
+        status: 'failed', reason: error.response?.data?.error?.message || error.message,
+      });
+      results.failed++;
+    }
+
+    if ((index + 1) % 10 === 0) {
+      await Campaign.findByIdAndUpdate(campaign._id, {
+        sentCount: results.sent, failedCount: results.failed,
+      });
+      await onProgress(Math.round(((index + 1) / total) * 100), total);
+    }
+    // Meta también tiene límite de tasa; mismo ritmo que el correo.
+    await wait(SEND_INTERVAL_MS);
+  }
+
+  await Campaign.findByIdAndUpdate(campaign._id, {
     status: 'completed',
     sentCount: results.sent,
     failedCount: results.failed,
