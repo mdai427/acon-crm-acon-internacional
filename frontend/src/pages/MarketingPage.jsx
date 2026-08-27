@@ -12,6 +12,7 @@ import {
   getJob,
 } from '../services/api';
 import { getMetaWaTemplates } from '../services/api';
+import { labelOf, fallbackVariables } from '../components/waVars';
 import { PhonePreview, extractVars } from '../components/WaTemplateWizard';
 import {
   Megaphone, Zap, BarChart3, Plus, Play, Pause, Trash2, Mail,
@@ -572,12 +573,16 @@ export default function MarketingPage({ toast }) {
                         onChange={e => {
                           const tpl = waTemplates.find(t => t.name === e.target.value);
                           const nVars = extractVars(tpl?.components?.find(c => c.type === 'BODY')?.text).length;
+                          const mapping = tpl?.variables?.length ? tpl.variables : fallbackVariables(nVars);
                           setCampaignForm(f => ({
                             ...f,
                             waTemplate: {
                               name: e.target.value,
                               language: tpl?.language || 'es_MX',
-                              params: Array(nVars).fill(''),
+                              // Las variables del CRM se dejan como marcador {{campo}}:
+                              // el envío las resuelve lead por lead. Las personalizadas
+                              // quedan vacías porque valen igual para toda la campaña.
+                              params: mapping.map(v => (v.kind === 'field' ? `{{${v.source}}}` : '')),
                             },
                           }));
                         }}
@@ -595,13 +600,14 @@ export default function MarketingPage({ toast }) {
                         if (!tpl) return null;
                         const vars = extractVars(tpl.components?.find(c => c.type === 'BODY')?.text);
                         if (!vars.length) return null;
+                        const mapping = tpl.variables?.length ? tpl.variables : fallbackVariables(vars.length);
                         return (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10 }}>
                             {vars.map((n, i) => (
                               <input
                                 key={n}
                                 className="form-input"
-                                placeholder={`{{${n}}} — admite {{contact}} {{company}} {{country}}`}
+                                placeholder={`${labelOf(mapping[i], i)} — admite {{contact}} {{company}} {{country}}`}
                                 value={campaignForm.waTemplate.params[i] || ''}
                                 onChange={e => setCampaignForm(f => ({
                                   ...f,

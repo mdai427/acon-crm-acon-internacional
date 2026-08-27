@@ -130,9 +130,11 @@ async function markRead(messageId) {
  * List approved message templates.
  */
 async function listTemplates() {
-  if (!isConfigured()) return [];
+  if (!isConfigured()) throw new Error('WhatsApp no configurado — falta el token o el Phone Number ID');
+  // Antes devolvía [] cuando faltaba el WABA ID: la pantalla mostraba "no hay
+  // plantillas" y nadie sabía que la causa era una credencial sin configurar.
   const wabaId = process.env.WHATSAPP_WABA_ID;
-  if (!wabaId) return [];
+  if (!wabaId) throw new Error('Falta WHATSAPP_WABA_ID: configúralo en Integraciones → WhatsApp Business para poder ver y crear plantillas');
   const r = await axios.get(
     `${BASE_URL}/${wabaId}/message_templates`,
     { headers: headers(), timeout: 10000 }
@@ -144,7 +146,8 @@ async function listTemplates() {
  * Crea una plantilla en Meta (queda PENDING hasta que la aprueben).
  * @param {object} data { name, language, category, bodyText, headerText, footerText }
  */
-async function createTemplate({ name, language = 'es_MX', category = 'UTILITY', bodyText, headerText, footerText, examples }) {
+async function createTemplate({ name, language = 'es_MX', category = 'UTILITY',
+  bodyText, headerText, headerFormat, headerHandle, footerText, examples, buttons }) {
   if (!isConfigured()) throw new Error('WhatsApp no configurado');
   const wabaId = process.env.WHATSAPP_WABA_ID;
   if (!wabaId) throw new Error('Falta WHATSAPP_WABA_ID para administrar plantillas');
@@ -157,7 +160,17 @@ async function createTemplate({ name, language = 'es_MX', category = 'UTILITY', 
   if (!cleanName) throw new Error('La plantilla necesita nombre');
 
   const components = [];
-  if (headerText?.trim()) components.push({ type: 'HEADER', format: 'TEXT', text: headerText.trim() });
+  if (headerText?.trim()) {
+    components.push({ type: 'HEADER', format: 'TEXT', text: headerText.trim() });
+  } else if (headerHandle) {
+    // Encabezado con archivo: Meta aprueba el diseño a partir de una muestra,
+    // que se referencia por el identificador de la subida.
+    components.push({
+      type: 'HEADER',
+      format: (headerFormat || 'IMAGE').toUpperCase(),
+      example: { header_handle: [headerHandle] },
+    });
+  }
   // Meta exige valores de ejemplo cuando el cuerpo lleva variables {{n}}.
   const bodyComponent = { type: 'BODY', text: bodyText.trim() };
   const nVars = new Set([...bodyText.matchAll(/\{\{(\d+)\}\}/g)].map(m => m[1])).size;
@@ -167,6 +180,15 @@ async function createTemplate({ name, language = 'es_MX', category = 'UTILITY', 
   }
   components.push(bodyComponent);
   if (footerText?.trim()) components.push({ type: 'FOOTER', text: footerText.trim() });
+  if (buttons?.length) {
+    // Meta llama `phone_number` a lo que el CRM guarda como `phone`.
+    components.push({
+      type: 'BUTTONS',
+      buttons: buttons.map(b => (b.type === 'PHONE_NUMBER'
+        ? { type: b.type, text: b.text, phone_number: b.phone }
+        : (b.type === 'URL' ? { type: b.type, text: b.text, url: b.url } : { type: b.type, text: b.text }))),
+    });
+  }
 
   const r = await axios.post(
     `${BASE_URL}/${wabaId}/message_templates`,

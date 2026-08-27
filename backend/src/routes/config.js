@@ -312,6 +312,57 @@ router.post('/resend/test', auth, checkPerm('config.edit'), async (req, res) => 
 });
 
 // ─────────────────────────────────────────
+// POST /api/config/labia/test — valida la API Key de Labia y muestra qué
+// números y sesiones tiene conectados. No envía ningún mensaje.
+// ─────────────────────────────────────────
+router.post('/labia/test', auth, checkPerm('config.edit'), async (req, res) => {
+  const labia = require('../services/labiaWaService');
+  if (!labia.isConfigured()) {
+    return res.status(400).json({ success: false, message: 'Configura LABIA_API_KEY primero' });
+  }
+  try {
+    const [cuenta, canales] = await Promise.all([labia.account(), labia.numbers()]);
+
+    const oficiales = canales?.numbers || [];
+    const sesiones  = canales?.unofficialSessions || [];
+    if (!oficiales.length && !sesiones.length) {
+      return res.json({
+        success: false,
+        message: '❌ La key es válida pero no hay ningún número conectado en el panel de Labia',
+      });
+    }
+
+    // Sin el secreto del webhook no entran los mensajes de los clientes: la key
+    // sola solo sirve para enviar, y media integración no es una integración.
+    const avisos = [];
+    if (!process.env.LABIA_WEBHOOK_SECRET) {
+      avisos.push('falta el secreto del webhook: no se recibirán mensajes entrantes');
+    }
+    if (oficiales.length > 1 && !process.env.LABIA_PHONE_NUMBER_ID) {
+      avisos.push('hay varios números: indica cuál usar en Phone Number ID');
+    }
+
+    const resumen = [
+      oficiales.length ? `${oficiales.length} número(s) oficial(es)` : null,
+      sesiones.length ? `${sesiones.length} sesión(es) QR` : null,
+    ].filter(Boolean).join(' y ');
+
+    res.json({
+      success: true,
+      message: `✅ Labia conectado — ${resumen}${avisos.length ? ` (⚠️ ${avisos.join('; ')})` : ''}`,
+      data: {
+        plan: cuenta?.subscription?.plan || cuenta?.plan || null,
+        numbers: oficiales.map(n => ({ phoneNumberId: n.phoneNumberId, number: n.displayNumero || n.number })),
+        sessions: sesiones.map(s => ({ sessionId: s.sessionId, number: s.number, status: s.status })),
+        warnings: avisos,
+      },
+    });
+  } catch (e) {
+    res.json({ success: false, message: `❌ ${e.message}` });
+  }
+});
+
+// ─────────────────────────────────────────
 // POST /api/config/twilio/test — valida credenciales y TwiML App
 // ─────────────────────────────────────────
 router.post('/twilio/test', auth, checkPerm('config.edit'), async (req, res) => {

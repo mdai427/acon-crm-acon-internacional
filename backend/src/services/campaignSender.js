@@ -18,8 +18,12 @@ const derivedKeys = require('../utils/derivedKeys');
 const { PUBLIC_BASE_URL } = require('../config/urls');
 
 // Pausa entre envíos. Sin esto se dispara el límite de tasa del proveedor y
-// medio envío termina en reintentos innecesarios.
-const SEND_INTERVAL_MS = 250;
+// medio envío termina en reintentos innecesarios. El ritmo lo marca el más
+// lento de los dos canales, que no es el mismo:
+//   · Resend admite 2 peticiones por segundo → 500 ms entre correos.
+//   · WhatsApp por Labia admite 20 → 250 ms sobra y va cuatro veces más rápido.
+const EMAIL_INTERVAL_MS = 500;
+const WA_INTERVAL_MS = 250;
 const MAX_RECIPIENTS = 5000;
 
 const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
@@ -66,16 +70,15 @@ function wrapPlainText(body) {
 }
 
 // Variables disponibles en asunto y cuerpo: {{contact}}, {{company}}, etc.
+//
+// La lista de campos es la misma que usan las plantillas de WhatsApp
+// (waTemplateStore.LEAD_FIELDS), para que un {{executive}} que se ofrece en el
+// creador de plantillas signifique lo mismo aquí y no se quede sin resolver.
+const { LEAD_FIELDS } = require('./waTemplateStore');
+
 function renderVariables(template, lead) {
-  const values = {
-    contact: lead.contact || '',
-    company: lead.company || '',
-    country: lead.country || '',
-    city: lead.city || '',
-    email: lead.email || '',
-  };
   return String(template || '').replace(/\{\{\s*(\w+)\s*\}\}/g, (match, key) =>
-    (key in values ? values[key] : match));
+    (LEAD_FIELDS[key] ? LEAD_FIELDS[key](lead) : match));
 }
 
 function unsubscribeFooter(email) {
@@ -132,7 +135,10 @@ async function sendCampaign(campaignId, onProgress = async () => {}) {
     : await Mailbox.findOne({ isActive: true, isDefault: true });
 
   const leads = await Lead.find(segmentFilter(campaign.segment))
-    .select('_id company contact email country city')
+    .select('_id company contact email country city stage services assignedTo')
+    // El ejecutivo asignado es una variable disponible: sin poblarlo, {{executive}}
+    // saldría vacío en todos los correos.
+    .populate('assignedTo', 'name')
     .limit(MAX_RECIPIENTS)
     .lean();
 
@@ -190,7 +196,7 @@ async function sendCampaign(campaignId, onProgress = async () => {}) {
       });
       await onProgress(Math.round(((index + 1) / total) * 100), total);
     }
-    await wait(SEND_INTERVAL_MS);
+    await wait(EMAIL_INTERVAL_MS);
   }
 
   await Campaign.findByIdAndUpdate(campaignId, {
@@ -210,7 +216,7 @@ async function sendCampaign(campaignId, onProgress = async () => {}) {
 
 async function sendWhatsAppCampaign(campaign, onProgress = async () => {}) {
   const Campaign = mongoose.models.Campaign;
-  const metaWA = require('./whatsappMetaService');
+  const wa = require('./whatsappService');
   const Activity = require('../models/Activity');
 
   if (!campaign.waTemplate?.name) {
@@ -229,7 +235,8 @@ async function sendWhatsAppCampaign(campaign, onProgress = async () => {}) {
   if (seg.minScore) filter.score = { $gte: seg.minScore };
 
   const leads = await Lead.find(filter)
-    .select('_id company contact country city whatsapp phone email')
+    .select('_id company contact country city whatsapp phone email stage services assignedTo')
+    .populate('assignedTo', 'name')
     .limit(MAX_RECIPIENTS)
     .lean();
 
@@ -259,7 +266,7 @@ async function sendWhatsAppCampaign(campaign, onProgress = async () => {}) {
         components.push({ type: 'body', parameters: params.map(text => ({ type: 'text', text })) });
       }
 
-      const r = await metaWA.sendTemplate(
+      const r = await wa.sendTemplate(
         phone, campaign.waTemplate.name, campaign.waTemplate.language || 'es_MX', components
       );
 
@@ -286,8 +293,8 @@ async function sendWhatsAppCampaign(campaign, onProgress = async () => {}) {
       });
       await onProgress(Math.round(((index + 1) / total) * 100), total);
     }
-    // Meta también tiene límite de tasa; mismo ritmo que el correo.
-    await wait(SEND_INTERVAL_MS);
+    // El proveedor de WhatsApp también limita la tasa, pero más alto.
+    await wait(WA_INTERVAL_MS);
   }
 
   await Campaign.findByIdAndUpdate(campaign._id, {

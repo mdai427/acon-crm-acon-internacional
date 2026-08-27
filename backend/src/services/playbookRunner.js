@@ -106,7 +106,7 @@ ${formato}` }],
 // ── Ejecutores por tipo de acción ────────────────────────────────────────────
 
 async function runWhatsApp(lead, action, ctx) {
-  const wa = require('./whatsappMetaService');
+  const wa = require('./whatsappService');
   const phone = lead.whatsapp || lead.phone
     || (typeof lead.contact === 'object' ? lead.contact?.whatsapp : null);
   if (!phone) throw new Error('El lead no tiene número de WhatsApp');

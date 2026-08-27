@@ -5,17 +5,30 @@ const Lead = require('../models/Lead');
 const Activity = require('../models/Activity');
 const { auth, checkPerm } = require('../middleware/auth');
 const { processInboundMessage } = require('../services/aiAgent');
-const metaWA = require('../services/whatsappMetaService');
+const wa = require('../services/whatsappService');
+const templateStore = require('../services/waTemplateStore');
+const multer = require('multer');
+
+// Encabezado con archivo: Meta acepta JPG, PNG, MP4 y PDF hasta 5 MB.
+const HEADER_MIME = ['image/jpeg', 'image/png', 'video/mp4', 'application/pdf'];
+const headerUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => cb(
+    HEADER_MIME.includes(file.mimetype) ? null : new Error('Solo se permiten JPG, PNG, MP4 o PDF'),
+    HEADER_MIME.includes(file.mimetype),
+  ),
+});
 
 // ── Backward-compat wrapper uses new Meta service ─────────────────────────────
 const sendWhatsApp = async ({ to, message, templateName, templateParams, mediaUrl, mediaType }) => {
-  const phone = metaWA.normalizePhone(to) || to;
+  const phone = wa.normalizePhone(to) || to;
   if (templateName) {
     const components = templateParams ? [{ type: 'body', parameters: templateParams.map(p => ({ type: 'text', text: p })) }] : [];
-    return metaWA.sendTemplate(phone, templateName, 'es_MX', components);
+    return wa.sendTemplate(phone, templateName, 'es_MX', components);
   }
-  if (mediaUrl) return metaWA.sendMedia(phone, mediaType || 'image', mediaUrl);
-  return metaWA.sendText(phone, message);
+  if (mediaUrl) return wa.sendMedia(phone, mediaType || 'image', mediaUrl);
+  return wa.sendText(phone, message);
 };
 
 // ============================================
@@ -96,38 +109,6 @@ router.post('/template', auth, checkPerm('whatsapp.send'), async (req, res) => {
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
-});
-
-// GET /api/whatsapp/templates — lista de plantillas aprobadas
-router.get('/templates', auth, checkPerm('whatsapp.view'), async (req, res) => {
-  // Plantillas predefinidas para ACON
-  const templates = [
-    {
-      id: 'acon_primer_contacto',
-      name: 'Primer contacto',
-      preview: 'Hola {{1}}, soy {{2}} de ACON Worldwide Logística. Vi que tienes necesidades de {{3}}...',
-      params: ['nombre_contacto', 'nombre_ejecutivo', 'servicio']
-    },
-    {
-      id: 'acon_cotizacion_lista',
-      name: 'Cotización lista',
-      preview: 'Hola {{1}}, tu cotización de flete {{2}} de {{3}} a {{4}} ya está lista...',
-      params: ['contacto', 'tipo_flete', 'origen', 'destino']
-    },
-    {
-      id: 'acon_seguimiento',
-      name: 'Seguimiento general',
-      preview: 'Hola {{1}}, quedé de darte seguimiento respecto a {{2}}. ¿Tienes un momento?',
-      params: ['contacto', 'tema']
-    },
-    {
-      id: 'acon_bienvenida_cliente',
-      name: 'Bienvenida cliente nuevo',
-      preview: 'Bienvenido a ACON {{1}}. Estamos listos para gestionar tu primer embarque...',
-      params: ['empresa']
-    }
-  ];
-  res.json({ success: true, data: templates });
 });
 
 // La bandeja mezcla los dos canales: la conversación con un cliente es una
@@ -260,6 +241,21 @@ router.post('/webhook', express.json(), async (req, res) => {
           }
         }
 
+        // Meta avisa por aquí cuando aprueba o rechaza una plantilla. Es el
+        // equivalente al evento `template.status` de Labia, así que se resuelve
+        // con el mismo código y el aviso le llega igual a quien la creó.
+        if (change.field === 'message_template_status_update') {
+          const { handleTemplateStatus } = require('./webhooks');
+          await handleTemplateStatus({
+            name: val.message_template_name,
+            language: val.message_template_language,
+            templateId: val.message_template_id,
+            event: val.event,
+            reason: val.reason,
+          }, req.io);
+          continue;
+        }
+
         // Actualizaciones de estado (sent, delivered, read)
         if (val.statuses) {
           for (const status of val.statuses) {
@@ -334,24 +330,46 @@ async function handleIncomingMessage(msg, contact, io) {
   await processInboundMessage({ lead, message: text, channel: 'whatsapp', io });
 }
 
-// GET /api/whatsapp/meta/status — check if Meta Cloud API is configured
+// GET /api/whatsapp/meta/status — proveedor activo y si está listo para enviar
 router.get('/meta/status', auth, checkPerm('whatsapp.view'), (req, res) => {
+  const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.META_WA_PHONE_ID;
   res.json({
     success: true,
     data: {
-      configured: metaWA.isConfigured(),
-      phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID ? '***' + process.env.WHATSAPP_PHONE_NUMBER_ID.slice(-4) : null,
+      ...wa.status(),
+      phoneNumberId: phoneId ? '***' + phoneId.slice(-4) : null,
     },
   });
 });
 
-// GET /api/whatsapp/meta/templates — list approved templates from Meta
+// POST /api/whatsapp/meta/templates/sync — trae de Meta las plantillas creadas
+// fuera del CRM. Solo tiene sentido con Labia, que mantiene su propia copia.
+router.post('/meta/templates/sync', auth, checkPerm('whatsapp.templates'), async (req, res) => {
+  try {
+    if (wa.activeProvider() !== 'labia') {
+      return res.status(400).json({ success: false, message: 'Sincronizar solo aplica al proveedor Labia' });
+    }
+    const result = await wa.labia.syncTemplates();
+    res.json({ success: true, data: result, message: 'Plantillas sincronizadas desde Meta' });
+  } catch (e) {
+    res.status(e.status || 500).json({ success: false, message: e.message });
+  }
+});
+
+// GET /api/whatsapp/meta/templates — plantillas del proveedor + las pendientes
+// que el CRM envió a revisión y todavía no aparecen en su lista.
 router.get('/meta/templates', auth, checkPerm('whatsapp.templates'), async (req, res) => {
   try {
-    const templates = await metaWA.listTemplates();
-    res.json({ success: true, data: templates });
+    const provider = wa.activeProvider();
+    const templates = await wa.listTemplates();
+    // Listar es también el momento de refrescar el espejo: si un webhook se
+    // perdió, el estado se corrige igual en cuanto alguien abre la pantalla.
+    const merged = await templateStore.syncFromProvider(templates, provider);
+    // El mapeo de variables solo lo sabe el CRM, no el proveedor: se adjunta
+    // para que el asistente de envío pueda rellenar solo las del lead.
+    res.json({ success: true, data: await templateStore.attachVariables(merged) });
   } catch (e) {
-    res.status(500).json({ success: false, message: e.message });
+    res.status(e.status || 500).json({ success: false, message: e.message });
   }
 });
 
@@ -361,7 +379,7 @@ router.post('/meta/send-text', auth, checkPerm('whatsapp.send'), async (req, res
     const { to, message, leadId } = req.body;
     if (!to || !message) return res.status(400).json({ success: false, message: 'Falta teléfono o mensaje' });
 
-    const result = await metaWA.sendText(to, message);
+    const result = await wa.sendText(to, message);
 
     // Log activity if leadId provided
     if (leadId) {
@@ -380,17 +398,58 @@ router.post('/meta/send-text', auth, checkPerm('whatsapp.send'), async (req, res
   }
 });
 
+// POST /api/whatsapp/meta/templates/media — sube el archivo del encabezado y
+// devuelve el identificador que hay que adjuntar al crear la plantilla.
+router.post('/meta/templates/media', auth, checkPerm('whatsapp.templates'),
+  headerUpload.single('file'), async (req, res) => {
+    try {
+      if (!req.file) return res.status(400).json({ success: false, message: 'Falta el archivo' });
+      if (wa.activeProvider() !== 'labia') {
+        return res.status(400).json({
+          success: false,
+          message: 'El encabezado con archivo requiere el proveedor Labia: Meta exige una sesión de subida propia',
+        });
+      }
+      const handle = await wa.labia.uploadTemplateHeader(
+        req.file.buffer, req.file.originalname, req.file.mimetype
+      );
+      res.json({ success: true, data: { headerHandle: handle } });
+    } catch (e) {
+      res.status(e.status || 400).json({ success: false, message: e.message });
+    }
+  });
+
 // POST /api/whatsapp/meta/templates — crear plantilla (queda a aprobación de Meta)
 router.post('/meta/templates', auth, checkPerm('whatsapp.templates'), async (req, res) => {
   try {
-    const result = await metaWA.createTemplate(req.body || {});
+    const body = req.body || {};
+    // Los ejemplos que Meta exige salen del mapeo de variables, así el
+    // ejecutivo no los escribe dos veces.
+    const variables = templateStore.normalizeVariables(body.variables, body.bodyText);
+    const payload = {
+      ...body,
+      variables,
+      examples: variables.map((v, i) => v.sample || body.examples?.[i] || `Ejemplo ${i + 1}`),
+      buttons: templateStore.normalizeButtons(body.buttons),
+    };
+
+    const result = await wa.createTemplate(payload);
+
+    // Se guarda el espejo local aunque la respuesta del proveedor sea escueta:
+    // es lo que permite avisar a quien la creó cuando Meta responda.
+    const saved = await templateStore.recordSubmission({
+      template: { ...payload, name: result.name, status: result.status, providerId: result.id },
+      provider: wa.activeProvider(),
+      userId: req.user._id,
+    });
+
     res.json({
       success: true,
-      data: result,
-      message: `Plantilla "${result.name}" enviada a aprobación de Meta (estado: ${result.status || 'PENDING'})`,
+      data: { ...result, variables: saved.variables },
+      message: `Plantilla "${result.name}" enviada a aprobación de Meta (estado: ${saved.status})`,
     });
   } catch (e) {
-    res.status(400).json({ success: false, message: e.response?.data?.error?.message || e.message });
+    res.status(e.status || 400).json({ success: false, message: e.response?.data?.error?.message || e.message });
   }
 });
 
@@ -400,7 +459,7 @@ router.post('/meta/send-template', auth, checkPerm('whatsapp.send'), async (req,
     const { to, templateName, languageCode, components, leadId } = req.body;
     if (!to || !templateName) return res.status(400).json({ success: false, message: 'Falta teléfono o template' });
 
-    const result = await metaWA.sendTemplate(to, templateName, languageCode || 'es_MX', components || []);
+    const result = await wa.sendTemplate(to, templateName, languageCode || 'es_MX', components || []);
 
     if (leadId) {
       await Activity.create({
@@ -419,3 +478,6 @@ router.post('/meta/send-template', auth, checkPerm('whatsapp.send'), async (req,
 
 module.exports = router;
 module.exports.sendWhatsApp = sendWhatsApp;
+// El webhook de Labia atiende los mismos mensajes entrantes por otra puerta
+// (routes/webhooks.js), así que reutiliza esta función en lugar de duplicarla.
+module.exports.handleIncomingMessage = handleIncomingMessage;

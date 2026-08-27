@@ -199,7 +199,7 @@ router.post('/linkedin', express.json(), requireWebhookKey, async (req, res) => 
 // ============================================
 // WHATSAPP META CLOUD API WEBHOOK
 // ============================================
-const { parseWebhookPayload, markRead } = require('../services/whatsappMetaService');
+const { parseWebhookPayload, markRead } = require('../services/whatsappService');
 const Activity = require('../models/Activity');
 
 // GET /api/webhooks/whatsapp — Meta webhook verification
@@ -425,4 +425,160 @@ router.post('/resend', async (req, res) => {
   }
 });
 
+// ============================================
+// WEBHOOK DE LABIA (WhatsApp por API de Labia)
+// ============================================
+//
+// Labia no guarda los mensajes: si esta ruta no los persiste, se pierden. Por
+// eso responde 2xx de inmediato (el emisor corta a los 10 s y reintenta hasta
+// 72 h) y procesa después.
+//
+// La firma se calcula sobre el cuerpo CRUDO, que ya está disponible porque
+// index.js monta express.raw() para todo /api/webhooks.
+
+const labia = require('../services/labiaWaService');
+
+// Cada entrega trae un id propio y los reintentos repiten el mismo, así que se
+// descartan los ya vistos. Es memoria del proceso a propósito: un duplicado que
+// se cuele tras un reinicio cuesta un mensaje repetido en el chat, mientras que
+// una colección en Mongo por cada webhook cuesta una escritura por evento.
+const LABIA_DELIVERY_TTL_MS = 10 * 60 * 1000;
+const labiaDeliveries = new Map();
+
+function isDuplicateDelivery(id) {
+  if (!id) return false;
+  const now = Date.now();
+  for (const [key, seenAt] of labiaDeliveries) {
+    if (now - seenAt > LABIA_DELIVERY_TTL_MS) labiaDeliveries.delete(key);
+  }
+  if (labiaDeliveries.has(id)) return true;
+  labiaDeliveries.set(id, now);
+  return false;
+}
+
+// POST /api/webhooks/labia — mensajes entrantes y estados de envío
+router.post('/labia', async (req, res) => {
+  if (!process.env.LABIA_WEBHOOK_SECRET) {
+    console.warn('⚠️ Webhook de Labia recibido sin LABIA_WEBHOOK_SECRET configurado');
+    return res.status(503).json({ error: 'Webhook de Labia sin configurar' });
+  }
+  if (!labia.verifyWebhook(req.body, req.headers)) {
+    console.warn('⚠️ Webhook de Labia con firma inválida — rechazado');
+    return res.status(401).json({ error: 'Firma inválida' });
+  }
+
+  res.status(200).json({ status: 'ok' });
+
+  if (isDuplicateDelivery(req.headers['x-labia-delivery'])) return;
+
+  try {
+    const payload = JSON.parse(Buffer.isBuffer(req.body) ? req.body.toString('utf8') : req.body);
+    await handleLabiaEvent(payload, req.io);
+  } catch (error) {
+    console.error('[webhook/labia]', error);
+  }
+});
+
+async function handleLabiaEvent({ evento, data = {} }, io) {
+  switch (evento) {
+    case 'message.received': {
+      // Se reutiliza el mismo camino que el webhook de Meta: crear el lead si
+      // no existe, guardar la actividad, notificar y pasar por el agente de IA.
+      const { handleIncomingMessage } = require('./whatsapp');
+      for (const { msg, contact } of labia.parseInbound(data)) {
+        await handleIncomingMessage(msg, contact, io);
+      }
+      break;
+    }
+
+    case 'message.status': {
+      // Los estados se casan por wamid, que es lo que se guardó al enviar.
+      const wamid = data.wamid || data.id;
+      if (!wamid || !data.status) break;
+      await Activity.findOneAndUpdate(
+        { 'waData.messageId': wamid },
+        { 'waData.status': data.status },
+      );
+      // Las campañas atribuyen sus entregas por el mismo id.
+      if (['failed', 'delivered', 'read'].includes(data.status)) {
+        await CampaignRecipient.updateOne(
+          { messageId: wamid },
+          data.status === 'failed'
+            ? { status: 'failed', reason: data.error || 'Rechazado por WhatsApp' }
+            : { status: 'delivered', deliveredAt: new Date() },
+        );
+      }
+      break;
+    }
+
+    case 'template.status':
+      await handleTemplateStatus(data, io);
+      break;
+
+    case 'channel.quality':
+      // Si baja la calidad del número, Meta acaba limitando el envío.
+      console.warn(`[labia] calidad del número: ${data.quality || data.event} (tier ${data.tier || '?'})`);
+      io?.to('role_admin').emit('wa_channel_quality', data);
+      break;
+
+    default:
+      break;
+  }
+}
+
+/**
+ * Meta aprueba o rechaza en diferido, horas después de crear la plantilla. El
+ * resultado se guarda en el espejo local —para que quede visible en la pantalla
+ * de Plantillas aunque nadie tenga el CRM abierto en ese momento— y además se
+ * avisa en vivo a quien la creó, que es quien está esperando la respuesta.
+ */
+async function handleTemplateStatus(data, io) {
+  const templateStore = require('../services/waTemplateStore');
+  const { notifyUser } = require('../services/notificationService');
+
+  const applied = await templateStore.applyStatusEvent({
+    name: data.name,
+    language: data.language,
+    event: data.event,
+    status: data.status,
+    reason: data.reason,
+    templateId: data.templateId || data.id,
+  });
+
+  if (!applied) {
+    // Plantilla creada fuera del CRM: no hay a quién avisar, pero conviene
+    // dejar rastro para no quedarse mirando un estado que nunca cambia.
+    console.log(`[labia] plantilla desconocida "${data.name}": ${data.event}`);
+    return;
+  }
+
+  const { doc, changed } = applied;
+  if (!changed) return; // reentrega del mismo evento: no se avisa dos veces
+
+  const aprobada = doc.status === 'APPROVED';
+  const titulo = aprobada
+    ? `Plantilla "${doc.name}" aprobada`
+    : `Plantilla "${doc.name}": ${doc.status === 'REJECTED' ? 'rechazada' : doc.status.toLowerCase()}`;
+  const cuerpo = aprobada
+    ? 'Ya se puede usar en el chat y en campañas.'
+    : (doc.rejectionReason || 'Meta cambió su estado.');
+
+  console.log(`[labia] plantilla ${doc.name}: ${doc.status}${doc.rejectionReason ? ` — ${doc.rejectionReason}` : ''}`);
+
+  const payload = {
+    name: doc.name, language: doc.language, status: doc.status,
+    reason: doc.rejectionReason || null,
+  };
+  io?.to('role_admin').emit('wa_template_status', payload);
+  if (doc.createdBy) {
+    io?.to(`user_${doc.createdBy}`).emit('wa_template_status', payload);
+    await notifyUser({
+      io, userId: doc.createdBy, type: 'wa_template', title: titulo, body: cuerpo,
+      meta: { templateName: doc.name, status: doc.status },
+    });
+  }
+}
+
 module.exports = router;
+// El webhook de Meta llega por otra ruta pero resuelve lo mismo (ver routes/whatsapp.js).
+module.exports.handleTemplateStatus = handleTemplateStatus;

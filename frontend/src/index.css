@@ -1967,3 +1967,28 @@ textarea.form-input{resize:vertical;min-height:80px}
   border: 1px solid var(--gray-200); border-radius: 8px;
 }
 @media (max-width: 640px) { .camp-wa-grid { grid-template-columns: 1fr } }
+
+/* ── PLANTILLAS DE WHATSAPP: origen de cada variable ── */
+/* Distingue de un vistazo lo que el CRM ya rellenó de lo que hay que escribir. */
+.waw-var-auto {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 7px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .3px;
+  color: #16A34A;
+  background: rgba(22, 163, 74, .1);
+}
+
+.waw-item-status {
+  margin-top: 5px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #D97706;
+}
+.waw-item-status[data-status="REJECTED"] { color: #DC2626; }

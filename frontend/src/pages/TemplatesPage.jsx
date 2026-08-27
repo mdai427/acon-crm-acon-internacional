@@ -623,8 +623,19 @@ export default function TemplatesPage({ toast }) {
                     <strong style={{ fontSize: 12.5, color: '#0B2545', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</strong>
                     <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 12, color: st.color, background: st.bg }}>{st.label}</span>
                   </div>
-                  <div style={{ fontSize: 11, color: '#9AA3AE', margin: '3px 0 5px' }}>{t.language} · {t.category?.toLowerCase()}</div>
+                  <div style={{ fontSize: 11, color: '#9AA3AE', margin: '3px 0 5px' }}>
+                    {t.language} · {t.category?.toLowerCase()}
+                    {t.createdByName ? ` · la creó ${t.createdByName}` : ''}
+                  </div>
                   <div style={{ fontSize: 11.5, color: '#5A6472', lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{body}</div>
+                  {/* El motivo del rechazo llega una sola vez por webhook: si no se
+                      muestra aquí, no hay forma de saber qué corregir. */}
+                  {t.status === 'REJECTED' && t.rejectionReason && (
+                    <div style={{ marginTop: 7, padding: '6px 8px', borderRadius: 7, fontSize: 11,
+                                  color: '#B91C1C', background: 'rgba(220,38,38,.08)', lineHeight: 1.45 }}>
+                      <strong>Motivo de Meta:</strong> {t.rejectionReason}
+                    </div>
+                  )}
                 </div>
               );
             })}

@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
-import { X, Check, ChevronRight, ChevronLeft, Send, Phone, ExternalLink } from 'lucide-react';
+import { X, Check, ChevronRight, ChevronLeft, Send, Phone, ExternalLink, Wand2 } from 'lucide-react';
 import { sendMetaTemplate } from '../services/api';
+import { LEAD_VARS, labelOf, prefillValues, fallbackVariables } from './waVars';
 
 // Asistente de envío de plantillas de WhatsApp, al estilo de las plataformas
 // grandes: 1) elegir plantilla → 2) llenar variables → 3) vista previa en un
@@ -19,11 +20,11 @@ export const extractVars = (text) => {
 export const fill = (text, values) =>
   String(text || '').replace(/\{\{(\d+)\}\}/g, (_, n) => values[n - 1] || `{{${n}}}`);
 
-// Campos del lead que se pueden insertar con un clic en cualquier variable.
-const LEAD_CHIPS = (lead) => [
-  { label: 'Empresa', value: lead?.company || '' },
-  { label: 'Contacto', value: (typeof lead?.contact === 'object' ? lead.contact?.name : lead?.contact) || '' },
-].filter(c => c.value);
+// Cualquier dato del lead se puede meter en una variable con un clic, por si
+// hace falta corregir lo que se rellenó solo.
+const LEAD_CHIPS = (lead) => LEAD_VARS
+  .map(v => ({ label: v.label, value: v.get(lead) }))
+  .filter(c => c.value);
 
 function Stepper({ step }) {
   return (
@@ -104,8 +105,12 @@ export default function WaTemplateWizard({ templates, lead, phone, onClose, onSe
   const contactName = (typeof lead?.contact === 'object' ? lead.contact?.name : lead?.contact) || lead?.company;
 
   const pick = (tpl) => {
-    setSelected(tpl);
-    setValues(Array(extractVars(tpl.components?.find(c => c.type === 'BODY')?.text).length).fill(''));
+    const n = extractVars(tpl.components?.find(c => c.type === 'BODY')?.text).length;
+    // Las plantillas creadas desde el CRM traen el mapeo de sus variables; las
+    // que vienen de fuera (creadas en Meta) no, y entonces se piden todas.
+    const mapping = tpl.variables?.length ? tpl.variables : fallbackVariables(n);
+    setSelected({ ...tpl, variables: mapping });
+    setValues(prefillValues(mapping, lead));
     setHeaderUrl('');
     setStep(1);
   };
@@ -170,6 +175,12 @@ export default function WaTemplateWizard({ templates, lead, phone, onClose, onSe
                     <span>{t.language}{nVars ? ` · ${nVars} variable(s)` : ''}</span>
                   </div>
                   <div className="waw-item-body">{tBody?.text}</div>
+                  {t.status && t.status !== 'APPROVED' && (
+                    <div className="waw-item-status" data-status={t.status}>
+                      {t.status === 'PENDING' ? 'En revisión por Meta' : t.status}
+                      {t.rejectionReason ? ` — ${t.rejectionReason}` : ''}
+                    </div>
+                  )}
                   <ChevronRight size={15} className="waw-item-go" />
                 </button>
               );
@@ -194,24 +205,37 @@ export default function WaTemplateWizard({ templates, lead, phone, onClose, onSe
                 </label>
               )}
 
-              {vars.map((n, i) => (
-                <label key={n} className="waw-field">
-                  <span>{'{{'}{n}{'}}'}</span>
-                  <input
-                    value={values[i] || ''}
-                    placeholder={`Contenido para {{${n}}}`}
-                    onChange={e => setValues(vs => vs.map((v, idx) => (idx === i ? e.target.value : v)))}
-                  />
-                  <div className="waw-chips">
-                    {LEAD_CHIPS(lead).map(c => (
-                      <button key={c.label} type="button" className="waw-chip"
-                        onClick={() => setValues(vs => vs.map((v, idx) => (idx === i ? c.value : v)))}>
-                        {c.label}
-                      </button>
-                    ))}
-                  </div>
-                </label>
-              ))}
+              {vars.map((n, i) => {
+                const meta = selected.variables?.[i];
+                const esDelCrm = meta?.kind === 'field';
+                return (
+                  <label key={n} className="waw-field">
+                    <span>
+                      {labelOf(meta, i)}
+                      {esDelCrm && (
+                        <span className="waw-var-auto" title="Se rellenó con el dato del lead">
+                          <Wand2 size={10} /> automático
+                        </span>
+                      )}
+                    </span>
+                    <input
+                      value={values[i] || ''}
+                      placeholder={esDelCrm
+                        ? 'El lead no tiene este dato: escríbelo'
+                        : `Escribe ${labelOf(meta, i).toLowerCase()}`}
+                      onChange={e => setValues(vs => vs.map((v, idx) => (idx === i ? e.target.value : v)))}
+                    />
+                    <div className="waw-chips">
+                      {LEAD_CHIPS(lead).map(c => (
+                        <button key={c.label} type="button" className="waw-chip"
+                          onClick={() => setValues(vs => vs.map((v, idx) => (idx === i ? c.value : v)))}>
+                          {c.label}
+                        </button>
+                      ))}
+                    </div>
+                  </label>
+                );
+              })}
               {!vars.length && !needsMedia && (
                 <div className="waw-map-sub">Esta plantilla no tiene variables: lista para enviar.</div>
               )}

@@ -123,7 +123,17 @@ const aiLimiter = rateLimit({
   message: { success: false, message: 'Límite de peticiones de IA alcanzado, espera un minuto' },
 });
 
-app.use('/api/webhooks', webhookLimiter);
+// Los eventos de WhatsApp llegan de a muchos: una campaña de mil destinatarios
+// genera miles de `message.status` en pocos minutos, y el tope general de los
+// webhooks (60/min) los rebotaría con 429. La firma HMAC ya autentica cada
+// entrega, así que el límite aquí solo protege de una avalancha.
+const waWebhookLimiter = rateLimit({
+  windowMs: 60000, max: 600, standardHeaders: true, legacyHeaders: false,
+  keyGenerator: rateLimitKey,
+});
+app.use('/api/webhooks/labia', waWebhookLimiter);
+app.use('/api/webhooks', (req, res, next) =>
+  (req.path === '/labia' ? next() : webhookLimiter(req, res, next)));
 app.use('/api/n8n',      webhookLimiter);
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/setup', setupLimiter);

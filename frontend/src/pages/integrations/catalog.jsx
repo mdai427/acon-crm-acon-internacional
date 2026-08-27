@@ -1,7 +1,7 @@
 import {
   Mail, MessageSquare, Users, Globe, Zap, HardDrive, TrendingUp, Send, Phone,
 } from 'lucide-react';
-import { testWhatsApp, testEmail, testResend, testTwilio } from '../../services/api';
+import { testWhatsApp, testLabia, testEmail, testResend, testTwilio } from '../../services/api';
 
 // ── Catálogo de integraciones ─────────────────────────────────────────────────
 // Cada campo se guarda cifrado en la base de datos (AES-256-GCM). Los marcados
@@ -43,6 +43,31 @@ export const CATALOG = [
             help: 'Invéntalo tú y pega exactamente el mismo en Meta' },
           { key: 'META_APP_SECRET', label: 'App Secret', secret: true,
             help: 'Valida la firma de los mensajes entrantes' },
+          { key: 'WHATSAPP_WABA_ID', label: 'WhatsApp Business Account ID',
+            help: 'Meta Business Suite → Cuentas de WhatsApp. Sin esto no se pueden ver ni crear plantillas' },
+        ],
+      },
+      {
+        id: 'labia',
+        name: 'WhatsApp por Labia',
+        desc: 'Alternativa a conectar Meta directo: plantillas sin WABA ID y sesión por QR',
+        icon: MessageSquare, color: '#7C5CFF',
+        docs: 'https://api.labiabot.com',
+        webhook: '/api/webhooks/labia',
+        required: ['LABIA_API_KEY'],
+        test: testLabia,
+        fields: [
+          { key: 'WA_PROVIDER', label: 'Proveedor de WhatsApp del CRM', type: 'select',
+            options: [{ v: 'meta', l: 'Meta Cloud API (directo)' }, { v: 'labia', l: 'Labia' }],
+            help: 'Elige por dónde salen y entran los mensajes. Si lo dejas vacío se usa Labia cuando hay API Key' },
+          { key: 'LABIA_API_KEY', label: 'API Key', secret: true, placeholder: 'lb_live_...',
+            help: 'Panel de Labia → Integraciones → API' },
+          { key: 'LABIA_WEBHOOK_SECRET', label: 'Secreto del webhook', secret: true, placeholder: 'whsec_...',
+            help: 'Panel de Labia → Integraciones → Webhooks. Sin esto no entran los mensajes de los clientes' },
+          { key: 'LABIA_PHONE_NUMBER_ID', label: 'Phone Number ID (opcional)',
+            help: 'Solo si la cuenta tiene varios números oficiales' },
+          { key: 'LABIA_SESSION_ID', label: 'Session ID de la sesión QR (opcional)',
+            help: 'Usa el canal no oficial. Solo admite texto, sin plantillas ni adjuntos' },
         ],
       },
       {
