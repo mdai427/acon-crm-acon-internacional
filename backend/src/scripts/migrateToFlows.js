@@ -255,13 +255,14 @@ async function upsertFlow(spec, ctx, report) {
   } else {
     report.drafts.push(`${spec.name}\n      - ${validation.errors.map(e => e.message).join('\n      - ')}`);
   }
-  if (!DRY) await flow.save();
+  if (!ctx.dry) await flow.save();
 }
 
-async function main() {
-  await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/acon_crm');
+// Corre la migración sobre la conexión ya abierta. Idempotente: se puede
+// llamar en cada arranque del servidor sin duplicar flujos.
+async function runMigration({ deactivate = false, dry = DRY } = {}) {
   const Automation = mongoose.models.Automation || (require('../routes/marketing'), mongoose.models.Automation);
-  const ctx = await validationCtx();
+  const ctx = { ...(await validationCtx()), dry };
   const report = { published: [], drafts: [], skipped: [] };
 
   const [playbooks, rules, sequences, automations] = await Promise.all([
@@ -273,7 +274,7 @@ async function main() {
   for (const s of sequences)  await upsertFlow(fromSequence(s), ctx, report);
   for (const a of automations) await upsertFlow(fromAutomation(a), ctx, report);
 
-  if (DEACTIVATE && !DRY) {
+  if (deactivate && !dry) {
     await Promise.all([
       Playbook.updateMany({}, { isActive: false }),
       FollowUpRule.updateMany({}, { isActive: false }),
@@ -283,12 +284,18 @@ async function main() {
   }
 
   const out = [];
-  out.push(`${DRY ? '[DRY] ' : ''}Migración a flujos — ${playbooks.length} playbooks, ${rules.length} reglas, ${sequences.length} secuencias, ${automations.length} automatizaciones`);
+  out.push(`${dry ? '[DRY] ' : ''}Migración a flujos — ${playbooks.length} playbooks, ${rules.length} reglas, ${sequences.length} secuencias, ${automations.length} automatizaciones`);
   out.push(`\nPublicados (${report.published.length}):`); report.published.forEach(x => out.push(`  ✓ ${x}`));
   out.push(`\nBorradores con pendientes (${report.drafts.length}):`); report.drafts.forEach(x => out.push(`  ✎ ${x}`));
   out.push(`\nOmitidos por ya migrados (${report.skipped.length}):`); report.skipped.forEach(x => out.push(`  · ${x}`));
-  if (DEACTIVATE) out.push(DRY ? '\n(--deactivate-legacy no aplica en --dry)' : '\nSistemas viejos desactivados (isActive=false).');
-  process.stdout.write(out.join('\n') + '\n');
+  if (deactivate) out.push(dry ? '\n(--deactivate-legacy no aplica en --dry)' : '\nSistemas viejos desactivados (isActive=false).');
+  return { text: out.join('\n'), report, counts: { playbooks: playbooks.length, rules: rules.length, sequences: sequences.length, automations: automations.length } };
+}
+
+async function main() {
+  await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/acon_crm');
+  const { text } = await runMigration({ deactivate: DEACTIVATE, dry: DRY });
+  process.stdout.write(text + '\n');
   await mongoose.disconnect();
 }
 
@@ -296,4 +303,4 @@ if (require.main === module) {
   main().catch(err => { process.stderr.write(`Migración fallida: ${err.message}\n`); process.exit(1); });
 }
 
-module.exports = { fromPlaybook, fromRule, fromSequence, fromAutomation };
+module.exports = { fromPlaybook, fromRule, fromSequence, fromAutomation, runMigration };
