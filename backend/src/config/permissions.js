@@ -107,10 +107,6 @@ const PERMISSIONS = {
   // ── PLANTILLAS Y AUTOMATIZACIONES ────────────────────────
   'templates.view':       ['admin','gerencia','executive','marketing'],
   'templates.edit':       ['admin','gerencia','marketing'],
-  'followups.view':       ['admin','gerencia','marketing'],
-  'followups.edit':       ['admin','gerencia','marketing'],
-  'playbooks.view':       ['admin','gerencia','executive','marketing'],
-  'playbooks.edit':       ['admin','gerencia'],
   'flows.view':           ['admin','direccion','gerencia','executive','marketing'],
   'flows.edit':           ['admin','gerencia','marketing'],
   'flows.publish':        ['admin','gerencia'],

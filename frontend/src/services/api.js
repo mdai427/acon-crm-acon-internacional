@@ -206,18 +206,8 @@ export const downloadQuotePDF = (id) => api.get(`/quotes/${id}/pdf`, { responseT
 export const suggestQuote = (data) => api.post('/quotes/suggest', data);
 
 // Follow-ups
-export const getFollowUps = () => api.get('/followups');
-export const createFollowUp = (data) => api.post('/followups', data);
-export const updateFollowUp = (id, data) => api.put(`/followups/${id}`, data);
-export const deleteFollowUp = (id) => api.delete(`/followups/${id}`);
 
 // Follow-up Rules
-export const getFollowUpRules = () => api.get('/followups/rules');
-export const createFollowUpRule = (data) => api.post('/followups/rules', data);
-export const updateFollowUpRule = (id, data) => api.put(`/followups/rules/${id}`, data);
-export const deleteFollowUpRule = (id) => api.delete(`/followups/rules/${id}`);
-export const getPendingFollowUps = () => api.get('/followups/pending');
-export const executeFollowUpRule = (ruleId) => api.post(`/followups/rules/${ruleId}/execute`);
 
 // AI
 export const draftEmail = (data) => api.post('/agents/draft-email', data);
@@ -249,10 +239,6 @@ export const deleteCampaign = (id) => api.delete(`/marketing/campaigns/${id}`);
 export const launchCampaign = (id) => api.post(`/marketing/campaigns/${id}/launch`);
 export const testCampaign = (id, to) => api.post(`/marketing/campaigns/${id}/test`, { to });
 export const getCampaignMetrics = (id) => api.get(`/marketing/campaigns/${id}/metrics`);
-export const getAutomations = () => api.get('/marketing/automations');
-export const createAutomation = (data) => api.post('/marketing/automations', data);
-export const updateAutomation = (id, data) => api.put(`/marketing/automations/${id}`, data);
-export const deleteAutomation = (id) => api.delete(`/marketing/automations/${id}`);
 export const getMarketingAnalytics = () => api.get('/marketing/analytics');
 export const previewSegment = (data) => api.post('/marketing/segments/preview', data);
 
@@ -287,10 +273,6 @@ export const getRecentJobs = () => api.get('/jobs');
 export const getStageSuggestions = (leadId, stage) => api.get(`/leads/${leadId}/stage-suggestions${stage ? `?stage=${stage}` : ''}`);
 export const createStageTasks = (leadId, stage) => api.post(`/leads/${leadId}/create-stage-tasks`, { stage });
 
-// Playbooks (Option C)
-export const getPlaybooks = () => api.get('/playbooks');
-export const updatePlaybook = (stage, data) => api.put(`/playbooks/${stage}`, data);
-export const seedPlaybooks = () => api.post('/playbooks/seed');
 
 // Commissions
 export const getCommissions = (params) => api.get('/commissions', { params });
@@ -358,14 +340,6 @@ export const downloadLeadAttachment = async (leadId, attId, originalName) => {
 };
 export const getLeadAttachmentUrl = (leadId, attId) => `${api.defaults.baseURL}/leads/${leadId}/attachments/${attId}/download`;
 
-// WhatsApp Sequences
-export const getSequences = () => api.get('/sequences');
-export const createSequence = (data) => api.post('/sequences', data);
-export const updateSequence = (id, data) => api.put(`/sequences/${id}`, data);
-export const deleteSequence = (id) => api.delete(`/sequences/${id}`);
-export const enrollInSequence = (id, data) => api.post(`/sequences/${id}/enroll`, data);
-export const getSequenceEnrollments = (id) => api.get(`/sequences/${id}/enrollments`);
-export const exitSequenceEnrollment = (enrollId, reason) => api.post(`/sequences/enrollments/${enrollId}/exit`, { reason });
 
 // Direccion Dashboard
 export const getDireccionReport = () => api.get('/reports/direccion');

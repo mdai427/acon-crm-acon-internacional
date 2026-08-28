@@ -37,7 +37,6 @@ const configRoutes = require('./routes/config');
 const n8nRoutes    = require('./routes/n8n');
 const operationsRoutes = require('./routes/operations');
 const quotesRoutes     = require('./routes/quotes');
-const followupsRoutes  = require('./routes/followups');
 const templatesRoutes  = require('./routes/templates');
 const { router: oauthRoutes } = require('./routes/oauth');
 const calendarRoutes   = require('./routes/userCalendar');
@@ -47,7 +46,6 @@ const copilotRoutes    = require('./routes/copilot');
 const postVentaRoutes  = require('./routes/postventa');
 const adsRoutes        = require('./routes/ads');
 const jobsRoutes       = require('./routes/jobs');
-const playbooksRoutes  = require('./routes/playbooks');
 
 // Registro de handlers de jobs (debe cargarse antes de que lleguen peticiones)
 require('./services/jobHandlers');
@@ -150,7 +148,7 @@ app.use('/api', (req, res, next) => {
   if (req.path.startsWith('/webhooks') || req.path.startsWith('/n8n')) return next();
   return apiLimiter(req, res, next);
 });
-app.use(['/api/agents', '/api/copilot', '/api/playbooks'], aiLimiter);
+app.use(['/api/agents', '/api/copilot'], aiLimiter);
 
 // ============================================
 // RUTAS API
@@ -172,7 +170,6 @@ app.use('/api/config',       configRoutes);
 app.use('/api/n8n',          n8nRoutes);
 app.use('/api/operations',   operationsRoutes);
 app.use('/api/quotes',       quotesRoutes);
-app.use('/api/followups',    followupsRoutes);
 app.use('/api/templates',    templatesRoutes);
 app.use('/api/oauth',        oauthRoutes);
 app.use('/api/calendar',     calendarRoutes);
@@ -182,7 +179,6 @@ app.use('/api/copilot',      copilotRoutes);
 app.use('/api/postventa',    postVentaRoutes);
 app.use('/api/ads',          adsRoutes);
 app.use('/api/jobs',         jobsRoutes);
-app.use('/api/playbooks',    playbooksRoutes);
 app.use('/api/flows',        require('./routes/flows'));
 app.use('/api/flow-runs',    require('./routes/flows').runs);
 app.use('/api/commissions',  require('./routes/commissions'));
@@ -190,7 +186,6 @@ app.use('/api/search',       require('./routes/search'));
 app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/exchange-rate', require('./routes/exchangeRate'));
 app.use('/api/catalog',       require('./routes/catalog'));
-app.use('/api/sequences',     require('./routes/sequences'));
 app.use('/api/audit',         require('./routes/audit'));
 app.use('/api/erp',           require('./routes/erp'));
 app.use('/api/calls',         require('./routes/calls'));

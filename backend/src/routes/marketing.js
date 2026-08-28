@@ -96,7 +96,6 @@ const Automation = mongoose.models.Automation || mongoose.model('Automation', au
 // abiertos permitiría inventar los resultados de una campaña.
 const CAMPAIGN_FIELDS = ['name', 'type', 'status', 'segment', 'subject', 'body',
   'bodyType', 'templateId', 'mailbox', 'scheduledAt', 'waTemplate'];
-const AUTOMATION_FIELDS = ['name', 'isActive', 'trigger', 'actions'];
 
 router.use(auth);
 
@@ -234,42 +233,7 @@ router.get('/campaigns/:id/metrics', checkPerm('marketing.view'), async (req, re
   } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 
-// ── Automations ───────────────────────────────────────────────────
-router.get('/automations',
-  checkPerm('marketing.view'),
-  cacheMiddleware(TTL.LIVE, () => 'marketing:automations'),
-  async (req, res) => {
-  try {
-    const automations = await Automation.find().populate('createdBy', 'name').sort({ createdAt: -1 }).lean();
-    res.json({ success: true, data: automations });
-  } catch (err) { res.status(500).json({ success: false, message: err.message }); }
-});
-
-router.post('/automations', checkPerm('marketing.create'), async (req, res) => {
-  try {
-    const automation = await Automation.create({ ...pick(req.body, AUTOMATION_FIELDS), createdBy: req.user._id });
-    invalidateMarketing();
-    res.json({ success: true, data: automation });
-  } catch (err) { res.status(500).json({ success: false, message: err.message }); }
-});
-
-router.put('/automations/:id', checkPerm('marketing.create'), async (req, res) => {
-  try {
-    const automation = await Automation.findByIdAndUpdate(req.params.id, pick(req.body, AUTOMATION_FIELDS), { new: true });
-    invalidateMarketing();
-    res.json({ success: true, data: automation });
-  } catch (err) { res.status(500).json({ success: false, message: err.message }); }
-});
-
-router.delete('/automations/:id', checkPerm('marketing.delete'), async (req, res) => {
-  try {
-    await Automation.findByIdAndDelete(req.params.id);
-    invalidateMarketing();
-    res.json({ success: true });
-  } catch (err) { res.status(500).json({ success: false, message: err.message }); }
-});
-
-// ── Segments — preview ─────────────────────────────────────────────
+// ── Segments — preview ─────────────────────────────
 router.post('/segments/preview', checkPerm('marketing.view'), async (req, res) => {
   try {
     const { services, stages, countries, minScore } = req.body;
@@ -292,9 +256,12 @@ router.get('/analytics',
   cacheMiddleware(TTL.COMPUTED, () => 'marketing:analytics'),
   async (req, res) => {
   try {
-    const [campaigns, automations] = await Promise.all([
+    const Flow = require('../models/Flow');
+    const FlowRun = require('../models/FlowRun');
+    const [campaigns, flows, flowRuns] = await Promise.all([
       Campaign.find().select('name status sentCount openCount replyCount createdAt'),
-      Automation.find().select('name isActive executionCount lastRunAt'),
+      Flow.find({ status: { $ne: 'archived' } }).select('name isActive'),
+      FlowRun.countDocuments(),
     ]);
 
     const totalSent = campaigns.reduce((a, c) => a + (c.sentCount || 0), 0);
@@ -305,7 +272,7 @@ router.get('/analytics',
       success: true,
       data: {
         campaigns: { total: campaigns.length, active: campaigns.filter(c => c.status === 'running').length, completed: campaigns.filter(c => c.status === 'completed').length },
-        automations: { total: automations.length, active: automations.filter(a => a.isActive).length, totalExecutions: automations.reduce((a, x) => a + (x.executionCount || 0), 0) },
+        automations: { total: flows.length, active: flows.filter(f => f.isActive).length, totalExecutions: flowRuns },
         totals: { sent: totalSent, opens: totalOpens, replies: totalReplies, openRate: totalSent ? Math.round((totalOpens / totalSent) * 100) : 0, replyRate: totalSent ? Math.round((totalReplies / totalSent) * 100) : 0 },
         recentCampaigns: campaigns.slice(0, 5),
       }

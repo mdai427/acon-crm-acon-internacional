@@ -47,54 +47,6 @@ register('lead_rescore_all', async (payload, updateProgress) => {
   return { ok, fail, total };
 });
 
-// ── Handler: followup_execute ──────────────────────────────────────
-// payload: { ruleId, userId }
-register('followup_execute', async (payload, updateProgress) => {
-  const mongoose = require('mongoose');
-  const Lead = require('../models/Lead');
-  const Activity = require('../models/Activity');
-  const FollowUpRule = require('../models/FollowUpRule');
-
-  const rule = await FollowUpRule.findById(payload.ruleId);
-  if (!rule || !rule.isActive) throw new Error('Regla no encontrada o inactiva');
-
-  const ACTIVE_STAGES = ['new','contacted','qualified','proposal','negotiation'];
-  const filter = { isActive: true, stage: { $in: ACTIVE_STAGES } };
-
-  if (rule.trigger.type === 'days_inactive') {
-    filter.daysSinceLastContact = { $gte: rule.trigger.value };
-  } else if (rule.trigger.type === 'score_below') {
-    filter.score = { $lt: rule.trigger.value };
-  } else if (rule.trigger.type === 'stage_entered' && rule.trigger.stages?.length) {
-    filter.stage = { $in: rule.trigger.stages };
-  }
-
-  const leads = await Lead.find(filter).select('_id company').lean();
-  const total = leads.length;
-  let executed = 0;
-
-  for (let i = 0; i < leads.length; i++) {
-    try {
-      for (const action of (rule.actions || [])) {
-        if (action.type === 'create_activity') {
-          await Activity.create({
-            lead: leads[i]._id,
-            type: 'task',
-            content: action.body || `Follow-up automático: ${rule.name}`,
-            direction: 'internal',
-            user: payload.userId,
-          });
-        }
-      }
-      executed++;
-      if ((i + 1) % 10 === 0) await updateProgress(Math.round(((i + 1) / total) * 100), total);
-    } catch {}
-  }
-
-  await FollowUpRule.findByIdAndUpdate(payload.ruleId, { lastRunAt: new Date(), $inc: { executionCount: 1 } });
-  return { executed, total };
-});
-
 // ── Handler: leads_import ──────────────────────────────────────────
 // payload: { rows: [...], userId }
 register('leads_import', async (payload, updateProgress) => {
@@ -130,4 +82,4 @@ register('leads_import', async (payload, updateProgress) => {
   return { created, skipped, total };
 });
 
-console.log('[JobQueue] Handlers registrados: campaign_launch, lead_rescore_all, followup_execute, leads_import');
+console.log('[JobQueue] Handlers registrados: campaign_launch, lead_rescore_all, leads_import');

@@ -18,12 +18,10 @@ import MailboxesPage from './pages/MailboxesPage';
 import OperationsPage from './pages/OperationsPage';
 import UsersPage from './pages/UsersPage';
 import QuoterPage from './pages/QuoterPage';
-import FollowUpsPage from './pages/FollowUpsPage';
 import TemplatesPage from './pages/TemplatesPage';
 import ImportPage from './pages/ImportPage';
 import MarketingPage from './pages/MarketingPage';
 import PostVentaPage from './pages/PostVentaPage';
-import PlaybooksPage from './pages/PlaybooksPage';
 import FlowsPage from './pages/FlowsPage';
 import CommissionsPage from './pages/CommissionsPage';
 import PermissionsPage from './pages/PermissionsPage';
@@ -59,12 +57,8 @@ const NAV = [
     roles: ['admin', 'gerencia', 'marketing'] },
   { id: 'marketing',    label: 'Campañas',          Icon: Megaphone,       section: 'marketing', mobile: false,
     roles: ['admin', 'direccion', 'gerencia', 'marketing', 'finanzas', 'viewer'] },
-  { id: 'followups',    label: 'Automatiz.',        Icon: Zap,             section: 'marketing', mobile: false,
-    roles: ['admin', 'gerencia', 'marketing'] },
   { id: 'flows',        label: 'Flujos',            Icon: Zap,             section: 'marketing', mobile: false,
     roles: ['admin', 'gerencia', 'marketing'] },
-  { id: 'playbooks',    label: 'Playbooks IA',      Icon: Sparkles,        section: 'marketing', mobile: false,
-    roles: ['admin', 'gerencia', 'executive', 'marketing'] },
   { id: 'templates',    label: 'Plantillas',        Icon: FileText,        section: 'marketing', mobile: false,
     roles: ['admin', 'gerencia', 'executive', 'marketing'] },
   { id: 'postventa',    label: 'Post-Venta',        Icon: HeartHandshake,  section: 'marketing', mobile: false,
@@ -492,7 +486,6 @@ function CRMApp() {
           {page === 'reports'      && <ReportsPage toast={toast} />}
           {page === 'config'       && <ConfigPage toast={toast} />}
           {page === 'quoter'       && <QuoterPage toast={toast} />}
-          {page === 'followups'    && <FollowUpsPage toast={toast} />}
           {page === 'users'        && <UsersPage toast={toast} />}
           {page === 'integrations' && (
             <IntegrationsPage
@@ -508,7 +501,6 @@ function CRMApp() {
           {page === 'marketing'    && <MarketingPage toast={toast} />}
           {page === 'postventa'    && <PostVentaPage toast={toast} />}
           {page === 'flows'        && <FlowsPage toast={toast} />}
-          {page === 'playbooks'    && <PlaybooksPage toast={toast} />}
           {page === 'commissions'  && <CommissionsPage toast={toast} />}
           {page === 'permissions'  && <PermissionsPage toast={toast} />}
           {page === 'catalog'      && <CatalogPage toast={toast} />}

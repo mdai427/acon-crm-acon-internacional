@@ -8,7 +8,7 @@ const { audit } = require('../services/auditService');
 const { scoreLeadWithAI } = require('../services/aiAgent');
 const { invalidateLead } = require('../services/cache');
 const { enqueue } = require('../services/jobQueue');
-const { generateStageTasks, DEFAULT_PLAYBOOKS } = require('../services/aiTasks');
+const { generateStageTasks } = require('../services/aiTasks');
 const Playbook = require('../models/Playbook');
 const User = require('../models/User');
 const { notifyLeadAssigned } = require('../services/notificationService');
@@ -257,24 +257,8 @@ router.put('/:id', checkPerm('leads.edit'), async (req, res) => {
 
     // Option B: auto-create AI tasks on stage change (background, no blocking)
     if (stageChanged) {
-      // El playbook de la etapa ejecuta sus acciones (mensajes, correos,
-      // tareas…) en background; ver services/playbookRunner.
-      // Flujos «cuando entra a una etapa»
       events.emit('lead.stage_entered', { leadId: lead._id, stage: updates.stage, from: prevStage, userId: req.user._id }, { io: req.io });
 
-      setImmediate(async () => {
-        try {
-          const playbookRunner = require('../services/playbookRunner');
-          await playbookRunner.runStageEntry({
-            leadId: lead._id,
-            stageKey: updates.stage,
-            userId: req.user._id,
-            io: req.io,
-          });
-        } catch (e) {
-          console.error('[Playbook] Error ejecutando acciones:', e.message);
-        }
-      });
     }
 
     // Audit log

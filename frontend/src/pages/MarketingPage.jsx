@@ -5,7 +5,6 @@ import {
 import {
   getCampaigns, createCampaign, updateCampaign, deleteCampaign, launchCampaign,
   testCampaign, getCampaignMetrics, getMailboxes,
-  getAutomations, createAutomation, updateAutomation, deleteAutomation,
   getMarketingAnalytics, previewSegment,
   getAdPlatformStatus, getMetaAdsUrl, getLinkedInAdsUrl, getGoogleAdsUrl,
   disconnectAdPlatform, getMetaAdAccounts, getLinkedInAdAccounts, createAdCampaign,
@@ -22,7 +21,6 @@ import {
 
 const TABS = [
   { id: 'campaigns',    label: 'Campañas',        Icon: Megaphone },
-  { id: 'automations',  label: 'Automatizaciones', Icon: Zap },
   { id: 'adchannels',   label: 'Canales Publicitarios', Icon: Radio },
   { id: 'analytics',    label: 'Analíticas',       Icon: BarChart3 },
 ];
@@ -33,15 +31,6 @@ const STAGES = ['new','contacted','qualified','proposal','negotiation'];
 const STAGE_LABELS = { new:'Nuevos', contacted:'Contactados', qualified:'Calificados', proposal:'Propuesta', negotiation:'Negociación' };
 const STATUS_COLORS = { draft: '#9AA3AE', scheduled: '#2563EB', running: '#16A34A', paused: '#F59E0B', completed: '#7C3AED' };
 const STATUS_LABELS = { draft: 'Borrador', scheduled: 'Programada', running: 'Activa', paused: 'Pausada', completed: 'Completada' };
-const TRIGGER_LABELS = { stage_entered: 'Al entrar a etapa', days_inactive: 'Días sin contacto', score_above: 'Score mayor a', lead_created: 'Al crear lead', date_based: 'Por fecha' };
-const ACTION_LABELS = { send_email: 'Enviar Email', send_whatsapp: 'Enviar WhatsApp', create_activity: 'Crear Actividad', notify_exec: 'Notificar Ejecutivo', change_stage: 'Cambiar Etapa' };
-
-const DEFAULT_AUTOMATIONS = [
-  { name: 'Follow-up post-cotización', trigger: { type: 'stage_entered', stages: ['proposal'] }, actions: [{ type: 'send_email', delay: 48, body: 'Seguimiento a propuesta enviada' }], isActive: true },
-  { name: 'Reactivar leads dormidos', trigger: { type: 'days_inactive', value: 14 }, actions: [{ type: 'send_whatsapp', delay: 0, body: '¡Hola! ¿Tienes alguna necesidad de importación o exportación en la que podamos ayudarte?' }], isActive: true },
-  { name: 'Bienvenida a lead nuevo', trigger: { type: 'lead_created' }, actions: [{ type: 'send_email', delay: 1, body: 'Bienvenido a ACON Internacional' }, { type: 'notify_exec', delay: 0 }], isActive: true },
-  { name: 'Alerta de cierre inminente', trigger: { type: 'score_above', value: 80 }, actions: [{ type: 'notify_exec', delay: 0 }, { type: 'create_activity', delay: 0, body: 'Lead caliente — contactar inmediatamente' }], isActive: true },
-];
 
 // Ad platform config
 const AD_PLATFORMS = [
@@ -179,11 +168,9 @@ function ConnectedBadge({ email }) {
 export default function MarketingPage({ toast }) {
   const [tab, setTab] = useState('campaigns');
   const [campaigns, setCampaigns] = useState([]);
-  const [automations, setAutomations] = useState([]);
   const [analytics, setAnalytics] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showNewCampaign, setShowNewCampaign] = useState(false);
-  const [showNewAuto, setShowNewAuto] = useState(false);
   const [segmentPreview, setSegmentPreview] = useState(null);
 
   // Ad channels state
@@ -214,17 +201,12 @@ export default function MarketingPage({ toast }) {
   // Métricas reales del envío, por campaña.
   const [metrics, setMetrics] = useState(null);
   const [metricsFor, setMetricsFor] = useState(null);
-  const [autoForm, setAutoForm] = useState({
-    name: '', trigger: { type: 'stage_entered', stages: [], value: '' },
-    actions: [{ type: 'send_email', delay: 0, body: '' }], isActive: true
-  });
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [cRes, aRes, anRes] = await Promise.all([getCampaigns(), getAutomations(), getMarketingAnalytics()]);
+      const [cRes, anRes] = await Promise.all([getCampaigns(), getMarketingAnalytics()]);
       setCampaigns(cRes.data.data || []);
-      setAutomations(aRes.data.data || []);
       setAnalytics(anRes.data.data);
     } catch { toast('Error al cargar marketing', 'error'); }
     finally { setLoading(false); }
@@ -372,23 +354,6 @@ export default function MarketingPage({ toast }) {
     catch { toast('Error al eliminar', 'error'); }
   };
 
-  const handleToggleAuto = async (auto) => {
-    try {
-      await updateAutomation(auto._id, { isActive: !auto.isActive });
-      toast(`Automatización ${auto.isActive ? 'pausada' : 'activada'}`, 'success'); load();
-    } catch { toast('Error', 'error'); }
-  };
-
-  const handleCreateAuto = async (e) => {
-    e.preventDefault();
-    try { await createAutomation(autoForm); toast('Automatización creada', 'success'); setShowNewAuto(false); load(); }
-    catch { toast('Error al crear automatización', 'error'); }
-  };
-
-  const seedDefaultAutomations = async () => {
-    try { await Promise.all(DEFAULT_AUTOMATIONS.map(a => createAutomation(a))); toast('Automatizaciones predeterminadas creadas', 'success'); load(); }
-    catch { toast('Error', 'error'); }
-  };
 
   if (loading) return <div className="loading"><div className="spinner" />Cargando marketing...</div>;
 
@@ -400,11 +365,10 @@ export default function MarketingPage({ toast }) {
       <div className="page-header">
         <div>
           <div className="page-title">Marketing</div>
-          <div className="page-sub">Campañas, automatizaciones y canales publicitarios para Freight Forwarding</div>
+          <div className="page-sub">Campañas y canales publicitarios para Freight Forwarding</div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           {tab === 'campaigns' && <button className="btn btn-primary btn-sm" onClick={() => setShowNewCampaign(true)} style={{ display: 'flex', alignItems: 'center', gap: 5 }}><Plus size={13} /> Nueva Campaña</button>}
-          {tab === 'automations' && <button className="btn btn-primary btn-sm" onClick={() => setShowNewAuto(true)} style={{ display: 'flex', alignItems: 'center', gap: 5 }}><Plus size={13} /> Nueva Automatización</button>}
           {tab === 'adchannels' && <button className="btn btn-primary btn-sm" onClick={() => setShowAdCampaignForm(true)} style={{ display: 'flex', alignItems: 'center', gap: 5 }}><Plus size={13} /> Nueva Ad Campaign</button>}
         </div>
       </div>
@@ -738,88 +702,6 @@ export default function MarketingPage({ toast }) {
         </>
       )}
 
-      {/* ── AUTOMATIONS ── */}
-      {tab === 'automations' && (
-        <>
-          {showNewAuto && (
-            <form onSubmit={handleCreateAuto} className="card" style={{ marginBottom: 20, border: '1px solid #7C3AED30' }}>
-              <div style={{ fontWeight: 700, fontSize: 15, color: '#0B2545', marginBottom: 16 }}>Nueva Automatización</div>
-              <div className="form-group">
-                <label className="form-label">Nombre</label>
-                <input className="form-input" placeholder="Follow-up post-propuesta" value={autoForm.name} onChange={e => setAutoForm(f => ({...f, name: e.target.value}))} required />
-              </div>
-              <div className="form-row">
-                <div className="form-group">
-                  <label className="form-label">Disparador (Trigger)</label>
-                  <select className="form-select" value={autoForm.trigger.type} onChange={e => setAutoForm(f => ({...f, trigger: {...f.trigger, type: e.target.value}}))}>
-                    {Object.entries(TRIGGER_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-                  </select>
-                </div>
-                {autoForm.trigger.type === 'days_inactive' && (
-                  <div className="form-group">
-                    <label className="form-label">Días sin actividad</label>
-                    <input className="form-input" type="number" placeholder="7" value={autoForm.trigger.value} onChange={e => setAutoForm(f => ({...f, trigger: {...f.trigger, value: e.target.value}}))} />
-                  </div>
-                )}
-                {autoForm.trigger.type === 'score_above' && (
-                  <div className="form-group">
-                    <label className="form-label">Score mínimo</label>
-                    <input className="form-input" type="number" placeholder="75" value={autoForm.trigger.value} onChange={e => setAutoForm(f => ({...f, trigger: {...f.trigger, value: e.target.value}}))} />
-                  </div>
-                )}
-              </div>
-              <div className="form-group">
-                <label className="form-label">Acción</label>
-                <select className="form-select" value={autoForm.actions[0]?.type} onChange={e => setAutoForm(f => ({...f, actions: [{...f.actions[0], type: e.target.value}]}))}>
-                  {Object.entries(ACTION_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-                </select>
-              </div>
-              {['send_email', 'send_whatsapp', 'create_activity'].includes(autoForm.actions[0]?.type) && (
-                <div className="form-group">
-                  <label className="form-label">Mensaje</label>
-                  <textarea className="form-input" rows={3} value={autoForm.actions[0]?.body || ''} onChange={e => setAutoForm(f => ({...f, actions: [{...f.actions[0], body: e.target.value}]}))} />
-                </div>
-              )}
-              <div className="form-group">
-                <label className="form-label">Demora (horas después del trigger)</label>
-                <input className="form-input" type="number" value={autoForm.actions[0]?.delay || 0} onChange={e => setAutoForm(f => ({...f, actions: [{...f.actions[0], delay: parseInt(e.target.value)}]}))} />
-              </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button type="submit" className="btn btn-primary">Crear</button>
-                <button type="button" className="btn btn-ghost" onClick={() => setShowNewAuto(false)}>Cancelar</button>
-              </div>
-            </form>
-          )}
-          {automations.length === 0 ? (
-            <div className="card"><div className="empty-state"><Zap size={40} color="#9AA3AE" /><p style={{ color: '#9AA3AE' }}>No hay automatizaciones configuradas.</p><div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}><button className="btn btn-ghost btn-sm" onClick={seedDefaultAutomations}>Cargar plantillas ACON</button><button className="btn btn-primary btn-sm" onClick={() => setShowNewAuto(true)}><Plus size={13} /> Crear</button></div></div></div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {automations.map(a => (
-                <div key={a._id} className="card" style={{ padding: '14px 20px', borderLeft: `4px solid ${a.isActive ? '#7C3AED' : '#E3E6EA'}` }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 700, fontSize: 13, color: '#0B2545', marginBottom: 4 }}>{a.name}</div>
-                      <div style={{ display: 'flex', gap: 12, fontSize: 12, color: '#9AA3AE' }}>
-                        <span>Trigger: <strong style={{ color: '#5A6472' }}>{TRIGGER_LABELS[a.trigger?.type] || a.trigger?.type}</strong></span>
-                        <span>Acción: <strong style={{ color: '#5A6472' }}>{ACTION_LABELS[a.actions?.[0]?.type] || '—'}</strong></span>
-                        <span>Ejecuciones: <strong style={{ color: '#F2641E' }}>{a.executionCount || 0}</strong></span>
-                      </div>
-                    </div>
-                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                      <span style={{ fontSize: 11, fontWeight: 700, color: a.isActive ? '#16A34A' : '#9AA3AE' }}>{a.isActive ? 'Activa' : 'Inactiva'}</span>
-                      <button className="btn btn-ghost btn-sm" onClick={() => handleToggleAuto(a)} style={{ display: 'flex', alignItems: 'center', gap: 4, color: a.isActive ? '#F59E0B' : '#16A34A' }}>
-                        {a.isActive ? <Pause size={13} /> : <Play size={13} />}{a.isActive ? 'Pausar' : 'Activar'}
-                      </button>
-                      <button className="btn btn-ghost btn-sm" onClick={async () => { await deleteAutomation(a._id); toast('Eliminada', 'success'); load(); }} style={{ color: '#DC2626' }}><Trash2 size={13} /></button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </>
-      )}
-
       {/* ── AD CHANNELS ── */}
       {tab === 'adchannels' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -1026,12 +908,12 @@ export default function MarketingPage({ toast }) {
               )}
             </div>
             <div className="card">
-              <div style={{ fontWeight: 700, color: '#0B2545', marginBottom: 16 }}>Resumen de Automatizaciones</div>
+              <div style={{ fontWeight: 700, color: '#0B2545', marginBottom: 16 }}>Resumen de Flujos</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 {[
-                  { label: 'Total automaciones', value: analytics.automations?.total || 0, color: '#7C3AED' },
+                  { label: 'Flujos', value: analytics.automations?.total || 0, color: '#7C3AED' },
                   { label: 'Activas', value: analytics.automations?.active || 0, color: '#16A34A' },
-                  { label: 'Total ejecuciones', value: analytics.automations?.totalExecutions || 0, color: '#F2641E' },
+                  { label: 'Ejecuciones', value: analytics.automations?.totalExecutions || 0, color: '#F2641E' },
                 ].map(({ label, value, color }) => (
                   <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: `${color}08`, borderRadius: 8, border: `1px solid ${color}20` }}>
                     <span style={{ fontSize: 13, color: '#5A6472' }}>{label}</span>
