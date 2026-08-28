@@ -353,7 +353,7 @@ Condition { op:'and'|'or', rules:[{ field, cmp, value }] }   // reutilizable
   <li><strong>auto_reply (aiAgent.js)</strong>: se elimina del código; su comportamiento queda como flujo de fábrica «Contestación automática con IA», desactivado hasta que alguien lo publique. El campo <code>Lead.autoReplySent</code> se retira.</li>
   <li><strong>Automation (Marketing)</strong>: se listan al usuario como «no estaban activas nunca» y se ofrece convertirlas a borrador. No se activan solas.</li>
   <li>Script idempotente <code>scripts/migrate-flows.js</code> con modo <code>--dry-run</code> que imprime el resultado. Se ejecuta una vez en producción tras el deploy.</li>
-  <li>Rutas viejas responden 410 con mensaje que apunta a Flujos durante una versión; luego se borran junto con <code>PlaybooksPage</code>, <code>FollowUpsPage</code>, la pestaña Automatizaciones de <code>MarketingPage</code> y las rutas <code>/sequences</code>.</li>
+  <li>Hecho (2026-08-28): los cuatro sistemas viejos y el script de migración se eliminaron del código (proyecto en dev, sin datos que migrar).</li>
 </ol>
 
 <h2 id="permisos">15. Permisos y auditoría</h2>

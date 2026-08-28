@@ -144,7 +144,7 @@ function invalidateTemplates() {
   store.deleteByPrefix('templates:');
 }
 
-/** Llamar cuando cambia una Campaign / Automation */
+/** Llamar cuando cambia una Campaign o un Flujo */
 function invalidateMarketing() {
   store.deleteByPrefix('marketing:');
 }

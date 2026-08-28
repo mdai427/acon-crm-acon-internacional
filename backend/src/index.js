@@ -66,19 +66,7 @@ const io = new Server(server, {
   }
 });
 
-connectDB().then(async () => {
-  // Migración única de Playbooks/Reglas/Secuencias/Automatizaciones a flujos.
-  // Idempotente: cada arranque sólo crea lo que falte y apaga lo viejo.
-  try {
-    const { runMigration } = require('./scripts/migrateToFlows');
-    const { report, counts } = await runMigration({ deactivate: true });
-    const total = counts.playbooks + counts.rules + counts.sequences + counts.automations;
-    if (report.published.length || report.drafts.length) {
-      console.log(`[flows] Migración: ${report.published.length} flujos publicados, ${report.drafts.length} borradores con pendientes (de ${total} elementos viejos)`);
-      report.drafts.forEach(d => console.log(`[flows]   ✎ ${d.split('\n')[0]}`));
-    }
-  } catch (err) { console.error('[flows] Migración automática falló:', err.message); }
-});
+connectDB();
 
 app.use(helmet({
   contentSecurityPolicy: {

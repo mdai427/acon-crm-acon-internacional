@@ -68,28 +68,6 @@ const campaignSchema = new mongoose.Schema({
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
 }, { timestamps: true });
 
-const automationSchema = new mongoose.Schema({
-  name: { type: String, required: true },
-  isActive: { type: Boolean, default: true },
-  trigger: {
-    type: { type: String, enum: ['stage_entered', 'days_inactive', 'score_above', 'lead_created', 'date_based'], required: true },
-    value: mongoose.Schema.Types.Mixed,
-    stages: [String],
-  },
-  actions: [{
-    type: { type: String, enum: ['send_email', 'send_whatsapp', 'create_activity', 'assign_to', 'change_stage', 'notify_exec'] },
-    delay: { type: Number, default: 0 }, // hours
-    templateId: { type: mongoose.Schema.Types.ObjectId, ref: 'Template' },
-    body: String,
-    value: String,
-  }],
-  executionCount: { type: Number, default: 0 },
-  lastRunAt: Date,
-  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-}, { timestamps: true });
-
-const Campaign = mongoose.models.Campaign || mongoose.model('Campaign', campaignSchema);
-const Automation = mongoose.models.Automation || mongoose.model('Automation', automationSchema);
 
 // Campos que el cliente puede escribir. Los contadores (sentCount, openCount…)
 // quedan fuera a propósito: los llenan los webhooks del proveedor, y dejarlos

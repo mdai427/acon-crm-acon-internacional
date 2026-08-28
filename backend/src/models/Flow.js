@@ -96,13 +96,7 @@ const flowSchema = new mongoose.Schema({
     by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   },
 
-  origin: { type: String, enum: ['user', 'migrated_playbook', 'migrated_rule', 'migrated_sequence', 'migrated_automation', 'factory'], default: 'user' },
-  // Documento viejo del que salió (Playbook / FollowUpRule / Sequence /
-  // Automation). Hace idempotente la migración: no se crea dos veces.
-  migratedFrom: {
-    model: { type: String, default: null },
-    id:    { type: mongoose.Schema.Types.ObjectId, default: null },
-  },
+  origin: { type: String, enum: ['user', 'factory'], default: 'user' },
 
   stats: {
     runsTotal:  { type: Number, default: 0 },

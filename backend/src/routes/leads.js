@@ -9,7 +9,6 @@ const { scoreLeadWithAI } = require('../services/aiAgent');
 const { invalidateLead } = require('../services/cache');
 const { enqueue } = require('../services/jobQueue');
 const { generateStageTasks } = require('../services/aiTasks');
-const Playbook = require('../models/Playbook');
 const User = require('../models/User');
 const { notifyLeadAssigned } = require('../services/notificationService');
 const { can } = require('../config/permissions');
@@ -361,15 +360,8 @@ router.get('/:id/stage-suggestions', checkPerm('leads.view'), async (req, res) =
     if (!lead) return res.status(404).json({ success: false, message: 'Lead no encontrado' });
 
     const stage = req.query.stage || lead.stage;
-    // Check for fixed playbook first
-    const playbook = await Playbook.findOne({ stage, isActive: true });
-    let tasks;
-    if (playbook && !playbook.useAI && playbook.tasks?.length) {
-      tasks = playbook.tasks.map(t => ({ title: t.title, dueInDays: t.dueInDays }));
-    } else {
-      tasks = await generateStageTasks(lead, stage);
-    }
-    res.json({ success: true, data: { tasks, stage, source: (playbook && !playbook.useAI) ? 'playbook' : 'ai' } });
+    const tasks = await generateStageTasks(lead, stage);
+    res.json({ success: true, data: { tasks, stage, source: 'ai' } });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -382,13 +374,7 @@ router.post('/:id/create-stage-tasks', checkPerm('leads.edit'), async (req, res)
     if (!lead) return res.status(404).json({ success: false, message: 'Lead no encontrado' });
 
     const stage = req.body.stage || lead.stage;
-    const playbook = await Playbook.findOne({ stage, isActive: true });
-    let tasks;
-    if (playbook && !playbook.useAI && playbook.tasks?.length) {
-      tasks = playbook.tasks.map(t => ({ title: t.title, dueInDays: t.dueInDays }));
-    } else {
-      tasks = await generateStageTasks(lead, stage);
-    }
+    const tasks = await generateStageTasks(lead, stage);
 
     const now = new Date();
     const created = [];
