@@ -36,6 +36,12 @@ const isPlaceholderKey = (key) => {
   return false;
 };
 
+// Flujos «cuando el score cruza un valor»: se avisa con el anterior y el nuevo.
+const emitScore = (lead, score) => {
+  if (Number(score) === Number(lead.score || 0)) return;
+  require('./events').emit('lead.score_changed', { leadId: lead._id, previous: lead.score || 0, score: Number(score) });
+};
+
 const scoreLeadWithAI = async (leadId) => {
   const lead = await Lead.findById(leadId);
   if (!lead) return;
@@ -47,6 +53,7 @@ const scoreLeadWithAI = async (leadId) => {
     // Sin clave real: usar heurística
     const score = heuristicScore(lead);
     await Lead.findByIdAndUpdate(leadId, { score });
+    emitScore(lead, score);
     console.log(`📊 Lead ${leadId} scored (heuristic): ${score}/100`);
     return { score, source: 'heuristic' };
   }
@@ -85,6 +92,7 @@ Responde SOLO con JSON: {"score": NUMBER, "reason": "explicacion breve en españ
       aiQualification: result.suggestedAction
     });
 
+    emitScore(lead, result.score);
     console.log(`🤖 Lead ${leadId} scored (AI): ${result.score}/100`);
     return { ...result, source: 'ai' };
   } catch (error) {
@@ -92,6 +100,7 @@ Responde SOLO con JSON: {"score": NUMBER, "reason": "explicacion breve en españ
     console.error(`⚠️ AI Scoring error para ${leadId}: ${error.message} — usando heurística`);
     const score = heuristicScore(lead);
     await Lead.findByIdAndUpdate(leadId, { score });
+    emitScore(lead, score);
     console.log(`📊 Lead ${leadId} scored (heuristic fallback): ${score}/100`);
     return { score, source: 'heuristic_fallback' };
   }

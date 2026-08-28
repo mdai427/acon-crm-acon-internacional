@@ -56,4 +56,18 @@ activitySchema.index({ type: 1 });
 activitySchema.index({ lead: 1, isAuto: 1 });           // cooldown check en followups
 activitySchema.index({ createdAt: -1 });                // reports / dashboard últimos 30 días
 
+// Un mensaje entrante (WhatsApp o correo, venga de Meta, Labia o el buzón) es
+// un evento para los flujos: «cuando el lead escribe» y las esperas «hasta que
+// responda» se enganchan aquí y no en cada webhook.
+activitySchema.post('save', function (doc) {
+  if (!this.isNew && !doc.$isNew) return;
+  if (doc.type !== 'whatsapp_in' && doc.type !== 'email_in') return;
+  require('../services/events').emit('message.received', {
+    leadId: doc.lead,
+    channel: doc.type === 'whatsapp_in' ? 'whatsapp' : 'email',
+    activityId: doc._id,
+    text: (doc.content || '').slice(0, 2000),
+  });
+});
+
 module.exports = mongoose.model('Activity', activitySchema);

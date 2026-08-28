@@ -183,6 +183,8 @@ app.use('/api/postventa',    postVentaRoutes);
 app.use('/api/ads',          adsRoutes);
 app.use('/api/jobs',         jobsRoutes);
 app.use('/api/playbooks',    playbooksRoutes);
+app.use('/api/flows',        require('./routes/flows'));
+app.use('/api/flow-runs',    require('./routes/flows').runs);
 app.use('/api/commissions',  require('./routes/commissions'));
 app.use('/api/search',       require('./routes/search'));
 app.use('/api/notifications', require('./routes/notifications'));
@@ -229,6 +231,7 @@ app.use((err, req, res, next) => {
 
 setupSocketHandlers(io);
 startCronJobs(io);
+require('./services/flows/engine').subscribe();
 
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {

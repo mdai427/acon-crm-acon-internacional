@@ -158,6 +158,24 @@ const startCronJobs = (io) => {
     }
   }, null, true, 'America/Mexico_City');
 
+  // Flujos de automatización: esperas vencidas (cada minuto) y disparadores
+  // por reloj —N días sin contacto, fecha alcanzada— (cada 10 minutos).
+  new CronJob('* * * * *', async () => {
+    try {
+      await require('./flows/engine').processDue(io);
+    } catch (err) {
+      console.error('[cron] flujos:', err.message);
+    }
+  }, null, true, 'America/Mexico_City');
+
+  new CronJob('*/10 * * * *', async () => {
+    try {
+      await require('./flows/triggers').runClockTriggers(io);
+    } catch (err) {
+      console.error('[cron] flujos por reloj:', err.message);
+    }
+  }, null, true, 'America/Mexico_City');
+
   new CronJob('30 9 * * 1-5', async () => {
     console.log('⏰ Cron: Ejecutando reglas de seguimiento automático...');
     try {

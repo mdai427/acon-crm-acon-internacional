@@ -1,0 +1,400 @@
+<title>Flujos ACON</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --bg:#F7F8FA; --surface:#FFFFFF; --surface-2:#EEF1F5; --line:#D9DEE6;
+  --text:#14213A; --muted:#5A6472; --navy:#0B2545; --accent:#F2641E; --accent-soft:#FDE9DF;
+  --ok:#1E7F4F; --warn:#B7791F; --bad:#C0392B; --ok-bg:#E4F3EA; --warn-bg:#FBF0DA; --bad-bg:#F9E3E0;
+  --display:'Sora',ui-sans-serif,system-ui,sans-serif;
+  --body:'IBM Plex Sans',ui-sans-serif,system-ui,sans-serif;
+  --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#0F1623; --surface:#172033; --surface-2:#1F2A40; --line:#2C3A54;
+  --text:#E6EAF2; --muted:#9AA6BA; --navy:#DCE6F7; --accent:#FF7F43; --accent-soft:#3A2418;
+  --ok:#5BCF8E; --warn:#E5B85A; --bad:#F08A7C; --ok-bg:#153223; --warn-bg:#3A2E12; --bad-bg:#3D1C18;
+}}
+:root[data-theme="dark"]{
+  --bg:#0F1623; --surface:#172033; --surface-2:#1F2A40; --line:#2C3A54;
+  --text:#E6EAF2; --muted:#9AA6BA; --navy:#DCE6F7; --accent:#FF7F43; --accent-soft:#3A2418;
+  --ok:#5BCF8E; --warn:#E5B85A; --bad:#F08A7C; --ok-bg:#153223; --warn-bg:#3A2E12; --bad-bg:#3D1C18;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--body);font-size:16px;line-height:1.6}
+a{color:var(--accent)}
+.wrap{display:grid;grid-template-columns:240px minmax(0,1fr);gap:48px;max-width:1120px;margin:0 auto;padding:40px 24px 96px}
+nav.toc{position:sticky;top:24px;align-self:start;font-size:13.5px}
+nav.toc .k{font-family:var(--display);font-weight:600;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:10px}
+nav.toc a{display:block;color:var(--muted);text-decoration:none;padding:4px 0 4px 10px;border-left:2px solid var(--line)}
+nav.toc a:hover,nav.toc a:focus-visible{color:var(--text);border-color:var(--accent);outline:none}
+main{max-width:72ch}
+header.hero{border-bottom:1px solid var(--line);padding-bottom:28px;margin-bottom:40px}
+.eyebrow{font-family:var(--display);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:600}
+h1{font-family:var(--display);font-size:38px;line-height:1.15;margin:8px 0 12px;color:var(--navy);text-wrap:balance;font-weight:700}
+.meta{display:flex;flex-wrap:wrap;gap:18px;font-size:13px;color:var(--muted);font-family:var(--mono)}
+h2{font-family:var(--display);font-size:24px;color:var(--navy);margin:56px 0 14px;text-wrap:balance;font-weight:600}
+h3{font-family:var(--display);font-size:17px;margin:32px 0 8px;font-weight:600}
+h4{font-size:15px;margin:20px 0 6px;font-weight:600}
+p{margin:0 0 14px}
+ul,ol{margin:0 0 14px;padding-left:22px}
+li{margin-bottom:5px}
+code{font-family:var(--mono);font-size:.88em;background:var(--surface-2);padding:1px 5px;border-radius:3px}
+pre{font-family:var(--mono);font-size:13px;line-height:1.55;background:var(--surface-2);border:1px solid var(--line);padding:14px 16px;overflow-x:auto;margin:0 0 16px;border-radius:4px}
+.tbl{overflow-x:auto;margin:0 0 18px;border:1px solid var(--line);border-radius:4px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{text-align:left;vertical-align:top;padding:9px 12px;border-bottom:1px solid var(--line)}
+th{font-family:var(--display);font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);background:var(--surface-2);font-weight:600}
+tr:last-child td{border-bottom:0}
+td code{white-space:nowrap}
+.pill{display:inline-block;font-family:var(--mono);font-size:11.5px;padding:1px 8px;border-radius:999px;font-weight:500}
+.pill.ok{background:var(--ok-bg);color:var(--ok)} .pill.warn{background:var(--warn-bg);color:var(--warn)} .pill.bad{background:var(--bad-bg);color:var(--bad)}
+.callout{border-left:3px solid var(--accent);background:var(--accent-soft);padding:12px 16px;margin:0 0 18px;border-radius:0 4px 4px 0}
+.callout p:last-child{margin:0}
+.note{border:1px solid var(--line);background:var(--surface);padding:12px 16px;margin:0 0 18px;border-radius:4px;font-size:14.5px}
+.flow{font-family:var(--mono);font-size:13px;background:var(--surface);border:1px solid var(--line);padding:14px 16px;border-radius:4px;margin:0 0 16px;overflow-x:auto;white-space:pre;line-height:1.7}
+.flow b{color:var(--accent);font-weight:500}
+.kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin:0 0 18px}
+.kpi div{background:var(--surface);border:1px solid var(--line);padding:12px 14px;border-radius:4px}
+.kpi strong{display:block;font-family:var(--display);font-size:22px;color:var(--navy);font-variant-numeric:tabular-nums}
+.kpi span{font-size:13px;color:var(--muted)}
+@media (max-width:820px){.wrap{grid-template-columns:1fr}nav.toc{position:static;display:none}}
+</style>
+
+<div class="wrap">
+<nav class="toc">
+  <div class="k">Contenido</div>
+  <a href="#resumen">1. Resumen</a>
+  <a href="#problema">2. Problema</a>
+  <a href="#objetivos">3. Objetivos y métricas</a>
+  <a href="#alcance">4. Alcance</a>
+  <a href="#concepto">5. Concepto: un flujo</a>
+  <a href="#disparadores">6. Disparadores</a>
+  <a href="#nodos">7. Catálogo de nodos</a>
+  <a href="#ia">8. Nodos de IA</a>
+  <a href="#motor">9. Motor de ejecución</a>
+  <a href="#datos">10. Modelo de datos</a>
+  <a href="#api">11. API</a>
+  <a href="#ui">12. Constructor visual</a>
+  <a href="#plantillas">13. Flujos de fábrica</a>
+  <a href="#migracion">14. Migración</a>
+  <a href="#permisos">15. Permisos y auditoría</a>
+  <a href="#riesgos">16. Riesgos</a>
+  <a href="#fases">17. Fases de entrega</a>
+  <a href="#abiertas">18. Preguntas abiertas</a>
+</nav>
+
+<main>
+<header class="hero">
+  <div class="eyebrow">PRD · ACON CRM</div>
+  <h1>Flujos de automatización unificados</h1>
+  <p style="font-size:17px;color:var(--muted);margin-bottom:16px">Un solo motor y un solo constructor visual que reemplaza Playbooks, Automatizaciones de Marketing, Reglas de seguimiento, Secuencias y la respuesta automática de IA.</p>
+  <div class="meta"><span>v1.2 · 2026-08-27</span><span>estado: borrador para revisión</span><span>autor: Claude + cryptogabovz</span></div>
+</header>
+
+<h2 id="resumen">1. Resumen</h2>
+<p>Hoy el CRM tiene cinco maneras distintas de decir «cuando pase X, haz Y»: Playbooks por etapa, Automatizaciones de Marketing, Reglas de seguimiento, Secuencias y la respuesta automática de IA escondida en <code>aiAgent.js</code>. Cuatro funcionan a medias cada una por su lado; la otra (Automatizaciones de Marketing) nunca tuvo motor y no ejecuta nada. Este documento define <strong>Flujos</strong>: un único modelo de disparador + grafo de nodos, un único motor con cola, y un constructor visual tipo canvas. Los sistemas actuales se convierten en plantillas de flujos y desaparecen como pantallas.</p>
+
+<h2 id="problema">2. Problema</h2>
+<div class="tbl"><table>
+<tr><th>Sistema actual</th><th>Dispara con</th><th>Ejecuta</th><th>Estado</th></tr>
+<tr><td>Playbooks <code>playbookRunner.js</code></td><td>Lead entra a etapa</td><td>WhatsApp (plantilla Meta), correo, borrador IA, tarea, aviso; demora en días; condición por score/valor</td><td><span class="pill ok">funciona</span></td></tr>
+<tr><td>Automatizaciones <code>routes/marketing.js</code></td><td>etapa, inactividad, score, lead creado, fecha</td><td>Nada. Sólo CRUD; ningún cron las lee</td><td><span class="pill bad">muerto</span></td></tr>
+<tr><td>Reglas de seguimiento <code>FollowUpRule</code></td><td>Días sin contacto, etapa, score bajo</td><td>WhatsApp/correo/tarea por cron, con cooldown</td><td><span class="pill ok">funciona</span></td></tr>
+<tr><td>Secuencias <code>Sequence</code></td><td>Manual o al entrar a etapa</td><td>Pasos encadenados con demora en horas y salida por respuesta</td><td><span class="pill warn">funciona, sin UI clara</span></td></tr>
+<tr><td>Respuesta automática <code>aiAgent.js</code> (<code>auto_reply</code>)</td><td>Mensaje entrante sin respuesta reciente</td><td>La IA contesta sola por WhatsApp/correo, una vez por lead</td><td><span class="pill warn">funciona, invisible para el usuario</span></td></tr>
+</table></div>
+<p>Consecuencias concretas:</p>
+<ul>
+  <li>Un mismo lead puede recibir un WhatsApp del playbook, otro de una regla y otro de una secuencia el mismo día. No hay control global de frecuencia.</li>
+  <li>Ningún sistema reacciona a lo que el lead <em>responde</em>. Todo es «enviar y esperar días».</li>
+  <li>Cada sistema tiene su propio vocabulario de acciones, demoras (días vs horas) y condiciones. El usuario no sabe cuál usar.</li>
+  <li>La IA existe como redactor puntual, no como pieza de decisión dentro del proceso.</li>
+  <li>La pantalla de Automatizaciones de Marketing promete algo que no ocurre: erosiona confianza en el producto.</li>
+</ul>
+
+<h2 id="objetivos">3. Objetivos y métricas</h2>
+<h3>Objetivos</h3>
+<ol>
+  <li>Una sola pantalla «Automatizaciones» donde se ve todo lo que el CRM hace solo.</li>
+  <li>Flujos con ramas: el camino cambia según lo que el lead hace (responde, abre, sube de score).</li>
+  <li>Cero mensajes duplicados o fuera de contexto: control de frecuencia y cancelación por cambio de etapa, global.</li>
+  <li>IA en tres puntos concretos: clasificar respuestas, redactar mensajes, elegir rama.</li>
+  <li>Todo lo que envía un flujo queda en el timeline del lead y es auditable.</li>
+</ol>
+<h3>Métricas de éxito (a 60 días de lanzar)</h3>
+<div class="kpi">
+  <div><strong>≥ 80 %</strong><span>de leads nuevos tocados por un flujo en la primera hora</span></div>
+  <div><strong>0</strong><span>leads con más de 1 mensaje automático por canal en 24 h</span></div>
+  <div><strong>≥ 95 %</strong><span>de ejecuciones sin caer a «tarea manual» por fallo</span></div>
+  <div><strong>≥ 25 %</strong><span>tasa de respuesta a seguimientos automáticos de propuesta</span></div>
+</div>
+<h3>No objetivos</h3>
+<ul>
+  <li>No hay integraciones salientes (webhooks) en v1. n8n queda fuera del producto; <code>routes/n8n.js</code> se elimina en la fase de limpieza.</li>
+  <li>No es un constructor de campañas masivas: las Campañas de Marketing se quedan como están.</li>
+  <li>No hay IA con libertad de inventar acciones. La IA elige entre opciones que el usuario definió.</li>
+</ul>
+
+<h2 id="alcance">4. Alcance</h2>
+<p><strong>Dentro:</strong> modelo <code>Flow</code> y <code>FlowRun</code>, motor, cola, disparadores por eventos y por cron, catálogo de nodos, constructor visual, simulación, prueba con un lead real, migración automática, borrado de las pantallas antiguas, permisos y auditoría.</p>
+<p><strong>Proveedor de WhatsApp:</strong> los flujos no saben si detrás está Meta o Labia; hablan con <code>whatsappService</code>. No se usan los agentes de IA de Labia: la inteligencia vive en los flujos del CRM y Labia sólo entrega mensajes.</p>
+<p><strong>Fuera (v2):</strong> A/B en ramas, flujos sobre Operaciones u Cotizaciones como entidad raíz (v1 sólo Lead), plantillas compartidas entre tenants, editor colaborativo.</p>
+
+<h2 id="concepto">5. Concepto: qué es un flujo</h2>
+<p>Un flujo es <strong>un disparador</strong> + <strong>un grafo dirigido de nodos</strong>. Cuando el disparador se cumple para un lead, se crea una <em>ejecución</em> (<code>FlowRun</code>) que recorre el grafo nodo por nodo. Los nodos de espera pausan la ejecución; los nodos de condición la bifurcan; los nodos de acción hacen cosas reales en el CRM.</p>
+<div class="flow"><b>DISPARADOR</b> Propuesta enviada
+  └─ <b>ESPERAR</b> 48 h  ó  hasta que responda
+       ├─ respondió ──▶ <b>IA: clasificar</b> ──▶ interesado ──▶ <b>TAREA</b> «Llamar hoy»
+       │                                  └──▶ no ahora  ──▶ <b>ESPERAR</b> 30 d ──▶ …
+       └─ sin respuesta ──▶ <b>WHATSAPP</b> plantilla seguimiento_propuesta
+            └─ <b>ESPERAR</b> 3 d hasta que responda
+                 └─ sin respuesta ──▶ <b>CONDICIÓN</b> valor &gt; 50 000
+                      ├─ sí ──▶ <b>AVISAR</b> Director comercial
+                      └─ no ──▶ <b>CORREO IA</b> «recordar propuesta, tono cercano»</div>
+<p>Vocabulario de cara al usuario (nunca «nodo» ni «grafo» en la interfaz):</p>
+<ul>
+  <li><strong>Flujo</strong>: la automatización completa.</li>
+  <li><strong>Inicio</strong>: el disparador.</li>
+  <li><strong>Paso</strong>: cada bloque del canvas.</li>
+  <li><strong>Lead en el flujo</strong>: una ejecución activa.</li>
+</ul>
+
+<h2 id="disparadores">6. Disparadores</h2>
+<p>Dos familias: <strong>por evento</strong> (el CRM emite un evento y el motor reacciona al instante) y <strong>por reloj</strong> (el cron evalúa una condición cada 10 minutos sobre todos los leads activos).</p>
+<div class="tbl"><table>
+<tr><th>Clave</th><th>Familia</th><th>Parámetros</th><th>Origen en el código</th></tr>
+<tr><td><code>lead.created</code></td><td>evento</td><td>fuente (opcional), servicio (opcional)</td><td><code>routes/leads.js</code>, importación</td></tr>
+<tr><td><code>lead.stage_entered</code></td><td>evento</td><td>etapas (1+)</td><td>cambio de <code>stage</code> en lead</td></tr>
+<tr><td><code>lead.score_changed</code></td><td>evento</td><td>cruza por encima / por debajo de N</td><td><code>scoreLeadWithAI</code></td></tr>
+<tr><td><code>lead.assigned</code></td><td>evento</td><td>—</td><td><code>leadAssignment</code></td></tr>
+<tr><td><code>message.received</code></td><td>evento</td><td>canal: whatsapp / email / cualquiera</td><td><code>handleIncomingMessage</code> (llegan ahí tanto Meta como Labia), <code>inboundEmail</code></td></tr>
+<tr><td><code>message.status</code></td><td>evento</td><td>entregado / leído / fallido (sólo alimenta a Esperar, no abre flujos)</td><td>webhooks Meta y Labia (<code>message.status</code>)</td></tr>
+<tr><td><code>quote.sent</code> / <code>quote.accepted</code> / <code>quote.rejected</code></td><td>evento</td><td>—</td><td><code>routes/quotes.js</code></td></tr>
+<tr><td><code>call.ended</code></td><td>evento</td><td>resultado (contestó / no contestó)</td><td><code>twilioService</code></td></tr>
+<tr><td><code>lead.inactive</code></td><td>reloj</td><td>días sin contacto N, etapas (opcional)</td><td>reemplaza <code>FollowUpRule days_inactive</code></td></tr>
+<tr><td><code>lead.date_reached</code></td><td>reloj</td><td>campo de fecha + desplazamiento (p. ej. «90 d después de perdido»)</td><td>reemplaza <code>date_based</code></td></tr>
+<tr><td><code>manual</code></td><td>usuario</td><td>—</td><td>botón «Meter en flujo» en la ficha del lead</td></tr>
+</table></div>
+<p>Todo evento pasa por un único bus interno (<code>services/events.js</code>, <code>emit(name, payload)</code>). Los disparadores por reloj son un cron que busca leads que cumplen la condición y <em>no</em> tienen una ejecución de ese flujo dentro del cooldown.</p>
+<h3>Filtros de entrada</h3>
+<p>Cualquier flujo puede además exigir condiciones de entrada (mismo lenguaje que el nodo Condición): etapa, score, valor, servicio, país, fuente, ejecutivo, etiqueta. Un lead que no las cumple no entra y no se registra ejecución.</p>
+
+<h2 id="nodos">7. Catálogo de nodos</h2>
+<h3>Acciones (hacen algo en el CRM)</h3>
+<div class="tbl"><table>
+<tr><th>Nodo</th><th>Configuración</th><th>Reutiliza</th><th>Si falla</th></tr>
+<tr><td><strong>Enviar WhatsApp</strong></td><td>Sale por <code>whatsappService</code> (proveedor Meta o Labia, transparente). <em>Canal oficial:</em> plantilla aprobada obligatoria, con variables <code>{empresa}</code> <code>{contacto}</code> <code>{etapa}</code> <code>{ejecutivo}</code> <code>{valor}</code>. <em>Sesión QR de Labia:</em> sólo texto libre (no hay plantillas ni ventana de 24 h). El editor consulta <code>whatsappService.status()</code> y muestra el modo que aplica</td><td><code>runWhatsApp</code>, <code>whatsappService</code></td><td>Tarea manual con el motivo</td></tr>
+<tr><td><strong>Enviar correo</strong></td><td>Plantilla de Plantillas <em>o</em> asunto + cuerpo inline <em>o</em> instrucciones para IA. Desde el buzón del ejecutivo</td><td><code>runEmail</code>, <code>mailboxService</code>, <code>suppressionService</code></td><td>Tarea manual</td></tr>
+<tr><td><strong>Crear tarea</strong></td><td>Título, descripción, vence en N días, prioridad, para: ejecutivo asignado / usuario fijo / rol</td><td><code>createTask</code></td><td>—</td></tr>
+<tr><td><strong>Avisar</strong></td><td>A: ejecutivo / usuario / rol; título, cuerpo; canales in-app + correo</td><td><code>notificationService</code></td><td>Se registra, no bloquea</td></tr>
+<tr><td><strong>Cambiar etapa</strong></td><td>Etapa destino. <em>No</em> dispara otros flujos de etapa por defecto (opción para permitirlo, con límite de profundidad 3)</td><td>lógica de <code>routes/leads.js</code></td><td>Se registra</td></tr>
+<tr><td><strong>Asignar ejecutivo</strong></td><td>Usuario fijo / round-robin / por país</td><td><code>leadAssignment</code></td><td>Se registra</td></tr>
+<tr><td><strong>Etiquetar</strong></td><td>Añadir / quitar etiqueta</td><td><code>Lead.tags</code></td><td>—</td></tr>
+<tr><td><strong>Actualizar campo</strong></td><td>Campo permitido (prioridad, valor, notas anexar)</td><td>—</td><td>—</td></tr>
+<tr><td><strong>Meter en otro flujo</strong></td><td>Flujo destino</td><td>motor</td><td>Se registra</td></tr>
+</table></div>
+<h3>Control de flujo</h3>
+<div class="tbl"><table>
+<tr><th>Nodo</th><th>Configuración</th><th>Salidas</th></tr>
+<tr><td><strong>Esperar</strong></td><td>Duración fija (minutos / horas / días) <em>o</em> «hasta que…» (responda por canal X, abra el correo, le llegue o lea el WhatsApp, cambie de etapa, se le asigne ejecutivo) con tope máximo. Opción «sólo en horario laboral» (L-V 9-18, zona horaria del CRM)</td><td>Una salida si es fija; dos («ocurrió» / «se agotó el tiempo») si es «hasta que»</td></tr>
+<tr><td><strong>Condición</strong></td><td>Grupo de reglas AND/OR sobre: etapa, score, valor, servicios, país, fuente, ejecutivo, etiqueta, días sin contacto, ¿respondió alguna vez?, ¿tiene cotización?, ¿tiene correo/WhatsApp?, campo personalizado</td><td>Sí / No</td></tr>
+<tr><td><strong>Dividir por</strong></td><td>Un campo con varios valores (etapa, país, servicio, resultado IA)</td><td>Una salida por valor + «otro»</td></tr>
+<tr><td><strong>Salir</strong></td><td>Motivo (texto libre) para el log</td><td>Termina la ejecución</td></tr>
+<tr><td><strong>Nota</strong></td><td>Texto para el humano que edita el flujo; no ejecuta nada</td><td>—</td></tr>
+</table></div>
+
+<h2 id="ia">8. Nodos de IA</h2>
+<div class="callout"><p><strong>Regla de oro:</strong> la IA nunca decide <em>qué acciones existen</em>; el usuario dibuja el flujo. La IA sólo (a) escribe texto, (b) clasifica algo en categorías que el usuario definió, o (c) elige entre ramas que el usuario dibujó. Cada nodo de IA tiene un «si falla o no está seguro» explícito.</p></div>
+<div class="tbl"><table>
+<tr><th>Nodo</th><th>Qué hace</th><th>Configuración</th><th>Salidas</th><th>Agente (aiAgents.js)</th></tr>
+<tr><td><strong>IA: clasificar respuesta</strong></td><td>Lee el último mensaje entrante del lead (y los 5 previos como contexto) y lo clasifica</td><td>Categorías editables. Por defecto: <code>interesado</code>, <code>pide_precio</code>, <code>pide_info</code>, <code>no_ahora</code>, <code>no_interesado</code>, <code>no_molestar</code>, <code>otro</code>. Umbral de confianza (def. 0.7)</td><td>Una por categoría + «no seguro»</td><td>nuevo: <code>flow_classify</code></td></tr>
+<tr><td><strong>IA: redactar mensaje</strong></td><td>Escribe correo o texto de WhatsApp de sesión con instrucciones + contexto del lead (empresa, servicios, score, notas, últimos 10 mensajes, cotizaciones)</td><td>Instrucciones, tono, largo máx., idioma; <strong>modo:</strong> «enviar directo» o «dejar como borrador para aprobar» (def.). Lista de prohibiciones fija: no inventar precios, plazos ni promesas</td><td>Una</td><td>existe: <code>playbook_agent</code> → renombrar <code>flow_writer</code></td></tr>
+<tr><td><strong>IA: elegir rama</strong></td><td>Con el contexto del lead, elige entre 2-4 ramas descritas en lenguaje natural por el usuario</td><td>Pregunta al modelo, descripción de cada rama, umbral</td><td>Una por rama + «no seguro»</td><td>nuevo: <code>flow_decide</code></td></tr>
+<tr><td><strong>IA: recalificar</strong></td><td>Vuelve a calcular score y notas con lo nuevo que pasó</td><td>—</td><td>Una (después suele ir Condición sobre score)</td><td>existe: <code>lead_scoring</code></td></tr>
+<tr><td><strong>IA: resumir para humano</strong></td><td>Resume la conversación + estado y lo pone en una tarea o aviso</td><td>Destinatario</td><td>Una</td><td>nuevo: <code>flow_summary</code></td></tr>
+</table></div>
+<h3>Detalles de implementación</h3>
+<ul>
+  <li>Toda llamada pasa por <code>aiClient.chat</code> con <code>feature</code> y <code>lead</code> para que quede en el panel de consumo y facturación existente.</li>
+  <li>Salida forzada en JSON con esquema; si no parsea, se toma la salida «no seguro» y se registra.</li>
+  <li>El prompt del clasificador incluye la definición de cada categoría escrita por el usuario. Cambiar categorías no requiere código.</li>
+  <li>Cache: si el mismo mensaje entrante se clasifica en dos flujos, se reutiliza el resultado (clave: <code>activityId + categorías</code>).</li>
+  <li>Presupuesto: límite configurable de llamadas de IA por lead y por día (def. 10) para evitar bucles caros.</li>
+</ul>
+
+<h2 id="motor">9. Motor de ejecución</h2>
+<h3>Ciclo de vida de una ejecución</h3>
+<ol>
+  <li>Disparador se cumple → se verifican filtros de entrada, cooldown y regla de concurrencia → se crea <code>FlowRun</code> en <code>running</code> apuntando al nodo de inicio.</li>
+  <li>El motor avanza nodo a nodo de forma síncrona hasta encontrar un <strong>Esperar</strong>, un fin, o 50 pasos (tope anti-bucle).</li>
+  <li>En Esperar: guarda <code>waitingFor</code> (tiempo o evento) y <code>nextRunAt</code>; estado <code>waiting</code>.</li>
+  <li>Reanuda por cron (cada minuto, lote de 100) cuando <code>nextRunAt</code> vence, o por evento cuando llega lo que esperaba.</li>
+  <li>Termina en <code>completed</code>, <code>exited</code> (nodo Salir o cancelación), o <code>failed</code>.</li>
+</ol>
+<h3>Reglas globales (no configurables por flujo)</h3>
+<ul>
+  <li><strong>Cambio de etapa cancela</strong> las ejecuciones de flujos cuyo disparador es «entra a etapa» de otra etapa. Hereda el comportamiento actual de Playbooks.</li>
+  <li><strong>Lead inactivo o perdido</strong> (<code>isActive=false</code>) cancela todas sus ejecuciones.</li>
+  <li><strong>Degradación</strong>: si un envío real falla, se crea tarea «[Manual] …» con el motivo y el flujo continúa por la salida normal (no se rompe la cadena).</li>
+  <li><strong>Frecuencia global</strong>: máximo 1 WhatsApp automático y 1 correo automático por lead cada 24 h, contando todos los flujos. Si el cupo está usado, el paso se pospone al siguiente hueco (no se pierde). Configurable en Ajustes, no por flujo.</li>
+  <li><strong>Silencio</strong>: si el lead está etiquetado <code>no_molestar</code> o su correo está en supresión, ningún nodo de envío ejecuta; se registra como omitido.</li>
+  <li><strong>Ventana de 24 h de Meta</strong> (canal oficial, sea Meta directo o Labia): WhatsApp automático sólo por plantilla aprobada. Texto libre sólo si <code>waWindow</code> confirma ventana abierta; si no, se degrada. En sesión QR de Labia no aplica: siempre texto libre.</li>
+</ul>
+<h3>Reglas por flujo</h3>
+<ul>
+  <li><strong>Concurrencia</strong>: «un lead sólo puede estar una vez en este flujo» (def.) o «puede reentrar».</li>
+  <li><strong>Cooldown</strong>: días mínimos entre dos entradas del mismo lead (def. 7).</li>
+  <li><strong>Al desactivar el flujo</strong>: pausar ejecuciones activas (def.) o terminarlas.</li>
+  <li><strong>Al editar y publicar</strong>: las ejecuciones en curso siguen con la versión con la que empezaron (se guarda <code>flowVersion</code> en la ejecución).</li>
+</ul>
+<h3>Idempotencia y concurrencia</h3>
+<ul>
+  <li>Cada avance de paso escribe primero <code>currentNodeId</code> y <code>stepLog</code> con <code>findOneAndUpdate</code> condicionado al estado esperado (lock optimista). Dos workers no ejecutan el mismo paso.</li>
+  <li>Los eventos llevan <code>eventId</code>; una ejecución no consume el mismo evento dos veces.</li>
+  <li>Se aprovecha <code>jobQueue</code> existente para envíos pesados; el motor no bloquea la petición HTTP que originó el evento.</li>
+</ul>
+
+<h2 id="datos">10. Modelo de datos</h2>
+<pre>Flow {
+  name, description, isActive, version
+  trigger: { type, params: {...}, entryFilters: Condition }
+  settings: { allowReentry, cooldownDays, onDeactivate: 'pause'|'exit',
+              businessHoursOnly }
+  nodes: [{ id, type, label, position:{x,y}, config:{...} }]
+  edges: [{ id, from, fromHandle, to }]
+  origin: 'user' | 'migrated_playbook' | 'migrated_rule' | 'migrated_sequence' | 'factory'
+  stats: { runsTotal, runsActive, lastRunAt }   // desnormalizados por cron
+  createdBy, updatedBy, publishedAt, timestamps
+}
+
+FlowRun {
+  flow, flowVersion, lead, triggeredBy: { type, eventId, userId }
+  status: 'running'|'waiting'|'completed'|'exited'|'failed'|'paused'
+  currentNodeId, nextRunAt
+  waitingFor: { kind: 'time'|'event', event, until }
+  context: { vars: {...}, lastAiResult, lastMessageId }
+  stepLog: [{ nodeId, at, result:'ok'|'skipped'|'failed'|'degraded', detail, activityId }]
+  exitReason, timestamps
+}
+índices: (status, nextRunAt) · (lead, flow, status) · (flow, status)
+
+FlowEvent (efímero, TTL 7 d)  { name, leadId, payload, eventId, at }
+
+Condition { op:'and'|'or', rules:[{ field, cmp, value }] }   // reutilizable
+</pre>
+<p><code>ScheduledAction</code> y <code>SequenceEnrollment</code> se eliminan tras la migración. <code>Playbook</code>, <code>FollowUpRule</code>, <code>Sequence</code> y <code>Automation</code> se marcan como <em>legacy</em> y se borran una versión después.</p>
+
+<h2 id="api">11. API</h2>
+<div class="tbl"><table>
+<tr><th>Método y ruta</th><th>Permiso</th><th>Descripción</th></tr>
+<tr><td><code>GET /api/flows</code></td><td><code>flows.view</code></td><td>Lista con stats y estado</td></tr>
+<tr><td><code>POST /api/flows</code></td><td><code>flows.edit</code></td><td>Crear (borrador)</td></tr>
+<tr><td><code>GET /api/flows/:id</code></td><td><code>flows.view</code></td><td>Flujo completo con nodos y aristas</td></tr>
+<tr><td><code>PUT /api/flows/:id</code></td><td><code>flows.edit</code></td><td>Guardar borrador. Valida grafo: un inicio, sin nodos huérfanos, sin ciclos sin Esperar, WhatsApp con plantilla</td></tr>
+<tr><td><code>POST /api/flows/:id/publish</code></td><td><code>flows.publish</code></td><td>Incrementa <code>version</code>, activa</td></tr>
+<tr><td><code>POST /api/flows/:id/toggle</code></td><td><code>flows.publish</code></td><td>Activar / desactivar</td></tr>
+<tr><td><code>POST /api/flows/:id/simulate</code></td><td><code>flows.view</code></td><td>Body: <code>leadId</code>, respuestas simuladas para los Esperar y nodos IA. Devuelve el camino sin ejecutar nada</td></tr>
+<tr><td><code>POST /api/flows/:id/test</code></td><td><code>flows.edit</code></td><td>Ejecuta de verdad sobre un lead (confirmación en UI)</td></tr>
+<tr><td><code>POST /api/flows/:id/enroll</code></td><td><code>leads.edit</code></td><td>Meter un lead manualmente</td></tr>
+<tr><td><code>GET /api/flows/:id/runs</code></td><td><code>flows.view</code></td><td>Ejecuciones con filtro por estado y lead</td></tr>
+<tr><td><code>POST /api/flow-runs/:id/cancel</code> · <code>/skip-wait</code></td><td><code>flows.edit</code></td><td>Cancelar o saltar la espera actual</td></tr>
+<tr><td><code>GET /api/leads/:id/flows</code></td><td><code>leads.view</code></td><td>Ejecuciones del lead para su ficha</td></tr>
+<tr><td><code>GET /api/flows/catalog</code></td><td><code>flows.view</code></td><td>Disparadores, nodos, campos de condición y plantillas Meta disponibles (para el constructor)</td></tr>
+<tr><td><code>DELETE /api/flows/:id</code></td><td><code>flows.delete</code></td><td>Sólo si no tiene ejecuciones activas</td></tr>
+</table></div>
+
+<h2 id="ui">12. Constructor visual</h2>
+<h3>Pantalla «Automatizaciones» (lista)</h3>
+<ul>
+  <li>Tarjetas o tabla: nombre, disparador en lenguaje natural («Cuando un lead entra a Propuesta»), estado, leads activos ahora, ejecutados en 30 d, tasa de respuesta, última ejecución.</li>
+  <li>Filtros: activos / pausados / borradores; por disparador.</li>
+  <li>Botón «Nuevo flujo» → elegir en blanco o una plantilla de fábrica.</li>
+</ul>
+<h3>Editor (canvas)</h3>
+<ul>
+  <li>Librería: <strong>React Flow</strong> (@xyflow/react). No se escribe canvas propio.</li>
+  <li>Layout: paleta de pasos a la izquierda (agrupada: Acciones, Esperar y decidir, IA), canvas al centro con zoom/pan/minimapa, panel de propiedades a la derecha al seleccionar un paso.</li>
+  <li>Cada paso muestra en su tarjeta un resumen legible («Esperar 48 h o hasta que responda», «WhatsApp: seguimiento_propuesta»). Los que están mal configurados muestran borde rojo y motivo.</li>
+  <li>Conexión por arrastre desde los puertos de salida; los puertos tienen nombre (Sí / No, respondió / se agotó).</li>
+  <li>Barra superior: nombre, estado (Borrador / Publicado v3), «Guardar», «Simular», «Probar con un lead», «Publicar». Publicar pide confirmación y muestra los errores de validación si hay.</li>
+  <li>Atajos: Supr borra, Ctrl+Z / Ctrl+Shift+Z, Ctrl+S guarda. Autolayout con un botón (dagre).</li>
+  <li>Accesibilidad: cada paso es enfocable con teclado, propiedades con etiquetas reales, contraste AA.</li>
+</ul>
+<h3>Simulación</h3>
+<p>Selecciona un lead real; para cada Esperar «hasta que» y cada nodo IA el usuario elige qué habría pasado; la interfaz pinta el camino en el canvas y lista lo que se habría enviado, con el texto renderizado (variables resueltas, borrador IA generado de verdad pero no enviado).</p>
+<h3>Ficha del lead</h3>
+<ul>
+  <li>Pestaña «Flujos»: en qué flujos está, en qué paso, cuándo es el siguiente, botones Cancelar y Saltar espera.</li>
+  <li>Botón «Meter en flujo» con los de disparador manual o los que permiten inscripción manual.</li>
+  <li>El timeline ya recibe las Activities (<code>metadata.source='flow'</code>, <code>flowId</code>, <code>runId</code>, <code>nodeId</code>).</li>
+</ul>
+
+<h2 id="plantillas">13. Flujos de fábrica</h2>
+<p>Se cargan con un clic y llegan como borrador editable. Los mensajes traen variables; las plantillas Meta se mapean por nombre y, si no existen, el paso queda marcado como pendiente de configurar.</p>
+<div class="tbl"><table>
+<tr><th>Flujo</th><th>Inicio</th><th>Resumen del recorrido</th></tr>
+<tr><td>Bienvenida a lead nuevo</td><td>Lead creado</td><td>Avisar ejecutivo → Esperar 1 h hasta que haya actividad del ejecutivo → si no: WhatsApp bienvenida → Esperar 2 d hasta que responda → si responde: IA clasificar → tarea según categoría; si no: correo brochure → Esperar 5 d → tarea «llamar»</td></tr>
+<tr><td>Seguimiento de propuesta</td><td>Cotización enviada</td><td>Esperar 48 h hasta que responda → WhatsApp seguimiento → Esperar 3 d → Condición valor &gt; 50 000 → Avisar director / Correo IA → Esperar 4 d → tarea llamada</td></tr>
+<tr><td>Reactivar dormidos</td><td>14 d sin contacto (etapas Contactado, Calificado, Propuesta)</td><td>Condición score ≥ 50 → WhatsApp reactivación / tarea. Cooldown 30 d</td></tr>
+<tr><td>Recontacto de perdidos</td><td>90 d después de Perdido</td><td>Correo suave → Esperar 7 d hasta que responda → si responde: cambiar etapa a Contactado + avisar</td></tr>
+<tr><td>Onboarding de ganado</td><td>Entra a Ganado</td><td>Correo bienvenida + tarea documentos → Esperar 30 d → tarea check-in postventa</td></tr>
+<tr><td>Lead caliente</td><td>Score cruza 80</td><td>Avisar ejecutivo + tarea alta prioridad → Esperar 4 h laborales hasta actividad → si nada: avisar director</td></tr>
+<tr><td>Respuesta entrante sin atender</td><td>Mensaje recibido</td><td>Esperar 2 h laborales hasta respuesta del ejecutivo → si nada: IA resumir → avisar ejecutivo con el resumen</td></tr>
+<tr><td>Contestación automática con IA</td><td>Mensaje recibido</td><td>IA clasificar → si <code>no_molestar</code>: etiquetar y salir; si <code>pide_precio</code>: tarea al ejecutivo; resto: IA redactar (enviar directo) → avisar ejecutivo. Reemplaza el <code>auto_reply</code> de <code>aiAgent.js</code>; viene desactivado</td></tr>
+<tr><td>Un playbook por etapa</td><td>Entra a etapa X</td><td>Generados desde los Playbooks actuales (ver migración)</td></tr>
+</table></div>
+
+<h2 id="migracion">14. Migración</h2>
+<div class="callout"><p><strong>Resultado final:</strong> los cuatro sistemas se funden en uno. Queda una sola página «Automatizaciones» y un solo motor; ningún sistema antiguo convive con el nuevo. Cada uno cabe dentro de Flujos (el nuevo es un superconjunto), así que la migración es automática y sin pérdida.</p></div>
+<ol>
+  <li><strong>Playbooks → Flujos</strong> (1:1 por etapa). Cada acción se vuelve un paso; <code>delayDays</code> se vuelve un Esperar previo; <code>onlyIf</code> se vuelve una Condición previa; el orden se respeta en cadena lineal. <code>ScheduledAction</code> pendientes se convierten en <code>FlowRun</code> en <code>waiting</code>.</li>
+  <li><strong>FollowUpRule → Flujos</strong> con disparador <code>lead.inactive</code> o <code>lead.stage_entered</code>; cooldown y máximo se conservan.</li>
+  <li><strong>Sequence → Flujos lineales</strong>; <code>skipIf</code> se vuelve Condición; <code>SequenceEnrollment</code> activos → <code>FlowRun</code>.</li>
+  <li><strong>auto_reply (aiAgent.js)</strong>: se elimina del código; su comportamiento queda como flujo de fábrica «Contestación automática con IA», desactivado hasta que alguien lo publique. El campo <code>Lead.autoReplySent</code> se retira.</li>
+  <li><strong>Automation (Marketing)</strong>: se listan al usuario como «no estaban activas nunca» y se ofrece convertirlas a borrador. No se activan solas.</li>
+  <li>Script idempotente <code>scripts/migrate-flows.js</code> con modo <code>--dry-run</code> que imprime el resultado. Se ejecuta una vez en producción tras el deploy.</li>
+  <li>Rutas viejas responden 410 con mensaje que apunta a Flujos durante una versión; luego se borran junto con <code>PlaybooksPage</code>, <code>FollowUpsPage</code>, la pestaña Automatizaciones de <code>MarketingPage</code> y las rutas <code>/sequences</code>.</li>
+</ol>
+
+<h2 id="permisos">15. Permisos y auditoría</h2>
+<ul>
+  <li>Nuevos permisos en <code>config/permissions.js</code>: <code>flows.view</code>, <code>flows.edit</code>, <code>flows.publish</code>, <code>flows.delete</code>. Reemplazan a <code>playbooks.*</code> y a los de seguimientos. Publicar queda separado de editar: un ejecutivo puede proponer, un gerente publica.</li>
+  <li>Cada publicación guarda un snapshot de versión; el editor muestra «Publicado por X el día Y» y permite ver versiones anteriores y restaurar.</li>
+  <li><code>auditService</code> registra: crear, publicar, activar/desactivar, borrar, cancelar ejecución, prueba real sobre lead.</li>
+  <li>Variables en mensajes se escapan para HTML en correo; los prompts de IA nunca incluyen instrucciones escritas por el lead como instrucciones (van delimitados como datos).</li>
+</ul>
+
+<h2 id="riesgos">16. Riesgos y mitigaciones</h2>
+<div class="tbl"><table>
+<tr><th>Riesgo</th><th>Mitigación</th></tr>
+<tr><td>Bucles (Cambiar etapa → dispara flujo de etapa → cambia etapa…)</td><td>Cambiar etapa no dispara flujos por defecto; profundidad máxima 3; tope de 50 pasos por ejecución; alerta si un lead supera 20 ejecuciones en un día</td></tr>
+<tr><td>Spam al lead por varios flujos</td><td>Frecuencia global por canal; etiqueta no_molestar; supresión de correo</td></tr>
+<tr><td>Coste de IA descontrolado</td><td>Presupuesto por lead/día; cache de clasificación; panel de consumo existente por agente</td></tr>
+<tr><td>Plantillas Meta rechazadas o pausadas</td><td>Validación al publicar consulta el estado en Meta; el paso se marca en rojo si la plantilla deja de estar aprobada</td></tr>
+<tr><td>Migración deja leads a medio flujo</td><td>Dry-run obligatorio; ejecuciones migradas empiezan en <code>waiting</code> con la misma fecha que tenían; reporte de diferencias</td></tr>
+<tr><td>Editor complejo asusta a usuarios no técnicos</td><td>Plantillas de fábrica, resúmenes en lenguaje natural en cada paso, simulación, vocabulario sin jerga</td></tr>
+<tr><td>Cron cada minuto compite con el resto de crons</td><td>Lotes de 100, índice (status, nextRunAt), lock optimista; medir duración y avisar si supera 30 s</td></tr>
+</table></div>
+
+<h2 id="fases">17. Fases de entrega</h2>
+<div class="tbl"><table>
+<tr><th>Fase</th><th>Entregable</th><th>Criterio de listo</th></tr>
+<tr><td><strong>1 · Motor</strong></td><td>Modelos Flow/FlowRun, bus de eventos, motor con Esperar/Condición/Salir y las 5 acciones actuales, cron, reglas globales, API sin UI</td><td>Tests del motor ≥ 80 % cobertura; un flujo definido en JSON se ejecuta de punta a punta contra un lead de prueba</td></tr>
+<tr><td><strong>2 · Migración</strong></td><td>Script de migración, rutas legacy en 410, flujos de fábrica</td><td>Dry-run en copia de producción sin diferencias; Playbooks actuales se comportan igual a través del motor nuevo</td></tr>
+<tr><td><strong>3 · Constructor</strong></td><td>Lista, editor React Flow, propiedades, validación, guardar/publicar, simulación, pestaña en la ficha del lead</td><td>Un gerente crea y publica «Seguimiento de propuesta» sin ayuda en menos de 10 minutos</td></tr>
+<tr><td><strong>4 · IA</strong></td><td>Clasificar respuesta, redactar (directo/borrador), elegir rama, recalificar, resumir; disparador <code>message.received</code></td><td>Clasificador ≥ 85 % de acierto sobre 50 mensajes reales etiquetados a mano</td></tr>
+<tr><td><strong>5 · Acciones extra</strong></td><td>Cambiar etapa, asignar, etiquetar, actualizar campo, meter en otro flujo</td><td>Cada nodo con test de ejecución y de fallo</td></tr>
+<tr><td><strong>6 · Limpieza</strong></td><td>Borrado de pantallas y modelos legacy, <code>routes/n8n.js</code> y <code>N8N_API_KEY</code>, docs</td><td>Sin referencias a Playbook/FollowUpRule/Sequence/Automation/auto_reply/n8n en el código</td></tr>
+</table></div>
+<p>Orden recomendado y no negociable: 1 → 2 antes que 3. Sin motor probado y migración limpia, el constructor sólo dibuja.</p>
+
+<h2 id="abiertas">18. Preguntas abiertas</h2>
+<ol>
+  <li>¿La frecuencia global (1 WhatsApp + 1 correo por 24 h) es aceptable para Dirección, o quieren permitir más en etapas de cierre?</li>
+  <li>¿Quién publica flujos: sólo admin/gerente, o también ejecutivos senior?</li>
+  <li>Horario laboral: ¿una sola zona horaria (CDMX) o por país del lead?</li>
+  <li>En canal oficial: ¿texto libre cuando la ventana de 24 h está abierta, o siempre plantilla? (En sesión QR de Labia es siempre texto libre; ya está resuelto.)</li>
+  <li>Categorías del clasificador por defecto: ¿validarlas con 50 mensajes reales antes de la fase 4?</li>
+</ol>
+</main>
+</div>

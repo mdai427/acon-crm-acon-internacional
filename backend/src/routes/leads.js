@@ -1,4 +1,5 @@
 const express = require('express');
+const events = require('../services/events');
 const router = express.Router();
 const Lead = require('../models/Lead');
 const Activity = require('../models/Activity');
@@ -164,6 +165,9 @@ router.post('/', checkPerm('leads.create'), async (req, res) => {
     // Score automático con IA (async, no bloquea)
     scoreLeadWithAI(lead._id).catch(console.error);
 
+    // Flujos «cuando se crea un lead»
+    events.emit('lead.created', { leadId: lead._id, userId: req.user._id, source: lead.source }, { io: req.io });
+
     // Investigación de empresa con IA (async, no bloquea)
     researchCompany(lead).then(async (research) => {
       await Lead.findByIdAndUpdate(lead._id, { aiResearch: research });
@@ -255,6 +259,9 @@ router.put('/:id', checkPerm('leads.edit'), async (req, res) => {
     if (stageChanged) {
       // El playbook de la etapa ejecuta sus acciones (mensajes, correos,
       // tareas…) en background; ver services/playbookRunner.
+      // Flujos «cuando entra a una etapa»
+      events.emit('lead.stage_entered', { leadId: lead._id, stage: updates.stage, from: prevStage, userId: req.user._id }, { io: req.io });
+
       setImmediate(async () => {
         try {
           const playbookRunner = require('../services/playbookRunner');
@@ -288,6 +295,7 @@ router.put('/:id', checkPerm('leads.edit'), async (req, res) => {
       if (assignee && String(updates.assignedTo) !== String(req.user._id)) {
         notifyLeadAssigned({ lead: updated, assignee, io: req.io }).catch(() => {});
       }
+      events.emit('lead.assigned', { leadId: lead._id, assignedTo: updates.assignedTo, userId: req.user._id }, { io: req.io });
     }
 
     req.io?.emit('lead_updated', updated);
@@ -303,6 +311,7 @@ router.delete('/:id', checkPerm('leads.delete'), async (req, res) => {
   try {
     const lead = await Lead.findById(req.params.id).select('company').lean();
     await Lead.findByIdAndUpdate(req.params.id, { isActive: false });
+    events.emit('lead.deactivated', { leadId: req.params.id, userId: req.user._id });
     audit({ req, action: 'delete', entity: 'Lead', entityId: req.params.id, entityLabel: lead?.company }).catch(() => {});
     invalidateLead(String(req.user._id));
     res.json({ success: true, message: 'Lead archivado' });

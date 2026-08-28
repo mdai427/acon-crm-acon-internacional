@@ -111,6 +111,10 @@ const PERMISSIONS = {
   'followups.edit':       ['admin','gerencia','marketing'],
   'playbooks.view':       ['admin','gerencia','executive','marketing'],
   'playbooks.edit':       ['admin','gerencia'],
+  'flows.view':           ['admin','direccion','gerencia','executive','marketing'],
+  'flows.edit':           ['admin','gerencia','marketing'],
+  'flows.publish':        ['admin','gerencia'],
+  'flows.delete':         ['admin'],
 
   // ── POST-VENTA ───────────────────────────────────────────
   'postventa.view':       ['admin','direccion','gerencia','executive','operaciones','finanzas'],
