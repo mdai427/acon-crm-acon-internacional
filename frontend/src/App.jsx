@@ -24,6 +24,7 @@ import ImportPage from './pages/ImportPage';
 import MarketingPage from './pages/MarketingPage';
 import PostVentaPage from './pages/PostVentaPage';
 import PlaybooksPage from './pages/PlaybooksPage';
+import FlowsPage from './pages/FlowsPage';
 import CommissionsPage from './pages/CommissionsPage';
 import PermissionsPage from './pages/PermissionsPage';
 import CatalogPage from './pages/CatalogPage';
@@ -59,6 +60,8 @@ const NAV = [
   { id: 'marketing',    label: 'Campañas',          Icon: Megaphone,       section: 'marketing', mobile: false,
     roles: ['admin', 'direccion', 'gerencia', 'marketing', 'finanzas', 'viewer'] },
   { id: 'followups',    label: 'Automatiz.',        Icon: Zap,             section: 'marketing', mobile: false,
+    roles: ['admin', 'gerencia', 'marketing'] },
+  { id: 'flows',        label: 'Flujos',            Icon: Zap,             section: 'marketing', mobile: false,
     roles: ['admin', 'gerencia', 'marketing'] },
   { id: 'playbooks',    label: 'Playbooks IA',      Icon: Sparkles,        section: 'marketing', mobile: false,
     roles: ['admin', 'gerencia', 'executive', 'marketing'] },
@@ -504,6 +507,7 @@ function CRMApp() {
           {page === 'import'       && <ImportPage toast={toast} onNavigate={navigate} />}
           {page === 'marketing'    && <MarketingPage toast={toast} />}
           {page === 'postventa'    && <PostVentaPage toast={toast} />}
+          {page === 'flows'        && <FlowsPage toast={toast} />}
           {page === 'playbooks'    && <PlaybooksPage toast={toast} />}
           {page === 'commissions'  && <CommissionsPage toast={toast} />}
           {page === 'permissions'  && <PermissionsPage toast={toast} />}

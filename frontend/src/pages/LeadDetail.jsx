@@ -11,6 +11,7 @@ import { Mail, Calendar, FileText, MessageSquare, RefreshCw, Plus, Send, Video, 
 import { triggerLeadResearch } from '../services/api';
 import AISuggestionsPanel from '../components/AISuggestionsPanel';
 import CallPanel from '../components/CallPanel';
+import LeadFlowsTab from '../components/flows/LeadFlowsTab';
 import { completeActivity } from '../services/api';
 import { usePipelineStages } from '../hooks/usePipelineStages';
 
@@ -24,6 +25,7 @@ const TABS = [
   { id: 'emails',    label: 'Correos',     Icon: Mail },
   { id: 'llamadas',  label: 'Llamadas',    Icon: Phone },
   { id: 'calendar',  label: 'Calendario',  Icon: Calendar },
+  { id: 'flujos',    label: 'Flujos',      Icon: Zap },
 ];
 
 // ── Activity card with task checkbox support ──────────────────────
@@ -837,6 +839,9 @@ export default function LeadDetail({ leadId, toast, onBack }) {
 
       {/* ── TAB: LLAMADAS ── */}
       {tab === 'llamadas' && <CallPanel lead={lead} toast={toast} />}
+
+      {/* ── TAB: FLUJOS ── */}
+      {tab === 'flujos' && <LeadFlowsTab lead={lead} toast={toast} />}
 
       {/* ── TAB: CALENDAR ── */}
       {tab === 'calendar' && (

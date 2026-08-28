@@ -379,3 +379,20 @@ export const getRecordAudit = (entityId) => api.get(`/audit/record/${entityId}`)
 export const getERPProviders = () => api.get('/erp/providers');
 export const saveERPProvider = (id, data) => api.put(`/erp/providers/${id}`, data);
 export const testERPProvider = (id) => api.post(`/erp/providers/${id}/test`);
+
+// Flujos de automatización (motor unificado)
+export const getFlows          = () => api.get('/flows');
+export const getFlow           = (id) => api.get(`/flows/${id}`);
+export const createFlow        = (data) => api.post('/flows', data);
+export const updateFlow        = (id, data) => api.put(`/flows/${id}`, data);
+export const deleteFlow        = (id) => api.delete(`/flows/${id}`);
+export const publishFlow       = (id, activate = true) => api.post(`/flows/${id}/publish`, { activate });
+export const toggleFlow        = (id) => api.post(`/flows/${id}/toggle`);
+export const simulateFlow      = (id, data) => api.post(`/flows/${id}/simulate`, data);
+export const testFlow          = (id, leadId) => api.post(`/flows/${id}/test`, { leadId });
+export const getFlowCatalog    = () => api.get('/flows/catalog');
+export const getFlowRuns       = (id, params) => api.get(`/flows/${id}/runs`, { params });
+export const getLeadFlowRuns   = (leadId) => api.get(`/flows/lead/${leadId}`);
+export const enrollLeadInFlow  = (id, leadId) => api.post(`/flows/${id}/enroll`, { leadId });
+export const cancelFlowRun     = (runId) => api.post(`/flow-runs/${runId}/cancel`);
+export const skipFlowRunWait   = (runId) => api.post(`/flow-runs/${runId}/skip-wait`);
